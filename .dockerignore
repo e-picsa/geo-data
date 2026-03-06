@@ -1,0 +1,5 @@
+.git
+.vscode
+.DS_Store
+*/**/*.test.ts
+node_modules
