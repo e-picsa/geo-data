@@ -97,6 +97,7 @@ export const adminBoundaries = async (req: Request) => {
       {
         method: "POST",
         body: overpassQuery,
+        signal: req.signal,
       },
     );
 

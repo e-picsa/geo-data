@@ -35,6 +35,21 @@ docker build -t admin-boundaries-topojson .
 docker run -p 8080:8080 admin-boundaries-topojson
 ```
 
+### Continuous Deployment (Recommended)
+
+The easiest way to deploy this to production is directly through the Google Cloud Run Console using **Developer Connect**:
+
+1. Go to the **Cloud Run** page in the Google Cloud Console.
+2. Click **Create Service**.
+3. Select **Continuously deploy from a repository**.
+4. Choose **Developer Connect** (recommended for GitHub, GitLab, and Bitbucket integration).
+5. Select your repository and branch.
+6. Cloud Run will automatically detect the `Dockerfile` at the root of the project.
+7. Set the authentication to **Allow unauthenticated invocations** (if this is a public API) or require authentication as needed.
+8. Click **Create**.
+
+Cloud Run will automatically build the image and deploy updates every time you push to your selected branch.
+
 ## API Usage
 
 ### `POST /climate/admin-boundaries`

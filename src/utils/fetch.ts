@@ -13,10 +13,13 @@ export async function fetchWithRetry(
   retries = 5,
   initialDelay = 2000,
 ): Promise<Response> {
-  let lastResponse: Response = new Response(JSON.stringify({ error: 'Max retries reached' }), {
-    status: 504,
-    statusText: 'Gateway Timeout',
-  });
+  let lastResponse: Response = new Response(
+    JSON.stringify({ error: "Max retries reached" }),
+    {
+      status: 504,
+      statusText: "Gateway Timeout",
+    },
+  );
 
   for (let i = 0; i < retries; i++) {
     try {
@@ -38,7 +41,9 @@ export async function fetchWithRetry(
           const jitter = Math.random() * 1000;
           const delay = initialDelay * Math.pow(2, i) + jitter;
 
-          console.warn(`Attempt ${i + 1} failed with ${response.status}. Retrying in ${Math.round(delay)}ms...`);
+          console.warn(
+            `Attempt ${i + 1} failed with ${response.status}. Retrying in ${Math.round(delay)}ms...`,
+          );
 
           await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
@@ -48,16 +53,22 @@ export async function fetchWithRetry(
         // Break the loop and return the error response
         break;
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.log("Request was aborted by the client.");
+        throw err;
+      }
       console.error(`Attempt ${i + 1} encountered a network error:`, err);
       // If we have no response yet and encounter a network error, we continue to retry
       if (i === retries - 1) {
-        return new Response(JSON.stringify({ error: 'Network failure' }), {
+        return new Response(JSON.stringify({ error: "Network failure" }), {
           status: 500,
-          statusText: 'Internal Server Error',
+          statusText: "Internal Server Error",
         });
       }
-      await new Promise((resolve) => setTimeout(resolve, initialDelay * Math.pow(2, i)));
+      await new Promise((resolve) =>
+        setTimeout(resolve, initialDelay * Math.pow(2, i)),
+      );
     }
   }
 

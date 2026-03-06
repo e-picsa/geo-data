@@ -4,11 +4,33 @@ import { adminBoundaries } from "./admin-boundaries.ts";
 
 const port = parseInt(Deno.env.get("PORT") ?? "8080");
 
+const abortController = new AbortController();
+
+const shutdown = () => {
+  console.log("Shutting down gracefully...");
+  abortController.abort();
+};
+
+Deno.addSignalListener("SIGINT", shutdown);
+if (Deno.build.os !== "windows") {
+  Deno.addSignalListener("SIGTERM", shutdown);
+}
+
 serve(
-  (req: Request) => {
+  async (req: Request) => {
     // handle cors pre-flight
     if (req.method === "OPTIONS") {
       return new Response("ok", { headers: corsHeaders });
+    }
+
+    const { pathname } = new URL(req.url);
+
+    // Health / Readiness Check Endpoint
+    if (pathname === "/" || pathname === "/health") {
+      return new Response(JSON.stringify({ status: "ok" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     if (req.method !== "POST" && req.method !== "GET") {
@@ -17,7 +39,6 @@ serve(
       });
     }
 
-    const { pathname } = new URL(req.url);
     // e.g. /climate/country-boundaries/zw
     const pathParts = pathname.split("/");
     const entryPoint = pathParts[2];
@@ -39,5 +60,5 @@ serve(
         });
     }
   },
-  { port },
+  { port, signal: abortController.signal },
 );
