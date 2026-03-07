@@ -172,7 +172,6 @@ export const adminBoundaries = async (req: Request) => {
     osmData = null;
 
     console.log("Optimizing with Mapshaper...");
-    let topojson: any = null;
 
     // Mapshaper configuration based on level
     const mapshaperInput: Record<string, any> = { "input.geojson": geojson };
@@ -220,7 +219,7 @@ export const adminBoundaries = async (req: Request) => {
       mapshaperCmds.push(`-clip mask.geojson`);
     }
 
-    await new Promise((resolve, reject) => {
+    const topojsonString = await new Promise<string>((resolve, reject) => {
       mapshaper.applyCommands(
         mapshaperCmds.join(" "),
         mapshaperInput,
@@ -231,9 +230,7 @@ export const adminBoundaries = async (req: Request) => {
             reject(err);
           } else {
             try {
-              const outputString = output["output.topojson"].toString();
-              topojson = JSON.parse(outputString);
-              resolve(true);
+              resolve(output["output.topojson"].toString());
             } catch (parseError) {
               reject(parseError);
             }
@@ -242,8 +239,7 @@ export const adminBoundaries = async (req: Request) => {
       );
     });
 
-    // Convert to string first
-    const topojsonString = JSON.stringify(topojson);
+    const topojson = JSON.parse(topojsonString);
 
     // Get actual bytes
     const bytes = new Blob([topojsonString]).size;
