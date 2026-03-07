@@ -7,6 +7,6 @@
     "zod": "npm:zod@4/v4",
     "mapshaper": "npm:mapshaper",
     "osmtogeojson": "npm:osmtogeojson",
-    "@google-cloud/storage": "npm:@google-cloud/storage"
+    "google-auth-library":"npm:google-auth-library"
   }
 }

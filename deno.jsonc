@@ -4,4 +4,5 @@
     "exclude": [],
   },
   "importMap": "./import_map.json",
+  "nodeModulesDir": "auto",
 }

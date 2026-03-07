@@ -1,40 +1,21 @@
-import processAmbient from "node:process";
+import { GoogleAuth } from "google-auth-library";
 
-// Google Cloud SDK (which is meant for Node.js) relies on process.env being an object.
-// We must polyfill it aggressively here, as certain docker environments for Deno lack the proper
-// initialization for these properties natively before they're executed inside internal dependencies.
-const _global = globalThis as any;
-if (!_global.process) {
-  _global.process = processAmbient;
-}
-if (!_global.process.env) {
-  _global.process.env = {};
-}
-// Merge Deno.env to process.env so it behaves exactly like Node.js
-Object.assign(_global.process.env, Deno.env.toObject());
+let authClient: Awaited<ReturnType<GoogleAuth["getClient"]>> | null = null;
 
-let StorageClass: any = null;
-let storageInstance: any = null;
-
-export async function getStorageClient() {
-  if (!storageInstance) {
-    if (Deno.env.get("DENO_ENV") === "test") {
-      storageInstance = {
-        bucket: () => ({
-          file: () => ({
-            exists: async () => [false],
-            download: async () => [new Uint8Array()],
-            save: async () => {},
-          }),
-        }),
-      };
-      return storageInstance;
-    }
-    const storageModule = await import("@google-cloud/storage");
-    StorageClass = storageModule.Storage;
-    storageInstance = new StorageClass();
+async function getAuthClient() {
+  if (!authClient) {
+    const auth = new GoogleAuth({
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
+    authClient = await auth.getClient();
   }
-  return storageInstance;
+  return authClient;
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const client = await getAuthClient();
+  const token = await client.getAccessToken();
+  return { Authorization: `Bearer ${token.token}` };
 }
 
 /**
@@ -52,20 +33,23 @@ export async function getFromCache(
   }
 
   try {
-    const storage = await getStorageClient();
-    const bucket = storage.bucket(bucketName);
-    const file = bucket.file(key);
+    const headers = await getAuthHeaders();
+    const url = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucketName)}/o/${encodeURIComponent(key)}?alt=media`;
 
-    const [exists] = await file.exists();
-    if (!exists) {
+    const res = await fetch(url, { headers });
+
+    if (res.status === 404) {
       return null;
     }
 
-    const [contents] = await file.download();
-    return JSON.parse(contents.toString("utf-8"));
+    if (!res.ok) {
+      throw new Error(`GCS GET failed: ${res.status} ${res.statusText}`);
+    }
+
+    return await res.json();
   } catch (error) {
     console.error(`Failed to read from cache (${key}):`, error);
-    return null; // Fail gracefully so we just fetch from source
+    return null;
   }
 }
 
@@ -81,23 +65,28 @@ export async function saveToCache(
   data: any,
 ): Promise<void> {
   if (!bucketName) {
-    return; // caching disabled if no bucket
+    return;
   }
 
   try {
-    const storage = await getStorageClient();
-    const bucket = storage.bucket(bucketName);
-    const file = bucket.file(key);
+    const headers = await getAuthHeaders();
+    const url = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucketName)}/o?uploadType=media&name=${encodeURIComponent(key)}`;
 
-    const contents = JSON.stringify(data);
-    await file.save(contents, {
-      contentType: "application/json",
-      resumable: false,
-    } as any);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      throw new Error(`GCS PUT failed: ${res.status} ${res.statusText}`);
+    }
 
     console.log(`Successfully saved to cache: ${key}`);
   } catch (error) {
     console.error(`Failed to save to cache (${key}):`, error);
-    // Fail gracefully
   }
 }
