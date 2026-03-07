@@ -19,7 +19,7 @@ To speed up requests and prevent rate-limiting against the Overpass API, raw OSM
 
 1. A GCS bucket.
 2. Provide the bucket name via the `OVERPASS_CACHE_BUCKET` environment variable.
-3. Configure **Object Lifecycle Management** on the bucket to automatically delete objects older than 30 days (or however long you wish to cache the raw OSM data).
+3. Configure **Object Lifecycle Management** on the bucket to automatically delete objects older than 90 days (or however long you wish to cache the raw OSM data).
 4. The compute identity running this service (e.g., Cloud Run service account) needs the `roles/storage.objectAdmin` (or at minimum `storage.objects.create` and `storage.objects.get` permissions) on the target bucket.
 
 ## Features

@@ -11,6 +11,7 @@ import { OVERPASS_QUERY_MAPPING } from "./overpass-mapping.ts";
 
 /**
  * Bust cache if query or processing methods change.
+ * GCS cache object lifecycle automatically deletes after 90 days
  */
 const CACHE_VERSION = 1;
 
