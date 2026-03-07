@@ -49,9 +49,9 @@ const OVERPASS_QUERY_MAPPING: {
       relation["admin_level"="4"]["boundary"="administrative"]["ISO3166-2"~"^${countryCode}-"](area.searchArea);
       ${OVERPASS_OUTPUT}
     `,
-  // NOTE - generation admin_level 5 does not include iso data, so just retrieve all level_5
-  // and clip to country boundary when processing
-  // E.g. ZM - Kabwe District: https://www.openstreetmap.org/relation/10676417
+  // NOTE - generation admin_level 5 does not include iso data, so just retrieve all level_5 and clip to country boundary when processing
+  // (search area checks for any intersection, including shared border regions outside of country)
+  // E.g. ZM - Chipata District: https://www.openstreetmap.org/relation/10686740
   5: (countryCode) => `
       [out:json][timeout:120];
       area["ISO3166-1"="${countryCode}"]->.searchArea;
