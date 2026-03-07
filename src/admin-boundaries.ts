@@ -79,6 +79,12 @@ const boundaryRequestSchema = z.object({
     }),
 });
 
+/**
+ * Overpass cache version - increment when changing the overpass query
+ * Cache auto-deletes entries after 30d
+ */
+const CACHE_VERSION = 1;
+
 export type AdminBoundariesSchema = z.infer<typeof boundaryRequestSchema>;
 
 export const adminBoundaries = async (req: Request) => {
@@ -92,7 +98,7 @@ export const adminBoundaries = async (req: Request) => {
       OVERPASS_QUERY_MAPPING[admin_level](country_code).trim();
 
     const cacheBucket = Deno.env.get("OVERPASS_CACHE_BUCKET") || "";
-    const cacheKey = `overpass/v1/country=${country_code}/admin_level=${admin_level}.json`;
+    const cacheKey = `overpass/v${CACHE_VERSION}/country=${country_code}/admin_level=${admin_level}.json`;
 
     let osmData: any = await getFromCache(cacheBucket, cacheKey);
 
