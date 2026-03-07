@@ -1,3 +1,7 @@
+import process from "node:process";
+if (!process.env) {
+  process.env = {};
+}
 import {
   assertEquals,
   assertExists,

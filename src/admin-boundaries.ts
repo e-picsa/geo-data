@@ -5,6 +5,7 @@ import { z } from "zod";
 import { ErrorResponse, JSONResponse } from "./utils/response.ts";
 import { validateBody } from "./utils/validation.ts";
 import { fetchWithRetry } from "./utils/fetch.ts";
+import { getFromCache, saveToCache } from "./utils/gcs.ts";
 
 /**
  * All overpass queries output with processing
@@ -90,54 +91,70 @@ export const adminBoundaries = async (req: Request) => {
     const overpassQuery =
       OVERPASS_QUERY_MAPPING[admin_level](country_code).trim();
 
-    console.log(`Fetching Overpass data for ${country_code}...`);
+    const cacheBucket = Deno.env.get("OVERPASS_CACHE_BUCKET") || "";
+    const cacheKey = `overpass/v1/country=${country_code}/admin_level=${admin_level}.json`;
 
-    // Fetch data from Overpass API
-    const overpassResponse = await fetchWithRetry(
-      "https://overpass-api.de/api/interpreter",
-      {
-        method: "POST",
-        body: overpassQuery,
-        signal: req.signal,
-      },
-    );
+    let osmData: any = await getFromCache(cacheBucket, cacheKey);
 
-    if (!overpassResponse.ok) {
-      const errorText = await overpassResponse.text();
-      console.error(
-        `Overpass API error (${overpassResponse.status}):`,
-        errorText,
+    if (osmData) {
+      console.log(
+        `Cache hit for ${country_code} admin level ${admin_level}. Skipping Overpass API.`,
       );
+    } else {
+      console.log(`Fetching Overpass data for ${country_code}...`);
 
-      let status = 502; // Bad Gateway default
-      let message = "Failed to fetch from Overpass API";
-
-      if (overpassResponse.status === 429) {
-        status = 429;
-        message = "Overpass API rate limit exceeded. Please try again later.";
-      } else if (overpassResponse.status === 504) {
-        status = 504;
-        message =
-          "Overpass API gateway timeout. The query took too long to execute.";
-      }
-
-      return new Response(
-        JSON.stringify({
-          error: message,
-          details: errorText || overpassResponse.statusText,
-          upstream_status: overpassResponse.status,
-        }),
+      // Fetch data from Overpass API
+      const overpassResponse = await fetchWithRetry(
+        "https://overpass-api.de/api/interpreter",
         {
-          status,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          method: "POST",
+          body: overpassQuery,
+          signal: req.signal,
         },
       );
-    }
 
-    let osmData = await overpassResponse.json();
-    console.log(
-      `Received ${osmData.elements?.length || 0} elements from Overpass for ${country_code}`,
-    );
+      if (!overpassResponse.ok) {
+        const errorText = await overpassResponse.text();
+        console.error(
+          `Overpass API error (${overpassResponse.status}):`,
+          errorText,
+        );
+
+        let status = 502; // Bad Gateway default
+        let message = "Failed to fetch from Overpass API";
+
+        if (overpassResponse.status === 429) {
+          status = 429;
+          message = "Overpass API rate limit exceeded. Please try again later.";
+        } else if (overpassResponse.status === 504) {
+          status = 504;
+          message =
+            "Overpass API gateway timeout. The query took too long to execute.";
+        }
+
+        return new Response(
+          JSON.stringify({
+            error: message,
+            details: errorText || overpassResponse.statusText,
+            upstream_status: overpassResponse.status,
+          }),
+          {
+            status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      osmData = await overpassResponse.json();
+      console.log(
+        `Received ${osmData.elements?.length || 0} elements from Overpass for ${country_code}`,
+      );
+
+      // Save to cache asynchronously without blocking the response
+      saveToCache(cacheBucket, cacheKey, osmData).catch((err) =>
+        console.error("Non-fatal error saving to cache:", err),
+      );
+    }
 
     // Convert OSM JSON to GeoJSON
     console.log("Converting to GeoJSON...");
@@ -162,8 +179,8 @@ export const adminBoundaries = async (req: Request) => {
       `-filter-islands min-area=10km2`,
       // Drop unnecessary metadata; retain only core identifiers
       `-each 'this.properties = { id: this.properties["@id"] || this.id, name: this.properties.name || "" }'`,
-      // Export as TopoJSON with 1e3 quantization for optimized coordinate storage
-      `-o output.topojson format=topojson quantization=1e3`,
+      // Export as TopoJSON with 1e3 quantization for optimized coordinate storage (include bounding box)
+      `-o output.topojson format=topojson quantization=1e3 bbox`,
     ];
 
     // For admin_level 5, we need to clip the target features to the country boundary
@@ -240,7 +257,6 @@ export const adminBoundaries = async (req: Request) => {
 
     return JSONResponse(
       {
-        message: "Boundary data retrieved successfully",
         country_code,
         admin_level,
         size_kb,

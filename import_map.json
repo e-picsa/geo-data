@@ -7,6 +7,7 @@
     "@picsa/shared-utils": "../../../../libs/shared/src/utils/role.utils.ts",
     "zod": "npm:zod@4/v4",
     "mapshaper": "npm:mapshaper",
-    "osmtogeojson": "npm:osmtogeojson"
+    "osmtogeojson": "npm:osmtogeojson",
+    "@google-cloud/storage": "npm:@google-cloud/storage"
   }
 }

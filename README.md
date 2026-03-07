@@ -4,6 +4,24 @@ A standalone Deno web service that fetches country administrative boundaries fro
 
 Initially designed as a Supabase Edge Function, this service has been refactored for direct deployment to Google Cloud Run to better handle the heavy memory and processing requirements of processing large country geometries.
 
+## Environment Variables
+
+| Variable                | Description                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `PORT`                  | The port the server listens on (default: `8080`)                                                                  |
+| `OVERPASS_CACHE_BUCKET` | The GCS bucket name to cache raw Overpass API requests (e.g. `my-cache-bucket`). If not set, caching is disabled. |
+
+### Caching Configuration (GCS)
+
+To speed up requests and prevent rate-limiting against the Overpass API, raw OSM responses are cached in Google Cloud Storage before TopoJSON conversion.
+
+**Setup Requirements:**
+
+1. A GCS bucket.
+2. Provide the bucket name via the `OVERPASS_CACHE_BUCKET` environment variable.
+3. Configure **Object Lifecycle Management** on the bucket to automatically delete objects older than 30 days (or however long you wish to cache the raw OSM data).
+4. The compute identity running this service (e.g., Cloud Run service account) needs the `roles/storage.objectAdmin` (or at minimum `storage.objects.create` and `storage.objects.get` permissions) on the target bucket.
+
 ## Features
 
 - Fetches OSM relation boundaries via Overpass API for `admin_level`s 2 through 5.
