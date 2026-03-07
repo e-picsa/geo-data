@@ -1,286 +1,344 @@
 import { corsHeaders } from "./utils/cors.ts";
 import osmtogeojson from "osmtogeojson";
 import mapshaper from "mapshaper";
-import { z } from "zod";
+
 import { ErrorResponse, JSONResponse } from "./utils/response.ts";
 import { validateBody } from "./utils/validation.ts";
 import { fetchWithRetry } from "./utils/fetch.ts";
 import { getFromCache, saveToCache } from "./utils/google-storage.ts";
+import { BOUNDARY_REQUEST_SCHEMA, BoundaryRequestParams } from "./schema.ts";
+import { OVERPASS_QUERY_MAPPING } from "./overpass-mapping.ts";
 
 /**
- * All overpass queries output with processing
- * ```ts
- * out geom qt;           // Outputs way geometry with coordinates
- * ```
- */
-const OVERPASS_OUTPUT = `
-  out geom qt;
-`.trim();
-
-/**
- *
- * Level 2 corresponds to simple national border
- * Levels 3-5 are subnational boundaries and may or may not exist depending on country
- *
- * All subnational queries are optimised to search within bounds of country area
- *
- * TODO
- * - [ ] Typically large memory usage for edge function, will likely need to deploy to cloud-run
- */
-const OVERPASS_QUERY_MAPPING: {
-  [admin_level: number]: (countryCode: string) => string;
-} = {
-  // E.g. MW - National Boundary: https://www.openstreetmap.org/relation/195290
-  2: (countryCode) => `
-      [out:json][timeout:120];
-      relation["ISO3166-1"="${countryCode}"]["boundary"="administrative"]["admin_level"="2"];
-      ${OVERPASS_OUTPUT}
-    `,
-  // E.g. MW - Southern Region: https://www.openstreetmap.org/relation/3365670
-  3: (countryCode) => `
-      [out:json][timeout:120];
-      area["ISO3166-1"="${countryCode}"]->.searchArea;
-      relation["admin_level"="3"]["boundary"="administrative"]["ISO3166-2"~"^${countryCode}-"](area.searchArea);
-      ${OVERPASS_OUTPUT}
-    `,
-  // E.g. MW - Mangochi District: https://www.openstreetmap.org/relation/7345875
-  4: (countryCode) => `
-      [out:json][timeout:120];
-      area["ISO3166-1"="${countryCode}"]->.searchArea;
-      relation["admin_level"="4"]["boundary"="administrative"]["ISO3166-2"~"^${countryCode}-"](area.searchArea);
-      ${OVERPASS_OUTPUT}
-    `,
-  // NOTE - generation admin_level 5 does not include iso data, so just retrieve all level_5 and clip to country boundary when processing
-  // (search area checks for any intersection, including shared border regions outside of country)
-  // E.g. ZM - Chipata District: https://www.openstreetmap.org/relation/10686740
-  5: (countryCode) => `
-      [out:json][timeout:120];
-      area["ISO3166-1"="${countryCode}"]->.searchArea;
-      (
-        relation["ISO3166-1"="${countryCode}"]["boundary"="administrative"]["admin_level"="2"];
-        relation["admin_level"="5"]["boundary"="administrative"](area.searchArea);
-      );
-      ${OVERPASS_OUTPUT}
-    `,
-};
-const validAdminLevels = Object.keys(OVERPASS_QUERY_MAPPING).map(Number);
-
-const boundaryRequestSchema = z.object({
-  country_code: z
-    .string()
-    .length(2)
-    .regex(/^[a-zA-Z]{2}$/, "Must be a valid 2-letter country code")
-    .transform((v: string) => v.toUpperCase()),
-  admin_level: z.coerce
-    .number()
-    .int()
-    .refine((v: number) => validAdminLevels.includes(v), {
-      message: `Admin level must be one of: ${validAdminLevels.join(", ")}`,
-    }),
-});
-
-/**
- * Overpass cache version - increment when changing the overpass query
- * Cache auto-deletes entries after 30d
+ * Bust cache if query or processing methods change.
  */
 const CACHE_VERSION = 1;
 
-export type AdminBoundariesSchema = z.infer<typeof boundaryRequestSchema>;
+type Source = "cache" | "overpass";
+
+type CachePaths = {
+  prefix: string;
+  overpass: string;
+  geojson: string;
+  topojson: string;
+};
+
+type TopojsonSummary = {
+  size_kb: number;
+  feature_count: number;
+  bbox: unknown[];
+};
 
 export const adminBoundaries = async (req: Request) => {
   try {
-    const { admin_level, country_code } = await validateBody(
-      req,
-      boundaryRequestSchema,
-    );
+    const params = await validateBody(req, BOUNDARY_REQUEST_SCHEMA);
+    const { country_code, admin_level } = params;
 
-    const overpassQuery =
-      OVERPASS_QUERY_MAPPING[admin_level](country_code).trim();
+    const bucket = getCacheBucket();
+    const paths = buildCachePaths(country_code, admin_level);
 
-    const cacheBucket = Deno.env.get("OVERPASS_CACHE_BUCKET") || "";
-    const cacheKey = `overpass/v${CACHE_VERSION}/country=${country_code}/admin_level=${admin_level}.json`;
+    const cachedTopojson = await readCache<any>(bucket, paths.topojson);
+    if (cachedTopojson) {
+      console.log(
+        `TopoJSON cache hit for ${country_code} admin level ${admin_level}.`,
+      );
+      return buildSuccessResponse(params, "cache", cachedTopojson);
+    }
 
-    let osmData: any = await getFromCache(cacheBucket, cacheKey);
-    let source: "cache" | "overpass" = "cache";
+    const overpassQuery = buildOverpassQuery(country_code, admin_level);
+
+    let osmData = await readCache<any>(bucket, paths.overpass);
+    let source: Source = "cache";
 
     if (osmData) {
       console.log(
-        `Cache hit for ${country_code} admin level ${admin_level}. Skipping Overpass API.`,
+        `Overpass cache hit for ${country_code} admin level ${admin_level}.`,
       );
     } else {
       source = "overpass";
-      console.log(`Fetching Overpass data for ${country_code}...`);
-
-      // Fetch data from Overpass API
-      const overpassResponse = await fetchWithRetry(
-        "https://overpass-api.de/api/interpreter",
-        {
-          method: "POST",
-          body: overpassQuery,
-          signal: req.signal,
-        },
-      );
-
-      if (!overpassResponse.ok) {
-        const errorText = await overpassResponse.text();
-        console.error(
-          `Overpass API error (${overpassResponse.status}):`,
-          errorText,
-        );
-
-        let status = 502; // Bad Gateway default
-        let message = "Failed to fetch from Overpass API";
-
-        if (overpassResponse.status === 429) {
-          status = 429;
-          message = "Overpass API rate limit exceeded. Please try again later.";
-        } else if (overpassResponse.status === 504) {
-          status = 504;
-          message =
-            "Overpass API gateway timeout. The query took too long to execute.";
-        }
-
-        return new Response(
-          JSON.stringify({
-            error: message,
-            details: errorText || overpassResponse.statusText,
-            upstream_status: overpassResponse.status,
-          }),
-          {
-            status,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
-        );
-      }
-
-      osmData = await overpassResponse.json();
-      console.log(
-        `Received ${osmData.elements?.length || 0} elements from Overpass for ${country_code}`,
-      );
-
-      // Save to cache asynchronously without blocking the response
-      saveToCache(cacheBucket, cacheKey, osmData).catch((err) =>
-        console.error("Non-fatal error saving to cache:", err),
-      );
+      osmData = await fetchOverpassData(req, overpassQuery, country_code);
+      writeCache(bucket, paths.overpass, osmData);
     }
 
-    // Convert OSM JSON to GeoJSON
-    console.log("Converting to GeoJSON...");
-    let geojson = osmtogeojson(osmData);
-
-    // Release memory for GC
-    osmData = null;
-
-    console.log("Optimizing with Mapshaper...");
-
-    // Mapshaper configuration based on level
-    const mapshaperInput: Record<string, any> = { "input.geojson": geojson };
-
-    const mapshaperCmds: string[] = [
-      `-i input.geojson`,
-      // Fixes OSM gaps/slivers and ensures valid manifold geometry
-      `-clean`,
-      // Visvalingam simplification at 10% (sufficient for Zoom 8 resolution ~600m/px)
-      `-simplify weighting=0.5 10%`,
-      // Remove noise/enclaves smaller than 10km2 to reduce payload
-      `-filter-islands min-area=10km2`,
-      // Drop unnecessary metadata; retain only core identifiers
-      `-each 'this.properties = { id: this.properties["@id"] || this.id, name: this.properties.name || "" }'`,
-      // Export as TopoJSON with 1e3 quantization for optimized coordinate storage (include bounding box)
-      `-o output.topojson format=topojson quantization=1e3 bbox`,
-    ];
-
-    // For admin_level 5, we need to clip the target features to the country boundary
-    // This is because the target features are not guaranteed to be within the country boundary
-    if (admin_level === 5) {
-      // Split into level 2 mask and target level
-      const countryFeatures = geojson.features.filter(
-        (f: any) =>
-          f.properties?.admin_level === "2" || f.properties?.admin_level === 2,
-      );
-      const targetFeatures = geojson.features.filter(
-        (f: any) =>
-          f.properties?.admin_level === "5" || f.properties?.admin_level === 5,
-      );
-
-      // Override the main input with exclusively the target features to prevent duplicate output layers
-      mapshaperInput["input.geojson"] = {
-        type: "FeatureCollection",
-        features: targetFeatures,
-      };
-
-      // Pass the national boundary as a secondary clipping mask
-      mapshaperInput["mask.geojson"] = {
-        type: "FeatureCollection",
-        features: countryFeatures,
-      };
-
-      // Geometrically slice away exterior geometry using the country layout
-      mapshaperCmds.push(`-clip mask.geojson`);
-    }
-
-    const topojsonString = await new Promise<string>((resolve, reject) => {
-      mapshaper.applyCommands(
-        mapshaperCmds.join(" "),
-        mapshaperInput,
-        (err: Error, output: any) => {
-          // release geojson for gc
-          geojson = null as any;
-          if (err) {
-            reject(err);
-          } else {
-            try {
-              resolve(output["output.topojson"].toString());
-            } catch (parseError) {
-              reject(parseError);
-            }
-          }
-        },
-      );
-    });
-
-    const topojson = JSON.parse(topojsonString);
-
-    // Get actual bytes
-    const bytes = new Blob([topojsonString]).size;
-
-    // Convert to nearest KB
-    const size_kb = Math.round(bytes / 1024);
-
-    console.log("Mapshaper processing complete.");
-
-    // Mapshaper usually puts features under the name of the input file, but splits
-    // heterogeneous geometries into input1, input2, etc. We sum them up.
-    const feature_count = Object.values(topojson.objects).reduce(
-      (sum: number, obj: any) => sum + (obj.geometries?.length || 0),
-      0,
+    const topojson = await convertOsmToTopojson(
+      osmData,
+      admin_level,
+      bucket,
+      paths,
     );
 
-    // TopoJSON often includes a top-level bbox if requested or generated
-    const bbox = topojson.bbox || [];
+    writeCache(bucket, paths.topojson, topojson);
 
-    return JSONResponse(
-      {
-        country_code,
-        admin_level,
-        source,
-        size_kb,
-        feature_count,
-        bbox,
-        topojson,
-      },
-      200,
-    );
+    return buildSuccessResponse(params, source, topojson);
   } catch (error) {
     if (error instanceof Response) {
       return error;
     }
+
     console.error(typeof error, error);
+
     const e = error as any;
-    const msg =
-      typeof e === "string"
-        ? e
-        : e?.details || e?.error || e.message || e.msg || e;
+    const msg = typeof e === "string"
+      ? e
+      : e?.details || e?.error || e?.message || e?.msg ||
+        "Failed to generate admin boundaries";
+
     return ErrorResponse(msg);
   }
 };
+
+function buildOverpassQuery(countryCode: string, adminLevel: number): string {
+  return OVERPASS_QUERY_MAPPING[adminLevel](countryCode).trim();
+}
+
+function buildCachePaths(
+  countryCode: string,
+  adminLevel: number,
+): CachePaths {
+  const prefix =
+    `overpass/v${CACHE_VERSION}/country=${countryCode}/admin_level=${adminLevel}`;
+
+  return {
+    prefix,
+    overpass: `${prefix}/overpass.json`,
+    geojson: `${prefix}/geojson.json`,
+    topojson: `${prefix}/topojson.json`,
+  };
+}
+
+function getCacheBucket(): string | null {
+  const bucket = Deno.env.get("OVERPASS_CACHE_BUCKET");
+  return bucket && bucket.trim().length > 0 ? bucket : null;
+}
+
+async function readCache<T>(
+  bucket: string | null,
+  key: string,
+): Promise<T | null> {
+  if (!bucket) return null;
+  return await getFromCache(bucket, key);
+}
+
+function writeCache(
+  bucket: string | null,
+  key: string,
+  value: unknown,
+): void {
+  if (!bucket) return;
+
+  saveToCache(bucket, key, value).catch((err) => {
+    console.error(`Non-fatal error saving cache key "${key}":`, err);
+  });
+}
+
+async function fetchOverpassData(
+  req: Request,
+  overpassQuery: string,
+  countryCode: string,
+): Promise<unknown> {
+  console.log(`Fetching Overpass data for ${countryCode}...`);
+
+  const overpassResponse = await fetchWithRetry(
+    "https://overpass-api.de/api/interpreter",
+    {
+      method: "POST",
+      body: overpassQuery,
+      signal: req.signal,
+    },
+  );
+
+  if (!overpassResponse.ok) {
+    const errorText = await overpassResponse.text();
+    console.error(
+      `Overpass API error (${overpassResponse.status}):`,
+      errorText,
+    );
+
+    let status = 502;
+    let message = "Failed to fetch from Overpass API";
+
+    if (overpassResponse.status === 429) {
+      status = 429;
+      message = "Overpass API rate limit exceeded. Please try again later.";
+    } else if (overpassResponse.status === 504) {
+      status = 504;
+      message =
+        "Overpass API gateway timeout. The query took too long to execute.";
+    }
+
+    throw new Response(
+      JSON.stringify({
+        error: message,
+        details: errorText || overpassResponse.statusText,
+        upstream_status: overpassResponse.status,
+      }),
+      {
+        status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  let osmData: any;
+  try {
+    osmData = await overpassResponse.json();
+  } catch {
+    throw new Response(
+      JSON.stringify({
+        error: "Invalid JSON returned by Overpass API",
+      }),
+      {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  console.log(
+    `Received ${
+      osmData?.elements?.length || 0
+    } elements from Overpass for ${countryCode}`,
+  );
+
+  return osmData;
+}
+
+function hasAdminLevel(feature: any, level: number): boolean {
+  return Number(feature?.properties?.admin_level) === level;
+}
+
+function buildMapshaperInputsAndCommands(
+  geojson: any,
+  adminLevel: number,
+): {
+  input: Record<string, unknown>;
+  commands: string[];
+} {
+  const input: Record<string, unknown> = {
+    "input.geojson": geojson,
+  };
+
+  const commands: string[] = [
+    `-i input.geojson`,
+    `-clean`,
+    `-simplify weighting=0.5 10%`,
+    `-filter-islands min-area=10km2`,
+    `-each 'this.properties = { id: this.properties["@id"] || this.id, name: this.properties.name || "" }'`,
+    `-o output.topojson format=topojson quantization=1e3 bbox`,
+  ];
+
+  if (adminLevel === 5) {
+    const countryFeatures = geojson.features.filter((f: any) =>
+      hasAdminLevel(f, 2)
+    );
+    const targetFeatures = geojson.features.filter((f: any) =>
+      hasAdminLevel(f, 5)
+    );
+
+    input["input.geojson"] = {
+      type: "FeatureCollection",
+      features: targetFeatures,
+    };
+
+    input["mask.geojson"] = {
+      type: "FeatureCollection",
+      features: countryFeatures,
+    };
+
+    commands.push(`-clip mask.geojson`);
+  }
+
+  return { input, commands };
+}
+
+async function convertOsmToTopojson(
+  osmData: unknown,
+  adminLevel: number,
+  bucket: string | null,
+  paths: CachePaths,
+): Promise<any> {
+  console.log("Converting to GeoJSON...");
+  let geojson: any = osmtogeojson(osmData as any);
+
+  // Optional/debug cache
+  writeCache(bucket, paths.geojson, geojson);
+
+  console.log("Optimizing with Mapshaper...");
+
+  const { input, commands } = buildMapshaperInputsAndCommands(
+    geojson,
+    adminLevel,
+  );
+
+  const topojsonString = await new Promise<string>((resolve, reject) => {
+    mapshaper.applyCommands(
+      commands.join(" "),
+      input,
+      (err: Error | null, output: any) => {
+        geojson = null as any;
+
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        try {
+          resolve(output["output.topojson"].toString());
+        } catch (parseError) {
+          reject(parseError);
+        }
+      },
+    );
+  });
+
+  console.log("Mapshaper processing complete.");
+  return JSON.parse(topojsonString);
+}
+
+function summarizeTopojson(topojson: any): TopojsonSummary {
+  const topojsonString = JSON.stringify(topojson);
+  const bytes = new TextEncoder().encode(topojsonString).length;
+  const size_kb = Math.round(bytes / 1024);
+
+  const feature_count = Object.values(topojson.objects || {}).reduce(
+    (sum: number, obj: any) => {
+      if (Array.isArray(obj?.geometries)) {
+        return sum + obj.geometries.length;
+      }
+      if (obj?.type) {
+        return sum + 1;
+      }
+      return sum;
+    },
+    0,
+  );
+
+  const bbox = Array.isArray(topojson.bbox) ? topojson.bbox : [];
+
+  return {
+    size_kb,
+    feature_count,
+    bbox,
+  };
+}
+
+function buildSuccessResponse(
+  params: BoundaryRequestParams,
+  source: Source,
+  topojson: any,
+): Response {
+  const { size_kb, feature_count, bbox } = summarizeTopojson(topojson);
+
+  return JSONResponse(
+    {
+      country_code: params.country_code,
+      admin_level: params.admin_level,
+      source,
+      size_kb,
+      feature_count,
+      bbox,
+      topojson,
+    },
+    200,
+  );
+}
