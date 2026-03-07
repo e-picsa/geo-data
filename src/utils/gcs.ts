@@ -1,3 +1,18 @@
+import processAmbient from "node:process";
+
+// Google Cloud SDK (which is meant for Node.js) relies on process.env being an object.
+// We must polyfill it aggressively here, as certain docker environments for Deno lack the proper
+// initialization for these properties natively before they're executed inside internal dependencies.
+const _global = globalThis as any;
+if (!_global.process) {
+  _global.process = processAmbient;
+}
+if (!_global.process.env) {
+  _global.process.env = {};
+}
+// Merge Deno.env to process.env so it behaves exactly like Node.js
+Object.assign(_global.process.env, Deno.env.toObject());
+
 let StorageClass: any = null;
 let storageInstance: any = null;
 
