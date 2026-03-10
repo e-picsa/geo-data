@@ -26,7 +26,7 @@ async function getAccessToken(): Promise<string> {
     );
 
     if (res.ok) {
-      const data = await res.json();
+      const data = await res.json() as any;
       cachedToken = {
         token: data.access_token,
         expiry: Date.now() + (data.expires_in - 30) * 1000,
@@ -38,20 +38,19 @@ async function getAccessToken(): Promise<string> {
   }
 
   // Fallback: local dev via gcloud CLI
-  const cmd = new Deno.Command("gcloud", {
-    args: ["auth", "print-access-token"],
-    stdout: "piped",
-    stderr: "piped",
+  const proc = Bun.spawn(["gcloud", "auth", "print-access-token"], {
+    stdout: "pipe",
+    stderr: "pipe",
   });
 
-  const { code, stdout, stderr } = await cmd.output();
+  const code = await proc.exited;
 
   if (code !== 0) {
-    const err = new TextDecoder().decode(stderr);
+    const err = await new Response(proc.stderr).text();
     throw new Error(`gcloud auth failed: ${err}`);
   }
 
-  const token = new TextDecoder().decode(stdout).trim();
+  const token = (await new Response(proc.stdout).text()).trim();
   cachedToken = {
     token,
     expiry: Date.now() + 30 * 60 * 1000, // ~30 min conservative

@@ -6,7 +6,8 @@ import { ErrorResponse, JSONResponse } from "./utils/response.ts";
 import { validateBody } from "./utils/validation.ts";
 import { fetchWithRetry } from "./utils/fetch.ts";
 import { getFromCache, saveToCache } from "./utils/google-storage.ts";
-import { BOUNDARY_REQUEST_SCHEMA, BoundaryRequestParams } from "./schema.ts";
+import { BOUNDARY_REQUEST_SCHEMA } from "./schema.ts";
+import type { BoundaryRequestParams } from "./schema.ts";
 import { OVERPASS_QUERY_MAPPING } from "./overpass-mapping.ts";
 
 /**
@@ -89,7 +90,11 @@ export const adminBoundaries = async (req: Request) => {
 };
 
 function buildOverpassQuery(countryCode: string, adminLevel: number): string {
-  return OVERPASS_QUERY_MAPPING[adminLevel](countryCode).trim();
+  const queryBuilder = OVERPASS_QUERY_MAPPING[adminLevel];
+  if (!queryBuilder) {
+    throw new Error(`Admin level ${adminLevel} is not supported`);
+  }
+  return queryBuilder(countryCode).trim();
 }
 
 function buildCachePaths(
@@ -108,7 +113,7 @@ function buildCachePaths(
 }
 
 function getCacheBucket(): string | null {
-  const bucket = Deno.env.get("OVERPASS_CACHE_BUCKET");
+  const bucket = process.env.OVERPASS_CACHE_BUCKET;
   return bucket && bucket.trim().length > 0 ? bucket : null;
 }
 
