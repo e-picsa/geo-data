@@ -246,6 +246,9 @@ function buildMapshaperInputsAndCommands(
     };
 
     commands.push(`-clip mask.geojson`);
+    // Filter out slivers along the border. 
+    // 5km2 is arbitrary but should drop the border overlaps while keeping real districts.
+    commands.push(`-filter-islands min-area=5km2`);
   }
 
   commands.push(`-o output.topojson format=topojson quantization=1e3 bbox`);
