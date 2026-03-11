@@ -19,7 +19,9 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
       if (!parseResult.success) {
         return new Response(
           JSON.stringify({
-            error: parseResult.error.issues.map((issue) => issue.message).join(', ') ?? 'Invalid request data',
+            error:
+              parseResult.error.issues.map((issue) => issue.message).join(', ') ??
+              'Invalid request data',
           }),
           {
             status: 400,
