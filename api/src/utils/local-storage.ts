@@ -9,9 +9,18 @@ export class LocalCacheProvider implements CacheProvider {
     this.baseDir = path.resolve(process.cwd(), baseDir);
   }
 
+  private getFilePath(key: string): string {
+    const targetPath = path.resolve(this.baseDir, key);
+    const relative = path.relative(this.baseDir, targetPath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error("Invalid cache key: path traversal detected");
+    }
+    return targetPath;
+  }
+
   async get<T>(key: string): Promise<T | null> {
     try {
-      const filePath = path.join(this.baseDir, key);
+      const filePath = this.getFilePath(key);
       const data = await fs.readFile(filePath, "utf-8");
       return JSON.parse(data);
     } catch (err: any) {
@@ -24,7 +33,7 @@ export class LocalCacheProvider implements CacheProvider {
 
   async set(key: string, data: any): Promise<void> {
     try {
-      const filePath = path.join(this.baseDir, key);
+      const filePath = this.getFilePath(key);
       await fs.mkdir(path.dirname(filePath), { recursive: true });
       await fs.writeFile(filePath, JSON.stringify(data), "utf-8");
       console.log(`Successfully saved to local cache: ${key}`);

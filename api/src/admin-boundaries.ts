@@ -5,7 +5,7 @@ import mapshaper from "mapshaper";
 import { ErrorResponse, JSONResponse } from "./utils/response.ts";
 import { validateBody } from "./utils/validation.ts";
 import { fetchWithRetry } from "./utils/fetch.ts";
-import { getCache } from "./utils/cache.ts";
+import { getCache, type CacheProvider } from "./utils/cache.ts";
 import { BOUNDARY_REQUEST_SCHEMA } from "./schema.ts";
 import type { BoundaryRequestParams } from "./schema.ts";
 import { OVERPASS_QUERY_MAPPING } from "./overpass-mapping.ts";
@@ -113,14 +113,14 @@ function buildCachePaths(
 }
 
 async function readCache<T>(
-  cache: import("./utils/cache.ts").CacheProvider,
+  cache: CacheProvider,
   key: string,
 ): Promise<T | null> {
   return await cache.get<T>(key);
 }
 
 function writeCache(
-  cache: import("./utils/cache.ts").CacheProvider,
+  cache: CacheProvider,
   key: string,
   value: unknown,
 ): void {

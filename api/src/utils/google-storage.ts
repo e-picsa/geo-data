@@ -70,13 +70,16 @@ export class GCSCacheProvider implements CacheProvider {
          const listData = (await listRes.json()) as any;
          const items = listData.items || [];
          
-         // Using Promise.all here is fast but might rate limit on huge buckets. Look into that if it breaks.
-         await Promise.all(items.map(async (item: any) => {
-             const delUrl = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(this.bucketName)}/o/${encodeURIComponent(item.name)}`;
-             const delRes = await fetch(delUrl, { method: "DELETE", headers });
-             if (!delRes.ok) console.error(`Failed to delete ${item.name}`);
-             else deletedCount++;
-         }));
+          const BATCH_SIZE = 100; // A reasonable batch size to avoid rate limits.
+         for (let i = 0; i < items.length; i += BATCH_SIZE) {
+           const batch = items.slice(i, i + BATCH_SIZE);
+           await Promise.all(batch.map(async (item: any) => {
+               const delUrl = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(this.bucketName)}/o/${encodeURIComponent(item.name)}`;
+               const delRes = await fetch(delUrl, { method: "DELETE", headers });
+               if (!delRes.ok) console.error(`Failed to delete ${item.name}`);
+               else deletedCount++;
+           }));
+         }
 
          nextPageToken = listData.nextPageToken || null;
        } while (nextPageToken);

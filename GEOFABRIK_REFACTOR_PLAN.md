@@ -185,7 +185,7 @@ boundaries/
 
 - Update `admin-boundaries.test.ts` to test the new retrieval endpoint (mock GCS reads).
 - Add a new `process-country.test.ts` that tests the processing pipeline with a small PBF fixture.
-- Run tests with: `bund test --allow-net --allow-env --allow-read --allow-run --allow-write`
+- Run tests with: `bun test --allow-net --allow-env --allow-read --allow-run --allow-write`
 
 ### Manual Verification
 
