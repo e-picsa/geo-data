@@ -16,10 +16,10 @@ interface ExportTilesParams {
 
 export async function exportTiles(params: ExportTilesParams): Promise<Buffer> {
   const { country_code, bbox, minZoom, maxZoom } = params;
-  const minLon = bbox[0] ?? 0;
-  const minLat = bbox[1] ?? 0;
-  const maxLon = bbox[2] ?? 0;
-  const maxLat = bbox[3] ?? 0;
+  const minLon = bbox[0];
+  const minLat = bbox[1];
+  const maxLon = bbox[2];
+  const maxLat = bbox[3];
 
   // Generate all required tiles
   const requiredTiles = [];
