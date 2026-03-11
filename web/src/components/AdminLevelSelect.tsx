@@ -7,8 +7,6 @@ const adminLevelOptions = [
   { value: 3, label: 'Level 3 (Region)' },
   { value: 4, label: 'Level 4 (State/Province)' },
   { value: 5, label: 'Level 5 (District/Council)' },
-  { value: 6, label: 'Level 6 (County/Municipality)' },
-  { value: 8, label: 'Level 8 (City/Town/Village)' },
 ];
 
 export interface AdminLevelSelectProps {

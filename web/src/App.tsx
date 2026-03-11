@@ -5,6 +5,7 @@ import * as topojsonClient from 'topojson-client';
 import { CountrySelect } from './components/CountrySelect';
 import { AdminLevelSelect } from './components/AdminLevelSelect';
 import { BoundsFitter } from './components/BoundsFitter';
+import { TrashIcon } from '@heroicons/react/20/solid';
 
 interface BoundaryResponse {
   country_code: string;
@@ -137,6 +138,29 @@ function App() {
               className="mt-2 w-full bg-white border border-slate-300 text-slate-700 font-medium py-2 px-4 rounded-md shadow-sm hover:bg-slate-50 transition-colors"
             >
               Download TopoJSON
+            </button>
+          </div>
+        )}
+
+        {/* Admin Tools - Dev Only */}
+        {import.meta.env.DEV && (
+          <div className="mt-auto pt-4 border-t border-slate-200">
+            <button
+              onClick={async () => {
+                if (!confirm('Are you sure you want to clear the server cache?')) return;
+                try {
+                  const baseUrl = API_URL.replace(/\/$/, '');
+                  const res = await fetch(`${baseUrl}/admin/clear-cache`, { method: 'POST' });
+                  if (!res.ok) throw new Error('Failed to clear cache');
+                  alert('Cache cleared successfully!');
+                } catch (e: any) {
+                  alert(e.message || 'Error clearing cache');
+                }
+              }}
+              className="w-full flex justify-center items-center gap-2 bg-red-50 text-red-600 font-medium py-2 px-4 rounded-md shadow-sm border border-red-200 hover:bg-red-100 transition-colors text-sm"
+            >
+              <TrashIcon className="h-5 w-5" />
+              Clear Server Cache (Dev)
             </button>
           </div>
         )}

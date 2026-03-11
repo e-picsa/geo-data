@@ -1,13 +1,13 @@
-import { corsHeaders } from './utils/cors.ts';
+import { corsHeaders } from '../utils/cors.ts';
 import osmtogeojson from 'osmtogeojson';
 import mapshaper from 'mapshaper';
 
-import { ErrorResponse, JSONResponse } from './utils/response.ts';
-import { validateBody } from './utils/validation.ts';
-import { fetchWithRetry } from './utils/fetch.ts';
-import { getCache, type CacheProvider } from './utils/cache.ts';
-import { BOUNDARY_REQUEST_SCHEMA } from './schema.ts';
-import type { BoundaryRequestParams } from './schema.ts';
+import { ErrorResponse, JSONResponse } from '../utils/response.ts';
+import { validateBody } from '../utils/validation.ts';
+import { fetchWithRetry } from '../utils/fetch.ts';
+import { getCache, type CacheProvider } from '../utils/cache.ts';
+import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
+import type { BoundaryRequestParams } from '../types/schema.ts';
 import { OVERPASS_QUERY_MAPPING } from './overpass-mapping.ts';
 
 /**
@@ -223,7 +223,7 @@ function buildMapshaperInputsAndCommands(
 async function convertOsmToTopojson(
   osmData: unknown,
   adminLevel: number,
-  cache: import('./utils/cache.ts').CacheProvider,
+  cache: import('../utils/cache.ts').CacheProvider,
   paths: CachePaths,
 ): Promise<any> {
   console.log('Converting to GeoJSON...');
