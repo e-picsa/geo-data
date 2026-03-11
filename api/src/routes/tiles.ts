@@ -31,7 +31,7 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
 
       const { country_code, minZoom, maxZoom } = parseResult.data;
 
-      const archiveStream = await exportTiles({ country_code, minZoom, maxZoom });
+      const archiveStream = await exportTiles({ country_code, minZoom, maxZoom }, req.signal);
 
       return new Response(archiveStream, {
         status: 200,

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import * as tar from 'tar';
 import sharp from 'sharp';
 import { getTilesForBbox } from '../utils/tiles.ts';
 import { fetchWithRetry } from '../utils/fetch.ts';
@@ -17,14 +17,17 @@ interface ExportTilesParams {
   maxZoom: number;
 }
 
-export async function exportTiles(params: ExportTilesParams): Promise<ReadableStream> {
+export async function exportTiles(
+  params: ExportTilesParams,
+  signal?: AbortSignal,
+): Promise<ReadableStream> {
   const { country_code, minZoom } = params;
 
   const maxZoom = Math.min(params.maxZoom, MAX_ZOOM);
 
   // Derive bbox from country boundary (admin_level 2)
   console.log(`Looking up bounding box for ${country_code}...`);
-  const [minLon, minLat, maxLon, maxLat] = await getBboxForCountry(country_code);
+  const [minLon, minLat, maxLon, maxLat] = await getBboxForCountry(country_code, signal);
   console.log(`Bounding box for ${country_code}: [${minLon}, ${minLat}, ${maxLon}, ${maxLat}]`);
 
   // Generate all required tiles
@@ -66,6 +69,7 @@ export async function exportTiles(params: ExportTilesParams): Promise<ReadableSt
         const res = await fetchWithRetry(
           url,
           {
+            signal,
             headers: {
               'User-Agent':
                 'GeoBoundariesTopoJSON/1.0 (https://github.com/chris/geo-boundaries-topojson)',
@@ -98,27 +102,25 @@ export async function exportTiles(params: ExportTilesParams): Promise<ReadableSt
   return new ReadableStream({
     start(controller) {
       console.log(`Creating tar.gz archive for ${country_code}...`);
-      // Create archive of the countryDir, but cd into it so the root of the tar is the zoom levels
-      const child = spawn('tar', ['-czf', '-', '-C', countryDir, '.']);
 
-      child.stdout.on('data', (data) => {
+      const tarStream = tar.c(
+        {
+          gzip: true,
+          cwd: countryDir,
+        },
+        ['.'],
+      );
+
+      tarStream.on('data', (data) => {
         controller.enqueue(new Uint8Array(data));
       });
 
-      child.stderr.on('data', (data) => {
-        console.warn('tar stderr:', data.toString());
+      tarStream.on('end', () => {
+        console.log(`Tar archive created successfully for ${country_code}`);
+        controller.close();
       });
 
-      child.on('close', (code) => {
-        if (code !== 0) {
-          controller.error(new Error(`tar process exited with code ${code}`));
-        } else {
-          console.log(`Tar archive created successfully for ${country_code}`);
-          controller.close();
-        }
-      });
-
-      child.on('error', (err) => {
+      tarStream.on('error', (err) => {
         controller.error(err);
       });
     },
