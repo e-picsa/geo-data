@@ -1,15 +1,21 @@
 # Admin Boundaries TopoJSON Generator
 
-A standalone Deno web service that fetches country administrative boundaries from the Overpass API, optimizes the geometries via Mapshaper, and returns lightweight TopoJSON payloads.
+A Bun monorepo that fetches country administrative boundaries from the Overpass API, optimizes geometries via Mapshaper, and returns lightweight TopoJSON payloads. Includes a React frontend for interactive boundary exploration.
 
-Initially designed as a Supabase Edge Function, this service has been refactored for direct deployment to Google Cloud Run to better handle the heavy memory and processing requirements of processing large country geometries.
+## Architecture
+
+| Component | Stack | Deployment |
+|-----------|-------|------------|
+| **API** (`api/`) | Bun + TypeScript | Google Cloud Run via Docker |
+| **Web** (`web/`) | React + Vite + Tailwind CSS | GitHub Pages |
 
 ## Environment Variables
 
-| Variable                | Description                                                                                                       |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `PORT`                  | The port the server listens on (default: `8080`)                                                                  |
-| `OVERPASS_CACHE_BUCKET` | The GCS bucket name to cache raw Overpass API requests (e.g. `my-cache-bucket`). If not set, caching is disabled. |
+| Variable                | Description                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `PORT`                  | The port the API server listens on (default: `8080`)                          |
+| `OVERPASS_CACHE_BUCKET` | GCS bucket name for caching raw Overpass responses. If not set, caching is disabled. |
+| `VITE_API_URL`          | (Frontend build-time) The production API URL. Defaults to `/api` for local dev. |
 
 ### Caching Configuration (GCS)
 
@@ -19,15 +25,16 @@ To speed up requests and prevent rate-limiting against the Overpass API, raw OSM
 
 1. A GCS bucket.
 2. Provide the bucket name via the `OVERPASS_CACHE_BUCKET` environment variable.
-3. Configure **Object Lifecycle Management** on the bucket to automatically delete objects older than 90 days (or however long you wish to cache the raw OSM data).
-4. The compute identity running this service (e.g., Cloud Run service account) needs the `roles/storage.objectAdmin` (or at minimum `storage.objects.create` and `storage.objects.get` permissions) on the target bucket.
+3. Configure **Object Lifecycle Management** on the bucket to automatically delete objects older than 90 days.
+4. The compute identity running this service (e.g., Cloud Run service account) needs `roles/storage.objectAdmin` on the target bucket.
 
 ## Features
 
-- Fetches OSM relation boundaries via Overpass API for `admin_level`s 2 through 5.
+- Fetches OSM relation boundaries via Overpass API for `admin_level`s 2 through 8.
 - Converts fetched GeoJSON natively into TopoJSON.
 - Uses Mapshaper (`-clean`, `-simplify`, `-filter-islands`) to aggressively reduce file size and complexity.
 - Validates requests via Zod.
+- Interactive React frontend with Leaflet map visualization and TopoJSON download.
 
 ## Administrative Levels (OSM)
 
@@ -41,101 +48,96 @@ As a general guideline:
 - **`admin_level=8`**: Municipality / City / Town level.
 
 **How to verify your exact level:**
-Because `admin_level` definitions shift from country to country (e.g., level 4 is a State in the US, but a Region in France), the best way to verify what a specific admin level returns is to test queries interactively on **[Overpass Turbo](https://overpass-turbo.eu/)**.
-
-You can run a query like this in Overpass Turbo to visualize the boundaries for a specific country before calling this API:
-
-```overpass
-[out:json];
-area["ISO3166-1"="ZW"]->.searchArea;
-(
-  relation["admin_level"="4"]["boundary"="administrative"]["ISO3166-2"~"^ZW-"](area.searchArea);
-);
-out body;
->;
-out skel qt;
-```
+Because `admin_level` definitions shift from country to country, the best way to verify what a specific admin level returns is to test queries interactively on **[Overpass Turbo](https://overpass-turbo.eu/)**.
 
 **Further Reference:**
-For a comprehensive table mapping `admin_level` values to their specific meanings in every country globally, consult the **[OSM Wiki for admin_level](https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries)**.
+[OSM Wiki for admin_level](https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries).
 
 ## Local Development
 
-The project is structured as a standard Deno application using `deno.jsonc` and an `import_map.json`.
+Prerequisites: [Bun](https://bun.sh/) installed.
 
 ```bash
-# Run the server locally on port 8080 (default)
-deno run --allow-net --allow-env --allow-read src/main.ts
+# Install dependencies (both workspaces)
+bun install
 
-# Specify a custom port
-PORT=3000 deno run --allow-net --allow-env --allow-read src/main.ts
+# Run both API and frontend concurrently
+npm run start
+
+# Or run individually
+npm run start:api   # API on http://localhost:8080
+npm run start:web   # Frontend on http://localhost:5173 (proxies /api → :8080)
 ```
 
-## Cloud Run Deployment
+The Vite dev server proxies `/api` requests to the Bun API at `localhost:8080`, so the frontend works seamlessly in development without CORS issues.
 
-The service is packaged using Docker for Google Cloud Run:
+## Cloud Run Deployment (API)
+
+The API is containerized via Docker for deployment to Google Cloud Run.
 
 ```bash
 # Build the Docker image
 docker build -t admin-boundaries-topojson .
 
-# Run the Docker image locally
+# Run locally
 docker run -p 8080:8080 admin-boundaries-topojson
+
+# Test the health endpoint
+curl http://localhost:8080/health
 ```
 
-### Continuous Deployment (Recommended)
+### Continuous Deployment
 
-The easiest way to deploy this to production is directly through the Google Cloud Run Console using **Developer Connect**:
+The easiest way to deploy is through the Google Cloud Run Console using **Developer Connect**:
 
-1. Go to the **Cloud Run** page in the Google Cloud Console.
-2. Click **Create Service**.
-3. Select **Continuously deploy from a repository**.
-4. Choose **Developer Connect** (recommended for GitHub, GitLab, and Bitbucket integration).
-5. Select your repository and branch.
-6. Cloud Run will automatically detect the `Dockerfile` at the root of the project.
-7. Set the authentication to **Allow unauthenticated invocations** (if this is a public API) or require authentication as needed.
-8. Click **Create**.
+1. Go to **Cloud Run** in the Google Cloud Console.
+2. Click **Create Service** → **Continuously deploy from a repository**.
+3. Select **Developer Connect** and link your repository.
+4. Cloud Run will automatically detect the `Dockerfile` at the repo root.
+5. Set environment variables (`OVERPASS_CACHE_BUCKET`, etc.) as needed.
+6. Cloud Run will automatically build and deploy on every push to your selected branch.
 
-Cloud Run will automatically build the image and deploy updates every time you push to your selected branch.
+The API is currently deployed at `https://geo-boundaries.picsa.app`.
+
+## GitHub Pages Deployment (Frontend)
+
+The frontend is deployed automatically to GitHub Pages via the `.github/workflows/deploy-frontend.yml` workflow.
+
+**How it works:**
+1. On push to `main` (when `web/` files change), the workflow builds the Vite app.
+2. `VITE_API_URL` is set to the Cloud Run URL at build time, so API calls go directly to Cloud Run.
+3. The built SPA is deployed to GitHub Pages.
+
+**Custom Domain Setup:**
+1. In your GitHub repo, go to **Settings → Pages**.
+2. Under **Custom domain**, enter your subdomain (e.g., `geo.picsa.app`).
+3. Add a `CNAME` DNS record pointing your subdomain to `e-picsa.github.io`.
+4. Enable **Enforce HTTPS**.
 
 ## API Usage
 
-The service provides two main endpoints:
-
 ### 1. Healthcheck
-
-Provides a lightweight readiness probe for Cloud Run container monitoring.
 
 **Endpoint:** `GET /` or `GET /health`
 
 **Response:** HTTP 200 OK
-
 ```json
-{
-  "status": "ok"
-}
+{ "status": "ok" }
 ```
 
----
-
 ### 2. Generate Boundaries
-
-Fetches OSM relations, converts them to TopoJSON, and optimizes the file size.
 
 **Endpoint:** `POST /`
 
 **Request Body:**
-
 ```json
 {
-  "country_code": "MW", // ISO 3166-1 alpha-2 code
-  "admin_level": 2 // OSM boundary admin_level (usually 2 for country, 4 for state)
+  "country_code": "MW",
+  "admin_level": 2
 }
 ```
 
 **Response:** HTTP 200 OK
-Returns a JSON object with boundary metadata and a parsed custom TopoJSON property.
-
 ```json
 {
   "message": "Boundary data retrieved successfully",
@@ -144,11 +146,15 @@ Returns a JSON object with boundary metadata and a parsed custom TopoJSON proper
   "size_kb": 128,
   "feature_count": 1,
   "bbox": [ ... ],
-  "topojson": {
-    "type": "Topology",
-    "objects": { ... },
-    "arcs": [ ... ],
-    "transform": { ... }
-  }
+  "topojson": { ... }
 }
+```
+
+### 3. Clear Cache
+
+**Endpoint:** `POST /admin/clear-cache`
+
+**Response:** HTTP 200 OK
+```json
+{ "status": "success", "message": "Cache cleared" }
 ```

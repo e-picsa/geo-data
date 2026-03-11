@@ -51,6 +51,8 @@ function App() {
   const [data, setData] = useState<BoundaryResponse | null>(null);
   const [geoJsonData, setGeoJsonData] = useState<any>(null);
 
+const API_URL = import.meta.env.VITE_API_URL || '/api';
+
   const fetchBoundaries = async () => {
     setLoading(true);
     setError(null);
@@ -58,7 +60,7 @@ function App() {
     setGeoJsonData(null);
     
     try {
-      const res = await fetch('/api', {
+      const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ country_code: countryCode, admin_level: adminLevel })

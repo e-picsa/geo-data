@@ -1,7 +1,7 @@
 {
   "name": "geo-boundaries-topojson",
   "version": "1.0.0",
-  "description": "A standalone Deno web service that fetches country administrative boundaries from the Overpass API, optimizes the geometries via Mapshaper, and returns lightweight TopoJSON payloads.",
+  "description": "A Bun monorepo that fetches country administrative boundaries from the Overpass API, optimizes geometries via Mapshaper, and returns lightweight TopoJSON payloads. Includes a React frontend for interactive boundary exploration.",
   "main": "index.js",
   "scripts": {
     "start": "bun run --filter '*' start",

@@ -1,5 +1,8 @@
 .git
 .vscode
 .DS_Store
-*/**/*.test.ts
+.github
 node_modules
+web
+*/**/*.test.ts
+*.md

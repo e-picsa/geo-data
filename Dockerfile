@@ -1,25 +1,21 @@
-# Use the official Deno alpine image for a minimal footprint
-FROM denoland/deno:alpine-2.1.4
-
-# Cloud run defaults to 8080
-EXPOSE 8080
-
+# ---- Build stage ----
+FROM oven/bun:1 AS build
 WORKDIR /app
 
-# Prefer not to run as root.
-USER deno
+COPY api/package.json ./package.json
+COPY bun.lock ./
 
-# Cache dependencies
-COPY import_map.json deno.jsonc ./
+RUN bun install --frozen-lockfile
 
-# Now we perform the rest of the copy
-COPY . .
+# ---- Runtime stage ----
+FROM oven/bun:1-slim
+WORKDIR /app
 
-# Cache the app
-RUN deno cache src/main.ts
+COPY --from=build /app/node_modules node_modules
+COPY --from=build /app/package.json package.json
+COPY api/src src
 
-# Run the index edge function natively
-# --allow-net: Run web server and query Overpass API
-# --allow-env: Read PORT variable and other configuration
-# --allow-read: Mapshaper requires some file IO semantics internally
-CMD ["run", "--allow-net", "--allow-env", "--allow-read", "src/main.ts"]
+EXPOSE 8080
+USER bun
+
+CMD ["bun", "run", "src/main.ts"]
