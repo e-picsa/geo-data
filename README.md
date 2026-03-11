@@ -167,7 +167,7 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 
 ### 4. Export Map Tiles Archive
 
-**Endpoint:** `POST /api/export-tiles`
+**Endpoint:** `POST /export-tiles`
 
 **Request Body:**
 
