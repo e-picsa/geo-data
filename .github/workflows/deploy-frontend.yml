@@ -34,7 +34,7 @@ jobs:
       - name: Build frontend
         env:
           VITE_API_URL: https://geo-boundaries.picsa.app
-        run: bun run build --cwd web
+        run: bun run --filter 'web' build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
