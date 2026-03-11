@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 const ExportTilesSchema = z.object({
   country_code: z.string().regex(/^[a-zA-Z0-9-_]+$/, 'Invalid country_code format'),
-  bbox: z.array(z.number()).length(4),
   minZoom: z.number().optional().default(0),
   maxZoom: z.number().max(8, 'Max zoom level restricted to 8').optional().default(8),
 });
@@ -30,9 +29,9 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
         );
       }
 
-      const { country_code, bbox, minZoom, maxZoom } = parseResult.data;
+      const { country_code, minZoom, maxZoom } = parseResult.data;
 
-      const archiveStream = await exportTiles({ country_code, bbox, minZoom, maxZoom });
+      const archiveStream = await exportTiles({ country_code, minZoom, maxZoom });
 
       return new Response(archiveStream, {
         status: 200,

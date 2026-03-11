@@ -1,14 +1,12 @@
-import { corsHeaders } from '../utils/cors.ts';
 import osmtogeojson from 'osmtogeojson';
 import mapshaper from 'mapshaper';
 
 import { ErrorResponse, JSONResponse } from '../utils/response.ts';
 import { validateBody } from '../utils/validation.ts';
-import { fetchWithRetry } from '../utils/fetch.ts';
 import { getCache, type CacheProvider } from '../utils/cache.ts';
 import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
-import { OVERPASS_QUERY_MAPPING } from './overpass-mapping.ts';
+import { buildOverpassQuery, fetchOverpassData } from './overpass.ts';
 
 /**
  * Bust cache if query or processing methods change.
@@ -54,7 +52,7 @@ export const adminBoundaries = async (req: Request) => {
       console.log(`Overpass cache hit for ${country_code} admin level ${admin_level}.`);
     } else {
       source = 'overpass';
-      osmData = await fetchOverpassData(req, overpassQuery, country_code);
+      osmData = await fetchOverpassData(req.signal, overpassQuery, country_code);
       writeCache(cache, paths.overpass, osmData);
     }
 
@@ -80,14 +78,6 @@ export const adminBoundaries = async (req: Request) => {
   }
 };
 
-function buildOverpassQuery(countryCode: string, adminLevel: number): string {
-  const queryBuilder = OVERPASS_QUERY_MAPPING[adminLevel];
-  if (!queryBuilder) {
-    throw new Error(`Admin level ${adminLevel} is not supported`);
-  }
-  return queryBuilder(countryCode).trim();
-}
-
 function buildCachePaths(countryCode: string, adminLevel: number): CachePaths {
   const prefix = `overpass/v${CACHE_VERSION}/country=${countryCode}/admin_level=${adminLevel}`;
 
@@ -107,69 +97,6 @@ function writeCache(cache: CacheProvider, key: string, value: unknown): void {
   cache.set(key, value).catch((err) => {
     console.error(`Non-fatal error saving cache key "${key}":`, err);
   });
-}
-
-async function fetchOverpassData(
-  req: Request,
-  overpassQuery: string,
-  countryCode: string,
-): Promise<unknown> {
-  console.log(`Fetching Overpass data for ${countryCode}...`);
-
-  const overpassResponse = await fetchWithRetry('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    body: overpassQuery,
-    signal: req.signal,
-  });
-
-  if (!overpassResponse.ok) {
-    const errorText = await overpassResponse.text();
-    console.error(`Overpass API error (${overpassResponse.status}):`, errorText);
-
-    let status = 502;
-    let message = 'Failed to fetch from Overpass API';
-
-    if (overpassResponse.status === 429) {
-      status = 429;
-      message = 'Overpass API rate limit exceeded. Please try again later.';
-    } else if (overpassResponse.status === 504) {
-      status = 504;
-      message = 'Overpass API gateway timeout. The query took too long to execute.';
-    }
-
-    throw new Response(
-      JSON.stringify({
-        error: message,
-        details: errorText || overpassResponse.statusText,
-        upstream_status: overpassResponse.status,
-      }),
-      {
-        status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    );
-  }
-
-  let osmData: any;
-  try {
-    osmData = await overpassResponse.json();
-  } catch {
-    throw new Response(
-      JSON.stringify({
-        error: 'Invalid JSON returned by Overpass API',
-      }),
-      {
-        status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    );
-  }
-
-  console.log(
-    `Received ${osmData?.elements?.length || 0} elements from Overpass for ${countryCode}`,
-  );
-
-  return osmData;
 }
 
 function hasAdminLevel(feature: any, level: number): boolean {
