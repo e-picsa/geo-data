@@ -9,7 +9,7 @@ export interface CountrySelectProps {
 }
 
 export function CountrySelect({ value, onChange }: CountrySelectProps) {
-  const selectedCountry = countries.find((c) => c.code === value) || countries[0];
+  const selectedCountry = countries.find((c) => c.code === value);
 
   return (
     <Listbox value={value} onChange={onChange}>
