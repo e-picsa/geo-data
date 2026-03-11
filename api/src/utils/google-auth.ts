@@ -21,12 +21,12 @@ async function getAccessToken(): Promise<string> {
   // Try metadata server first (works on Cloud Run, GCE, Cloud Functions)
   try {
     const res = await fetch(
-      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
-      { headers: { "Metadata-Flavor": "Google" } },
+      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+      { headers: { 'Metadata-Flavor': 'Google' } },
     );
 
     if (res.ok) {
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
       cachedToken = {
         token: data.access_token,
         expiry: Date.now() + (data.expires_in - 30) * 1000,
@@ -38,9 +38,9 @@ async function getAccessToken(): Promise<string> {
   }
 
   // Fallback: local dev via gcloud CLI
-  const proc = Bun.spawn(["gcloud", "auth", "print-access-token"], {
-    stdout: "pipe",
-    stderr: "pipe",
+  const proc = Bun.spawn(['gcloud', 'auth', 'print-access-token'], {
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
 
   const code = await proc.exited;
@@ -57,4 +57,3 @@ async function getAccessToken(): Promise<string> {
   };
   return token;
 }
-

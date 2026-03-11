@@ -3,7 +3,7 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
-   "scripts": {
+  "scripts": {
     "start": "bun --watch run src/main.ts",
     "test": "bun test"
   },

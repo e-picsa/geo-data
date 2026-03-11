@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { ErrorResponse } from './response.ts';
 
-export async function validateBody<T extends z.ZodType>(req: Request, schema: T): Promise<z.infer<T>> {
+export async function validateBody<T extends z.ZodType>(
+  req: Request,
+  schema: T,
+): Promise<z.infer<T>> {
   let body: unknown;
 
   try {

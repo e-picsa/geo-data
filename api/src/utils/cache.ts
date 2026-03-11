@@ -1,5 +1,5 @@
-import { GCSCacheProvider } from "./google-storage.ts";
-import { LocalCacheProvider } from "./local-storage.ts";
+import { GCSCacheProvider } from './google-storage.ts';
+import { LocalCacheProvider } from './local-storage.ts';
 
 export interface CacheProvider {
   get<T>(key: string): Promise<T | null>;
@@ -8,7 +8,9 @@ export interface CacheProvider {
 }
 
 export class NoOpCacheProvider implements CacheProvider {
-  async get<T>(_key: string): Promise<T | null> { return null; }
+  async get<T>(_key: string): Promise<T | null> {
+    return null;
+  }
   async set(_key: string, _data: any): Promise<void> {}
   async clear(): Promise<void> {}
 }
@@ -18,7 +20,8 @@ let cacheInstance: CacheProvider;
 export function getCache(): CacheProvider {
   if (cacheInstance) return cacheInstance;
 
-  const provider = process.env.CACHE_PROVIDER || (process.env.OVERPASS_CACHE_BUCKET ? 'gcs' : 'local');
+  const provider =
+    process.env.CACHE_PROVIDER || (process.env.OVERPASS_CACHE_BUCKET ? 'gcs' : 'local');
 
   if (provider === 'local') {
     const dir = process.env.LOCAL_CACHE_DIR || './.cache';

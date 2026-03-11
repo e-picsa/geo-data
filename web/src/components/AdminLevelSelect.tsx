@@ -22,7 +22,7 @@ export function AdminLevelSelect({ value, onChange }: AdminLevelSelectProps) {
       <div className="relative mt-1">
         <ListboxButton className="relative w-full cursor-default rounded-md bg-white py-2 pl-3 pr-10 text-left border border-slate-300 shadow-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm">
           <span className="block truncate">
-            {adminLevelOptions.find(o => o.value === value)?.label || `Level ${value}`}
+            {adminLevelOptions.find((o) => o.value === value)?.label || `Level ${value}`}
           </span>
           <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
             <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />

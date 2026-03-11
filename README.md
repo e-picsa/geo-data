@@ -4,18 +4,18 @@ A Bun monorepo that fetches country administrative boundaries from the Overpass 
 
 ## Architecture
 
-| Component | Stack | Deployment |
-|-----------|-------|------------|
-| **API** (`api/`) | Bun + TypeScript | Google Cloud Run via Docker |
-| **Web** (`web/`) | React + Vite + Tailwind CSS | GitHub Pages |
+| Component        | Stack                       | Deployment                  |
+| ---------------- | --------------------------- | --------------------------- |
+| **API** (`api/`) | Bun + TypeScript            | Google Cloud Run via Docker |
+| **Web** (`web/`) | React + Vite + Tailwind CSS | GitHub Pages                |
 
 ## Environment Variables
 
-| Variable                | Description                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| `PORT`                  | The port the API server listens on (default: `8080`)                          |
+| Variable                | Description                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| `PORT`                  | The port the API server listens on (default: `8080`)                                 |
 | `OVERPASS_CACHE_BUCKET` | GCS bucket name for caching raw Overpass responses. If not set, caching is disabled. |
-| `VITE_API_URL`          | (Frontend build-time) The production API URL. Defaults to `/api` for local dev. |
+| `VITE_API_URL`          | (Frontend build-time) The production API URL. Defaults to `/api` for local dev.      |
 
 ### Caching Configuration (GCS)
 
@@ -104,11 +104,13 @@ The API is currently deployed at `https://geo-boundaries.picsa.app`.
 The frontend is deployed automatically to GitHub Pages via the `.github/workflows/deploy-frontend.yml` workflow.
 
 **How it works:**
+
 1. On push to `main` (when `web/` files change), the workflow builds the Vite app.
 2. `VITE_API_URL` is set to the Cloud Run URL at build time, so API calls go directly to Cloud Run.
 3. The built SPA is deployed to GitHub Pages.
 
 **Custom Domain Setup:**
+
 1. In your GitHub repo, go to **Settings → Pages**.
 2. Under **Custom domain**, enter your subdomain (e.g., `geo.picsa.app`).
 3. Add a `CNAME` DNS record pointing your subdomain to `e-picsa.github.io`.
@@ -121,6 +123,7 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 **Endpoint:** `GET /` or `GET /health`
 
 **Response:** HTTP 200 OK
+
 ```json
 { "status": "ok" }
 ```
@@ -130,6 +133,7 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 **Endpoint:** `POST /`
 
 **Request Body:**
+
 ```json
 {
   "country_code": "MW",
@@ -138,6 +142,7 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 ```
 
 **Response:** HTTP 200 OK
+
 ```json
 {
   "message": "Boundary data retrieved successfully",
@@ -155,6 +160,7 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 **Endpoint:** `POST /admin/clear-cache`
 
 **Response:** HTTP 200 OK
+
 ```json
 { "status": "success", "message": "Cache cleared" }
 ```

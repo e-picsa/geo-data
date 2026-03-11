@@ -1,6 +1,6 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import type { CacheProvider } from "./cache.ts";
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import type { CacheProvider } from './cache.ts';
 
 export class LocalCacheProvider implements CacheProvider {
   private baseDir: string;
@@ -13,7 +13,7 @@ export class LocalCacheProvider implements CacheProvider {
     const targetPath = path.resolve(this.baseDir, key);
     const relative = path.relative(this.baseDir, targetPath);
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
-      throw new Error("Invalid cache key: path traversal detected");
+      throw new Error('Invalid cache key: path traversal detected');
     }
     return targetPath;
   }
@@ -21,7 +21,7 @@ export class LocalCacheProvider implements CacheProvider {
   async get<T>(key: string): Promise<T | null> {
     try {
       const filePath = this.getFilePath(key);
-      const data = await fs.readFile(filePath, "utf-8");
+      const data = await fs.readFile(filePath, 'utf-8');
       return JSON.parse(data);
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
@@ -35,7 +35,7 @@ export class LocalCacheProvider implements CacheProvider {
     try {
       const filePath = this.getFilePath(key);
       await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), "utf-8");
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
       console.log(`Successfully saved to local cache: ${key}`);
     } catch (err) {
       console.error(`Failed to save to local cache (${key}):`, err);

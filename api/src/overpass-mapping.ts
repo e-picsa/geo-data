@@ -16,10 +16,7 @@ const OVERPASS_OUTPUT = `
  * All subnational queries are optimised to search within the bounds of the
  * country area.
  */
-export const OVERPASS_QUERY_MAPPING: Record<
-  number,
-  (countryCode: string) => string
-> = {
+export const OVERPASS_QUERY_MAPPING: Record<number, (countryCode: string) => string> = {
   // E.g. MW - National Boundary: https://www.openstreetmap.org/relation/195290
   2: (countryCode) => `
       [out:json][timeout:120];
