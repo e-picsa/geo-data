@@ -14,8 +14,13 @@ interface ExportTilesParams {
   maxZoom: number;
 }
 
-export async function exportTiles(params: ExportTilesParams): Promise<Buffer> {
+export async function exportTiles(params: ExportTilesParams): Promise<ReadableStream> {
   const { country_code, bbox, minZoom, maxZoom } = params;
+
+  if (!/^[a-zA-Z0-9-_]+$/.test(country_code)) {
+    throw new Error('Invalid country_code format');
+  }
+
   const minLon = bbox[0] ?? 0;
   const minLat = bbox[1] ?? 0;
   const maxLon = bbox[2] ?? 0;
@@ -89,29 +94,32 @@ export async function exportTiles(params: ExportTilesParams): Promise<Buffer> {
   }
 
   // Now tar the directory
-  return new Promise((resolve, reject) => {
-    console.log(`Creating tar.gz archive for ${country_code}...`);
-    // Create archive of the countryDir, but cd into it so the root of the tar is the zoom levels
-    const child = spawn('tar', ['-czf', '-', '-C', countryDir, '.']);
+  return new ReadableStream({
+    start(controller) {
+      console.log(`Creating tar.gz archive for ${country_code}...`);
+      // Create archive of the countryDir, but cd into it so the root of the tar is the zoom levels
+      const child = spawn('tar', ['-czf', '-', '-C', countryDir, '.']);
 
-    const chunks: Buffer[] = [];
-    child.stdout.on('data', (data) => chunks.push(Buffer.from(data)));
+      child.stdout.on('data', (data) => {
+        controller.enqueue(new Uint8Array(data));
+      });
 
-    child.stderr.on('data', (data) => {
-      console.warn('tar stderr:', data.toString());
-    });
+      child.stderr.on('data', (data) => {
+        console.warn('tar stderr:', data.toString());
+      });
 
-    child.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`tar process exited with code ${code}`));
-      } else {
-        console.log(`Tar archive created successfully for ${country_code}`);
-        resolve(Buffer.concat(chunks));
-      }
-    });
+      child.on('close', (code) => {
+        if (code !== 0) {
+          controller.error(new Error(`tar process exited with code ${code}`));
+        } else {
+          console.log(`Tar archive created successfully for ${country_code}`);
+          controller.close();
+        }
+      });
 
-    child.on('error', (err) => {
-      reject(err);
-    });
+      child.on('error', (err) => {
+        controller.error(err);
+      });
+    },
   });
 }
