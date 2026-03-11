@@ -1,5 +1,5 @@
 {
-  "name": "geo-boundaries-topojson",
+  "name": "geo-data",
   "version": "1.0.0",
   "description": "A Bun monorepo that fetches country administrative boundaries from the Overpass API, optimizes geometries via Mapshaper, and returns lightweight TopoJSON payloads. Includes a React frontend for interactive boundary exploration.",
   "main": "index.js",
@@ -23,16 +23,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/e-picsa/geo-boundaries-topojson.git"
+    "url": "git+https://github.com/e-picsa/geo-data.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/e-picsa/geo-boundaries-topojson/issues"
+    "url": "https://github.com/e-picsa/geo-data/issues"
   },
-  "homepage": "https://github.com/e-picsa/geo-boundaries-topojson#readme",
+  "homepage": "https://github.com/e-picsa/geo-data#readme",
   "workspaces": [
     "api",
     "web"

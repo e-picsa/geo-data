@@ -68,7 +68,7 @@ Single request/response. Overpass is the bottleneck (rate-limits, timeouts, slow
 
 ### Geofabrik URL Resolver
 
-#### [NEW] [geofabrik-index.ts](file:///c:/apps/picsa/geo-boundaries-topojson/src/geofabrik-index.ts)
+#### [NEW] [geofabrik-index.ts](file:///c:/apps/picsa/geo-data/src/geofabrik-index.ts)
 
 - Fetches and caches `https://download.geofabrik.de/index-v1.json` (a ~200 KB GeoJSON FeatureCollection).
 - Provides `getGeofabrikPbfUrl(countryCode: string): string` that looks up the `iso3166-1:alpha2` field and returns the `.osm.pbf` download URL.
@@ -78,7 +78,7 @@ Single request/response. Overpass is the bottleneck (rate-limits, timeouts, slow
 
 ### Processing Pipeline
 
-#### [NEW] [process-country.ts](file:///c:/apps/picsa/geo-boundaries-topojson/src/process-country.ts)
+#### [NEW] [process-country.ts](file:///c:/apps/picsa/geo-data/src/process-country.ts)
 
 Core processing logic, separated from HTTP concerns:
 
@@ -90,7 +90,7 @@ Core processing logic, separated from HTTP concerns:
 6. **Store to GCS** — Write each level's TopoJSON to `boundaries/v1/country={CC}/admin_level={N}/topojson.json`.
 7. **Cleanup** — Remove temp PBF/GeoJSON files.
 
-#### [NEW] [process-handler.ts](file:///c:/apps/picsa/geo-boundaries-topojson/src/process-handler.ts)
+#### [NEW] [process-handler.ts](file:///c:/apps/picsa/geo-data/src/process-handler.ts)
 
 HTTP handler for the processing endpoint:
 
@@ -103,7 +103,7 @@ HTTP handler for the processing endpoint:
 
 ### Retrieval Endpoint
 
-#### [NEW] [retrieve-handler.ts](file:///c:/apps/picsa/geo-boundaries-topojson/src/retrieve-handler.ts)
+#### [NEW] [retrieve-handler.ts](file:///c:/apps/picsa/geo-data/src/retrieve-handler.ts)
 
 - `GET /boundaries/:country_code/:admin_level`
 - Reads the pre-computed TopoJSON from GCS.
@@ -114,7 +114,7 @@ HTTP handler for the processing endpoint:
 
 ### Router & Main
 
-#### [MODIFY] [main.ts](file:///c:/apps/picsa/geo-boundaries-topojson/src/main.ts)
+#### [MODIFY] [main.ts](file:///c:/apps/picsa/geo-data/src/main.ts)
 
 - Add routes:
   - `POST /process` → `processHandler` (admin pipeline)
@@ -126,7 +126,7 @@ HTTP handler for the processing endpoint:
 
 ### Schema Updates
 
-#### [MODIFY] [schema.ts](file:///c:/apps/picsa/geo-boundaries-topojson/src/schema.ts)
+#### [MODIFY] [schema.ts](file:///c:/apps/picsa/geo-data/src/schema.ts)
 
 - Add `PROCESS_REQUEST_SCHEMA` (just `country_code`, no `admin_level` since pipeline does all levels).
 - Add `RETRIEVE_REQUEST_SCHEMA` (parsed from URL params).
@@ -135,7 +135,7 @@ HTTP handler for the processing endpoint:
 
 ### Docker / Dependencies
 
-#### [MODIFY] [Dockerfile](file:///c:/apps/picsa/geo-boundaries-topojson/Dockerfile)
+#### [MODIFY] [Dockerfile](file:///c:/apps/picsa/geo-data/Dockerfile)
 
 - Switch to a base image with `osmium-tool` available, or add `apk add osmium-tool` (available in Alpine repos).
 - Add `--allow-run` permission to the Deno CMD to allow shelling out to `osmium`.
@@ -145,15 +145,15 @@ HTTP handler for the processing endpoint:
 
 ### Cleanup / Deprecation
 
-#### [DELETE] [overpass-mapping.ts](file:///c:/apps/picsa/geo-boundaries-topojson/src/overpass-mapping.ts)
+#### [DELETE] [overpass-mapping.ts](file:///c:/apps/picsa/geo-data/src/overpass-mapping.ts)
 
 No longer needed — Overpass queries are replaced by Geofabrik download + osmium filtering.
 
-#### [MODIFY] [admin-boundaries.ts](file:///c:/apps/picsa/geo-boundaries-topojson/src/admin-boundaries.ts)
+#### [MODIFY] [admin-boundaries.ts](file:///c:/apps/picsa/geo-data/src/admin-boundaries.ts)
 
 Either remove entirely or keep as a legacy fallback. The Mapshaper processing logic should be extracted into a shared utility for re-use by the new pipeline.
 
-#### [MODIFY] [import_map.json](file:///c:/apps/picsa/geo-boundaries-topojson/import_map.json)
+#### [MODIFY] [import_map.json](file:///c:/apps/picsa/geo-data/import_map.json)
 
 - Remove `osmtogeojson` (no longer needed — GeoJSON comes from `osmium export`).
 - Keep `mapshaper`, `zod`.

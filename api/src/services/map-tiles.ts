@@ -71,8 +71,7 @@ export async function exportTiles(
           {
             signal,
             headers: {
-              'User-Agent':
-                'GeoBoundariesTopoJSON/1.0 (https://github.com/chris/geo-boundaries-topojson)',
+              'User-Agent': 'GeoData/1.0 (https://github.com/e-picsa/geo-data)',
             },
           },
           5,
