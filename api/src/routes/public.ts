@@ -6,7 +6,7 @@ export const handlePublicRoutes = async (req: Request, pathname: string): Promis
   if (req.method === 'GET' && (pathname === '/' || pathname === '/health')) {
     return new Response(JSON.stringify({ status: 'ok' }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
