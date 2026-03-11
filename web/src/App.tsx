@@ -5,6 +5,7 @@ import * as topojsonClient from 'topojson-client';
 import { CountrySelect } from './components/CountrySelect';
 import { AdminLevelSelect } from './components/AdminLevelSelect';
 import { BoundsFitter } from './components/BoundsFitter';
+import { ExportTilesButton } from './components/ExportTilesButton';
 import { TrashIcon } from '@heroicons/react/20/solid';
 
 interface BoundaryResponse {
@@ -139,6 +140,8 @@ function App() {
             >
               Download TopoJSON
             </button>
+
+            <ExportTilesButton countryCode={data.country_code} bbox={data.bbox} apiUrl={API_URL} />
           </div>
         )}
 

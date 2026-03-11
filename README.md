@@ -55,7 +55,7 @@ Because `admin_level` definitions shift from country to country, the best way to
 
 ## Local Development
 
-Prerequisites: [Bun](https://bun.sh/) installed.
+Prerequisites: [Bun](https://bun.sh/) installed. The API uses `sharp` for converting PNG map tiles into WebP images. Node's package manager handles the precompiled binaries during install automatically.
 
 ```bash
 # Install dependencies (both workspaces)
@@ -164,3 +164,21 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 ```json
 { "status": "success", "message": "Cache cleared" }
 ```
+
+### 4. Export Map Tiles Archive
+
+**Endpoint:** `POST /export-tiles`
+
+**Request Body:**
+
+```json
+{
+  "country_code": "MW",
+  "bbox": [32.668, -17.129, 35.92, -9.364],
+  "minZoom": 0,
+  "maxZoom": 8
+}
+```
+
+**Response:** HTTP 200 OK
+Returns a binary blob stream `Content-Type: application/gzip` representing a `.tar.gz` archive of downloaded and converted WebP tiles.

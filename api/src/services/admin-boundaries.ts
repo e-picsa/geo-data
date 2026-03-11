@@ -1,26 +1,26 @@
-import { corsHeaders } from '../utils/cors.ts';
 import osmtogeojson from 'osmtogeojson';
 import mapshaper from 'mapshaper';
 
 import { ErrorResponse, JSONResponse } from '../utils/response.ts';
 import { validateBody } from '../utils/validation.ts';
-import { fetchWithRetry } from '../utils/fetch.ts';
 import { getCache, type CacheProvider } from '../utils/cache.ts';
 import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
-import { OVERPASS_QUERY_MAPPING } from './overpass-mapping.ts';
+import { fetchOverpassData } from './overpass.ts';
 
 /**
- * Bust cache if query or processing methods change.
- * GCS cache object lifecycle automatically deletes after 90 days
+ * Bust cache if conversion or processing methods change.
+ * GCS cache object lifecycle automatically deletes after 90 days.
+ *
+ * NOTE: The raw Overpass response cache version lives in overpass.ts.
+ * This version only covers the derived geojson/topojson artefacts.
  */
 const CACHE_VERSION = 1;
 
-type Source = 'cache' | 'overpass';
+type Source = 'cache' | 'generated';
 
 type CachePaths = {
   prefix: string;
-  overpass: string;
   geojson: string;
   topojson: string;
 };
@@ -45,24 +45,15 @@ export const adminBoundaries = async (req: Request) => {
       return buildSuccessResponse(params, 'cache', cachedTopojson);
     }
 
-    const overpassQuery = buildOverpassQuery(country_code, admin_level);
-
-    let osmData = await readCache<any>(cache, paths.overpass);
-    let source: Source = 'cache';
-
-    if (osmData) {
-      console.log(`Overpass cache hit for ${country_code} admin level ${admin_level}.`);
-    } else {
-      source = 'overpass';
-      osmData = await fetchOverpassData(req, overpassQuery, country_code);
-      writeCache(cache, paths.overpass, osmData);
-    }
+    // fetchOverpassData is cache-through — it reads/writes the Overpass
+    // response cache internally, so we don't manage it here.
+    const osmData = await fetchOverpassData(req.signal, country_code, admin_level);
 
     const topojson = await convertOsmToTopojson(osmData, admin_level, cache, paths);
 
     writeCache(cache, paths.topojson, topojson);
 
-    return buildSuccessResponse(params, source, topojson);
+    return buildSuccessResponse(params, 'generated', topojson);
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -80,20 +71,11 @@ export const adminBoundaries = async (req: Request) => {
   }
 };
 
-function buildOverpassQuery(countryCode: string, adminLevel: number): string {
-  const queryBuilder = OVERPASS_QUERY_MAPPING[adminLevel];
-  if (!queryBuilder) {
-    throw new Error(`Admin level ${adminLevel} is not supported`);
-  }
-  return queryBuilder(countryCode).trim();
-}
-
 function buildCachePaths(countryCode: string, adminLevel: number): CachePaths {
-  const prefix = `overpass/v${CACHE_VERSION}/country=${countryCode}/admin_level=${adminLevel}`;
+  const prefix = `derived/v${CACHE_VERSION}/country=${countryCode}/admin_level=${adminLevel}`;
 
   return {
     prefix,
-    overpass: `${prefix}/overpass.json`,
     geojson: `${prefix}/geojson.json`,
     topojson: `${prefix}/topojson.json`,
   };
@@ -107,69 +89,6 @@ function writeCache(cache: CacheProvider, key: string, value: unknown): void {
   cache.set(key, value).catch((err) => {
     console.error(`Non-fatal error saving cache key "${key}":`, err);
   });
-}
-
-async function fetchOverpassData(
-  req: Request,
-  overpassQuery: string,
-  countryCode: string,
-): Promise<unknown> {
-  console.log(`Fetching Overpass data for ${countryCode}...`);
-
-  const overpassResponse = await fetchWithRetry('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    body: overpassQuery,
-    signal: req.signal,
-  });
-
-  if (!overpassResponse.ok) {
-    const errorText = await overpassResponse.text();
-    console.error(`Overpass API error (${overpassResponse.status}):`, errorText);
-
-    let status = 502;
-    let message = 'Failed to fetch from Overpass API';
-
-    if (overpassResponse.status === 429) {
-      status = 429;
-      message = 'Overpass API rate limit exceeded. Please try again later.';
-    } else if (overpassResponse.status === 504) {
-      status = 504;
-      message = 'Overpass API gateway timeout. The query took too long to execute.';
-    }
-
-    throw new Response(
-      JSON.stringify({
-        error: message,
-        details: errorText || overpassResponse.statusText,
-        upstream_status: overpassResponse.status,
-      }),
-      {
-        status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    );
-  }
-
-  let osmData: any;
-  try {
-    osmData = await overpassResponse.json();
-  } catch {
-    throw new Response(
-      JSON.stringify({
-        error: 'Invalid JSON returned by Overpass API',
-      }),
-      {
-        status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    );
-  }
-
-  console.log(
-    `Received ${osmData?.elements?.length || 0} elements from Overpass for ${countryCode}`,
-  );
-
-  return osmData;
 }
 
 function hasAdminLevel(feature: any, level: number): boolean {
