@@ -1,14 +1,14 @@
-import { corsHeaders } from "./utils/cors.ts";
-import osmtogeojson from "osmtogeojson";
-import mapshaper from "mapshaper";
+import { corsHeaders } from '../utils/cors.ts';
+import osmtogeojson from 'osmtogeojson';
+import mapshaper from 'mapshaper';
 
-import { ErrorResponse, JSONResponse } from "./utils/response.ts";
-import { validateBody } from "./utils/validation.ts";
-import { fetchWithRetry } from "./utils/fetch.ts";
-import { getCache, type CacheProvider } from "./utils/cache.ts";
-import { BOUNDARY_REQUEST_SCHEMA } from "./schema.ts";
-import type { BoundaryRequestParams } from "./schema.ts";
-import { OVERPASS_QUERY_MAPPING } from "./overpass-mapping.ts";
+import { ErrorResponse, JSONResponse } from '../utils/response.ts';
+import { validateBody } from '../utils/validation.ts';
+import { fetchWithRetry } from '../utils/fetch.ts';
+import { getCache, type CacheProvider } from '../utils/cache.ts';
+import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
+import type { BoundaryRequestParams } from '../types/schema.ts';
+import { OVERPASS_QUERY_MAPPING } from './overpass-mapping.ts';
 
 /**
  * Bust cache if query or processing methods change.
@@ -16,7 +16,7 @@ import { OVERPASS_QUERY_MAPPING } from "./overpass-mapping.ts";
  */
 const CACHE_VERSION = 1;
 
-type Source = "cache" | "overpass";
+type Source = 'cache' | 'overpass';
 
 type CachePaths = {
   prefix: string;
@@ -41,33 +41,24 @@ export const adminBoundaries = async (req: Request) => {
 
     const cachedTopojson = await readCache<any>(cache, paths.topojson);
     if (cachedTopojson) {
-      console.log(
-        `TopoJSON cache hit for ${country_code} admin level ${admin_level}.`,
-      );
-      return buildSuccessResponse(params, "cache", cachedTopojson);
+      console.log(`TopoJSON cache hit for ${country_code} admin level ${admin_level}.`);
+      return buildSuccessResponse(params, 'cache', cachedTopojson);
     }
 
     const overpassQuery = buildOverpassQuery(country_code, admin_level);
 
     let osmData = await readCache<any>(cache, paths.overpass);
-    let source: Source = "cache";
+    let source: Source = 'cache';
 
     if (osmData) {
-      console.log(
-        `Overpass cache hit for ${country_code} admin level ${admin_level}.`,
-      );
+      console.log(`Overpass cache hit for ${country_code} admin level ${admin_level}.`);
     } else {
-      source = "overpass";
+      source = 'overpass';
       osmData = await fetchOverpassData(req, overpassQuery, country_code);
       writeCache(cache, paths.overpass, osmData);
     }
 
-    const topojson = await convertOsmToTopojson(
-      osmData,
-      admin_level,
-      cache,
-      paths,
-    );
+    const topojson = await convertOsmToTopojson(osmData, admin_level, cache, paths);
 
     writeCache(cache, paths.topojson, topojson);
 
@@ -80,10 +71,10 @@ export const adminBoundaries = async (req: Request) => {
     console.error(typeof error, error);
 
     const e = error as any;
-    const msg = typeof e === "string"
-      ? e
-      : e?.details || e?.error || e?.message || e?.msg ||
-        "Failed to generate admin boundaries";
+    const msg =
+      typeof e === 'string'
+        ? e
+        : e?.details || e?.error || e?.message || e?.msg || 'Failed to generate admin boundaries';
 
     return ErrorResponse(msg);
   }
@@ -97,12 +88,8 @@ function buildOverpassQuery(countryCode: string, adminLevel: number): string {
   return queryBuilder(countryCode).trim();
 }
 
-function buildCachePaths(
-  countryCode: string,
-  adminLevel: number,
-): CachePaths {
-  const prefix =
-    `overpass/v${CACHE_VERSION}/country=${countryCode}/admin_level=${adminLevel}`;
+function buildCachePaths(countryCode: string, adminLevel: number): CachePaths {
+  const prefix = `overpass/v${CACHE_VERSION}/country=${countryCode}/admin_level=${adminLevel}`;
 
   return {
     prefix,
@@ -112,18 +99,11 @@ function buildCachePaths(
   };
 }
 
-async function readCache<T>(
-  cache: CacheProvider,
-  key: string,
-): Promise<T | null> {
+async function readCache<T>(cache: CacheProvider, key: string): Promise<T | null> {
   return await cache.get<T>(key);
 }
 
-function writeCache(
-  cache: CacheProvider,
-  key: string,
-  value: unknown,
-): void {
+function writeCache(cache: CacheProvider, key: string, value: unknown): void {
   cache.set(key, value).catch((err) => {
     console.error(`Non-fatal error saving cache key "${key}":`, err);
   });
@@ -136,32 +116,25 @@ async function fetchOverpassData(
 ): Promise<unknown> {
   console.log(`Fetching Overpass data for ${countryCode}...`);
 
-  const overpassResponse = await fetchWithRetry(
-    "https://overpass-api.de/api/interpreter",
-    {
-      method: "POST",
-      body: overpassQuery,
-      signal: req.signal,
-    },
-  );
+  const overpassResponse = await fetchWithRetry('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    body: overpassQuery,
+    signal: req.signal,
+  });
 
   if (!overpassResponse.ok) {
     const errorText = await overpassResponse.text();
-    console.error(
-      `Overpass API error (${overpassResponse.status}):`,
-      errorText,
-    );
+    console.error(`Overpass API error (${overpassResponse.status}):`, errorText);
 
     let status = 502;
-    let message = "Failed to fetch from Overpass API";
+    let message = 'Failed to fetch from Overpass API';
 
     if (overpassResponse.status === 429) {
       status = 429;
-      message = "Overpass API rate limit exceeded. Please try again later.";
+      message = 'Overpass API rate limit exceeded. Please try again later.';
     } else if (overpassResponse.status === 504) {
       status = 504;
-      message =
-        "Overpass API gateway timeout. The query took too long to execute.";
+      message = 'Overpass API gateway timeout. The query took too long to execute.';
     }
 
     throw new Response(
@@ -172,7 +145,7 @@ async function fetchOverpassData(
       }),
       {
         status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       },
     );
   }
@@ -183,19 +156,17 @@ async function fetchOverpassData(
   } catch {
     throw new Response(
       JSON.stringify({
-        error: "Invalid JSON returned by Overpass API",
+        error: 'Invalid JSON returned by Overpass API',
       }),
       {
         status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       },
     );
   }
 
   console.log(
-    `Received ${
-      osmData?.elements?.length || 0
-    } elements from Overpass for ${countryCode}`,
+    `Received ${osmData?.elements?.length || 0} elements from Overpass for ${countryCode}`,
   );
 
   return osmData;
@@ -213,7 +184,7 @@ function buildMapshaperInputsAndCommands(
   commands: string[];
 } {
   const input: Record<string, unknown> = {
-    "input.geojson": geojson,
+    'input.geojson': geojson,
   };
 
   const commands: string[] = [
@@ -225,25 +196,21 @@ function buildMapshaperInputsAndCommands(
   ];
 
   if (adminLevel === 5) {
-    const countryFeatures = geojson.features.filter((f: any) =>
-      hasAdminLevel(f, 2)
-    );
-    const targetFeatures = geojson.features.filter((f: any) =>
-      hasAdminLevel(f, 5)
-    );
+    const countryFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 2));
+    const targetFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 5));
 
-    input["input.geojson"] = {
-      type: "FeatureCollection",
+    input['input.geojson'] = {
+      type: 'FeatureCollection',
       features: targetFeatures,
     };
 
-    input["mask.geojson"] = {
-      type: "FeatureCollection",
+    input['mask.geojson'] = {
+      type: 'FeatureCollection',
       features: countryFeatures,
     };
 
     commands.push(`-clip mask.geojson`);
-    // Filter out slivers along the border. 
+    // Filter out slivers along the border.
     // 5km2 is arbitrary but should drop the border overlaps while keeping real districts.
     commands.push(`-filter-islands min-area=5km2`);
   }
@@ -256,44 +223,37 @@ function buildMapshaperInputsAndCommands(
 async function convertOsmToTopojson(
   osmData: unknown,
   adminLevel: number,
-  cache: import("./utils/cache.ts").CacheProvider,
+  cache: import('../utils/cache.ts').CacheProvider,
   paths: CachePaths,
 ): Promise<any> {
-  console.log("Converting to GeoJSON...");
+  console.log('Converting to GeoJSON...');
   let geojson: any = osmtogeojson(osmData as any);
 
   // Optional/debug cache
   writeCache(cache, paths.geojson, geojson);
 
-  console.log("Optimizing with Mapshaper...");
+  console.log('Optimizing with Mapshaper...');
 
-  const { input, commands } = buildMapshaperInputsAndCommands(
-    geojson,
-    adminLevel,
-  );
+  const { input, commands } = buildMapshaperInputsAndCommands(geojson, adminLevel);
 
   const topojsonString = await new Promise<string>((resolve, reject) => {
-    mapshaper.applyCommands(
-      commands.join(" "),
-      input,
-      (err: Error | null, output: any) => {
-        geojson = null as any;
+    mapshaper.applyCommands(commands.join(' '), input, (err: Error | null, output: any) => {
+      geojson = null as any;
 
-        if (err) {
-          reject(err);
-          return;
-        }
+      if (err) {
+        reject(err);
+        return;
+      }
 
-        try {
-          resolve(output["output.topojson"].toString());
-        } catch (parseError) {
-          reject(parseError);
-        }
-      },
-    );
+      try {
+        resolve(output['output.topojson'].toString());
+      } catch (parseError) {
+        reject(parseError);
+      }
+    });
   });
 
-  console.log("Mapshaper processing complete.");
+  console.log('Mapshaper processing complete.');
   return JSON.parse(topojsonString);
 }
 
@@ -302,18 +262,15 @@ function summarizeTopojson(topojson: any): TopojsonSummary {
   const bytes = new TextEncoder().encode(topojsonString).length;
   const size_kb = Math.round(bytes / 1024);
 
-  const feature_count = Object.values(topojson.objects || {}).reduce(
-    (sum: number, obj: any) => {
-      if (Array.isArray(obj?.geometries)) {
-        return sum + obj.geometries.length;
-      }
-      if (obj?.type) {
-        return sum + 1;
-      }
-      return sum;
-    },
-    0,
-  );
+  const feature_count = Object.values(topojson.objects || {}).reduce((sum: number, obj: any) => {
+    if (Array.isArray(obj?.geometries)) {
+      return sum + obj.geometries.length;
+    }
+    if (obj?.type) {
+      return sum + 1;
+    }
+    return sum;
+  }, 0);
 
   const bbox = Array.isArray(topojson.bbox) ? topojson.bbox : [];
 
