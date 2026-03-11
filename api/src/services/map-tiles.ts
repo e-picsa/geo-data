@@ -21,10 +21,10 @@ export async function exportTiles(params: ExportTilesParams): Promise<ReadableSt
     throw new Error('Invalid country_code format');
   }
 
-  const minLon = bbox[0] ?? 0;
-  const minLat = bbox[1] ?? 0;
-  const maxLon = bbox[2] ?? 0;
-  const maxLat = bbox[3] ?? 0;
+  const minLon = bbox[0];
+  const minLat = bbox[1];
+  const maxLon = bbox[2];
+  const maxLat = bbox[3];
 
   // Generate all required tiles
   const requiredTiles = [];
