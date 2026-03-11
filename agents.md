@@ -1,7 +1,7 @@
 # AI Assistants Architecture Guide
 
 Welcome! This system is a monorepo consisting of:
-1. `api/` (formerly Deno, now powered by Bun)
+1. `api/` (powered by Bun)
 2. `web/` (React + Vite + Tailwind CSS)
 
 ## Core Tasks
@@ -22,6 +22,5 @@ Welcome! This system is a monorepo consisting of:
 - Styling uses pure Tailwind classes in `className`. 
 
 ## Best Practices
-- **Do NOT** use Deno-specific syntax (`Deno.env`, `Deno.readTextFile`, etc) anywhere in the `api` tree. It has been stripped for compatibility with the Bun/NPM monorepo standard.
 - Avoid introducing any heavy DOM libraries into the frontend. The entire application is designed to be lightweight.
 - For local dev, run `npm run dev` in the project root to spool up both instances concurrently. 

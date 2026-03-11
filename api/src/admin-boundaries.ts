@@ -5,7 +5,7 @@ import mapshaper from "mapshaper";
 import { ErrorResponse, JSONResponse } from "./utils/response.ts";
 import { validateBody } from "./utils/validation.ts";
 import { fetchWithRetry } from "./utils/fetch.ts";
-import { getFromCache, saveToCache } from "./utils/google-storage.ts";
+import { getCache, type CacheProvider } from "./utils/cache.ts";
 import { BOUNDARY_REQUEST_SCHEMA } from "./schema.ts";
 import type { BoundaryRequestParams } from "./schema.ts";
 import { OVERPASS_QUERY_MAPPING } from "./overpass-mapping.ts";
@@ -36,10 +36,10 @@ export const adminBoundaries = async (req: Request) => {
     const params = await validateBody(req, BOUNDARY_REQUEST_SCHEMA);
     const { country_code, admin_level } = params;
 
-    const bucket = getCacheBucket();
+    const cache = getCache();
     const paths = buildCachePaths(country_code, admin_level);
 
-    const cachedTopojson = await readCache<any>(bucket, paths.topojson);
+    const cachedTopojson = await readCache<any>(cache, paths.topojson);
     if (cachedTopojson) {
       console.log(
         `TopoJSON cache hit for ${country_code} admin level ${admin_level}.`,
@@ -49,7 +49,7 @@ export const adminBoundaries = async (req: Request) => {
 
     const overpassQuery = buildOverpassQuery(country_code, admin_level);
 
-    let osmData = await readCache<any>(bucket, paths.overpass);
+    let osmData = await readCache<any>(cache, paths.overpass);
     let source: Source = "cache";
 
     if (osmData) {
@@ -59,17 +59,17 @@ export const adminBoundaries = async (req: Request) => {
     } else {
       source = "overpass";
       osmData = await fetchOverpassData(req, overpassQuery, country_code);
-      writeCache(bucket, paths.overpass, osmData);
+      writeCache(cache, paths.overpass, osmData);
     }
 
     const topojson = await convertOsmToTopojson(
       osmData,
       admin_level,
-      bucket,
+      cache,
       paths,
     );
 
-    writeCache(bucket, paths.topojson, topojson);
+    writeCache(cache, paths.topojson, topojson);
 
     return buildSuccessResponse(params, source, topojson);
   } catch (error) {
@@ -112,27 +112,19 @@ function buildCachePaths(
   };
 }
 
-function getCacheBucket(): string | null {
-  const bucket = process.env.OVERPASS_CACHE_BUCKET;
-  return bucket && bucket.trim().length > 0 ? bucket : null;
-}
-
 async function readCache<T>(
-  bucket: string | null,
+  cache: CacheProvider,
   key: string,
 ): Promise<T | null> {
-  if (!bucket) return null;
-  return await getFromCache(bucket, key);
+  return await cache.get<T>(key);
 }
 
 function writeCache(
-  bucket: string | null,
+  cache: CacheProvider,
   key: string,
   value: unknown,
 ): void {
-  if (!bucket) return;
-
-  saveToCache(bucket, key, value).catch((err) => {
+  cache.set(key, value).catch((err) => {
     console.error(`Non-fatal error saving cache key "${key}":`, err);
   });
 }
@@ -264,14 +256,14 @@ function buildMapshaperInputsAndCommands(
 async function convertOsmToTopojson(
   osmData: unknown,
   adminLevel: number,
-  bucket: string | null,
+  cache: import("./utils/cache.ts").CacheProvider,
   paths: CachePaths,
 ): Promise<any> {
   console.log("Converting to GeoJSON...");
   let geojson: any = osmtogeojson(osmData as any);
 
   // Optional/debug cache
-  writeCache(bucket, paths.geojson, geojson);
+  writeCache(cache, paths.geojson, geojson);
 
   console.log("Optimizing with Mapshaper...");
 

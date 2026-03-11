@@ -87,7 +87,11 @@ const API_URL = import.meta.env.VITE_API_URL || '/api';
       }
       
     } catch (err: any) {
-      setError(err.message);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An unexpected error occurred while fetching boundaries.');
+      }
     } finally {
       setLoading(false);
     }

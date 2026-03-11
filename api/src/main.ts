@@ -1,5 +1,6 @@
 import { corsHeaders } from "./utils/cors.ts";
 import { adminBoundaries } from "./admin-boundaries.ts";
+import { getCache } from "./utils/cache.ts";
 
 const port = parseInt(process.env.PORT ?? "8080");
 
@@ -29,6 +30,23 @@ Bun.serve({
     // Main API Endpoint
     if (req.method === "POST" && pathname === "/") {
       return adminBoundaries(req);
+    }
+
+    // Admin Cache Invalidation Endpoint
+    if (req.method === "POST" && pathname === "/admin/clear-cache") {
+      try {
+        const cache = getCache();
+        await cache.clear();
+        return new Response(
+          JSON.stringify({ status: "success", message: "Cache cleared" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (err: any) {
+        return new Response(
+          JSON.stringify({ status: "error", message: err.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Fallback for unsupported routes

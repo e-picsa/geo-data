@@ -5,13 +5,10 @@
   "private": true,
    "scripts": {
     "start": "bun --watch run src/main.ts",
-    "test": "deno test"
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "^1.3.10"
-  },
-  "peerDependencies": {
-    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@types/osmtogeojson": "^2.2.34",
