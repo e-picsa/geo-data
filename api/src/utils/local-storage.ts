@@ -50,4 +50,18 @@ export class LocalCacheProvider implements CacheProvider {
       console.error(`Failed to clear local cache at ${this.baseDir}:`, err);
     }
   }
+
+  getBaseDir(): string {
+    return this.baseDir;
+  }
+
+  async clearPrefix(prefix: string): Promise<void> {
+    try {
+      const prefixPath = path.join(this.baseDir, prefix);
+      await fs.rm(prefixPath, { recursive: true, force: true });
+      console.log(`Successfully cleared local cache prefix: ${prefix}`);
+    } catch (err) {
+      console.error(`Failed to clear local cache prefix ${prefix}:`, err);
+    }
+  }
 }

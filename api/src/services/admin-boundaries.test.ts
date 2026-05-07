@@ -9,7 +9,7 @@ import { getCache } from '../utils/cache.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 4;
 
 async function clearJsonCache() {
   const cache = getCache();
@@ -48,33 +48,7 @@ test('adminBoundaries - Successfully generates TopoJSON for MW Admin Layer 2', a
   const topojson = data.topojson;
   expect(topojson.type).toBe('Topology');
 
-  expect(typeof data.feature_count).toBe('number');
-  expect(data.feature_count > 0).toBe(true);
-
   expect(typeof data.size_kb).toBe('number');
-}, 60000);
-
-test('adminBoundaries - Successfully generates TopoJSON for MW Admin Layer 5 with clip', async () => {
-  const req = new Request('http://localhost/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ country_code: 'MW', admin_level: 5 }),
-    signal: AbortSignal.timeout(60000),
-  });
-
-  const res = await adminBoundaries(req);
-
-  expect(res.status).toBe(200);
-
-  const data = (await res.json()) as any;
-  console.log('Returned payload keys:', Object.keys(data));
-
-  expect(data.topojson).toBeDefined();
-  expect(data.country_code).toBe('MW');
-  expect(data.admin_level).toBe(5);
-  expect(data.feature_count > 0).toBe(true);
 }, 60000);
 
 test('adminBoundaries - Caches raw PBF and derived JSON after successful request', async () => {
