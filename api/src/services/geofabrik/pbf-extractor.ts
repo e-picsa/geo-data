@@ -14,6 +14,7 @@ import {
 
 export interface ExtractorOptions {
   adminLevel: number;
+  countryCode?: string;
   progressEveryNBlocks?: number;
 }
 
@@ -25,6 +26,7 @@ export class PbfBoundaryExtractor {
   private readonly nodes: OsmNode[] = [];
 
   private readonly adminLevel: string;
+  private readonly countryCode: string;
   private readonly progressEveryNBlocks: number;
 
   constructor(
@@ -33,6 +35,7 @@ export class PbfBoundaryExtractor {
     options: ExtractorOptions,
   ) {
     this.adminLevel = `${options.adminLevel}`;
+    this.countryCode = options.countryCode ?? '';
     this.progressEveryNBlocks = options.progressEveryNBlocks ?? 1000;
   }
 
@@ -100,6 +103,15 @@ export class PbfBoundaryExtractor {
         const tags = entity.tags;
         if (!tags) continue;
         if (tags.boundary !== 'administrative') continue;
+
+        // Admin level 2 will often include full data for bordering countries, filter tags available
+        if (this.adminLevel === '2' && this.countryCode) {
+          const isoCode = tags['ISO3166-1'];
+          if (isoCode && isoCode !== this.countryCode) {
+            continue;
+          }
+        }
+
         if (`${tags.admin_level}` !== this.adminLevel) continue;
 
         this.relations.push(entity);

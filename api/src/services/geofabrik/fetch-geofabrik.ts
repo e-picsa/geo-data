@@ -41,7 +41,7 @@ export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions): 
   const pbfPath = await ensureRawPbf(countryCode, CACHE_VERSION, signal);
   const pbfTime = Math.round(performance.now() - pbfStart);
 
-  const extractor = new PbfBoundaryExtractor(pbfPath, signal, { adminLevel });
+  const extractor = new PbfBoundaryExtractor(pbfPath, signal, { adminLevel, countryCode });
   const extracted = await extractor.extract();
 
   if (extracted.relations.length === 0) {
