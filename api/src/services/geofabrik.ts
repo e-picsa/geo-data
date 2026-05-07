@@ -4,7 +4,6 @@ import { getCache } from '../utils/cache.ts';
 import { fetchWithRetry } from '../utils/fetch.ts';
 import { getGeofabrikUrl } from './geofabrik-mapping.ts';
 
-// Core Osmix Imports
 import { blocksToJsonEntities } from '@osmix/json';
 import { OsmPbfBytesToBlocksTransformStream, toAsyncGenerator } from '@osmix/pbf';
 import type {
@@ -16,51 +15,67 @@ import type {
   OsmWay,
 } from 'osmix';
 
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const VALID_ADMIN_LEVELS = new Set(['2', '3', '4', '5']);
+const MIN_VALID_PBF_BYTES = 50_000;
 
 export interface OsmData {
   elements: OsmEntity[];
 }
 
+export interface ExtractedOsmData {
+  relations: OsmRelation[];
+  ways: OsmWay[];
+  nodes: OsmNode[];
+}
+
 // ==========================================
 // STRUCTURAL TYPE GUARDS
 // ==========================================
-/**
- * Narrows the block stream union, stripping out the initial OsmPbfHeaderBlock.
- */
 function isPrimitiveBlock(block: OsmPbfHeaderBlock | OsmPbfBlock): block is OsmPbfBlock {
   return 'primitivegroup' in block;
 }
-/**
- * Narrows the unknown stream item to a generic OsmEntity.
- * Filters out OsmPbfHeaderBlock and malformed data.
- */
-function isOsmEntity(item: unknown): item is OsmEntity {
-  return typeof item === 'object' && item !== null && 'id' in item;
-}
 
-/** Relation Guard: Identified by the 'members' array */
 function isOsmRelation(entity: OsmEntity): entity is OsmRelation {
   return 'members' in entity;
 }
 
-/** Way Guard: Identified by the 'refs' array */
 function isOsmWay(entity: OsmEntity): entity is OsmWay {
   return 'refs' in entity;
 }
 
-/** Node Guard: Identified by geographic coordinates */
 function isOsmNode(entity: OsmEntity): entity is OsmNode {
   return 'lat' in entity && 'lon' in entity;
 }
 
-// ==========================================
-// EXTRACTION PIPELINE
-// ==========================================
+function blockHasRelations(block: OsmPbfBlock): boolean {
+  return block.primitivegroup?.some((g) => g.relations?.length) ?? false;
+}
 
-function geofabrikCacheKey(countryCode: string): string {
-  return `geofabrik/v${CACHE_VERSION}/extracted/${countryCode}/boundaries.json`;
+function blockHasWays(block: OsmPbfBlock): boolean {
+  return block.primitivegroup?.some((g) => g.ways?.length) ?? false;
+}
+
+function blockHasNodes(block: OsmPbfBlock): boolean {
+  return (
+    block.primitivegroup?.some((g) => (g.dense && g.dense.id.length > 0) || g.nodes?.length) ??
+    false
+  );
+}
+
+// ==========================================
+// CACHE KEYS
+// ==========================================
+function relationsCacheKey(countryCode: string): string {
+  return `geofabrik/v${CACHE_VERSION}/extracted/${countryCode}/relations.json`;
+}
+
+function waysCacheKey(countryCode: string): string {
+  return `geofabrik/v${CACHE_VERSION}/extracted/${countryCode}/ways.json`;
+}
+
+function nodesCacheKey(countryCode: string): string {
+  return `geofabrik/v${CACHE_VERSION}/extracted/${countryCode}/nodes.json`;
 }
 
 function rawPbfPath(countryCode: string): string {
@@ -73,7 +88,7 @@ async function ensureRawPbf(countryCode: string, signal: AbortSignal): Promise<s
 
   if (await file.exists()) {
     const size = file.size;
-    if (size > 50_000) {
+    if (size > MIN_VALID_PBF_BYTES) {
       console.log(`Using cached PBF for ${countryCode} (${size} bytes)`);
       return pbfPath;
     }
@@ -81,12 +96,16 @@ async function ensureRawPbf(countryCode: string, signal: AbortSignal): Promise<s
   }
 
   const url = getGeofabrikUrl(countryCode);
-  if (!url) throw new Error(`No Geofabrik URL for country code: ${countryCode}`);
+  if (!url) {
+    throw new Error(`No Geofabrik URL for country code: ${countryCode}`);
+  }
 
   console.log(`Downloading PBF from Geofabrik for ${countryCode}...`);
 
   const response = await fetchWithRetry(url, { signal });
-  if (!response.ok) throw new Error(`Failed to download PBF: HTTP ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`Failed to download PBF: HTTP ${response.status}`);
+  }
 
   await mkdir(dirname(pbfPath), { recursive: true });
   await Bun.write(pbfPath, response);
@@ -98,105 +117,156 @@ async function ensureRawPbf(countryCode: string, signal: AbortSignal): Promise<s
 // EXTRACTION PIPELINE
 // ==========================================
 
-async function extractAdminBoundaries(pbfPath: string, signal: AbortSignal): Promise<OsmData> {
-  // The "Half-Pipe": Streams bytes to blocks, but stops before JSON hydration.
-  // This is natively optimized by Bun/Node Web Streams.
-  const getBlockStream = () =>
-    Bun.file(pbfPath).stream().pipeThrough(new OsmPbfBytesToBlocksTransformStream());
+function openBlockStream(pbfPath: string) {
+  return Bun.file(pbfPath).stream().pipeThrough(new OsmPbfBytesToBlocksTransformStream());
+}
 
-  const requiredWays = new Set<number>();
-  const requiredNodes = new Set<number>();
-  const extractedElements = new Map<string, OsmEntity>();
+/**
+ * PBF files are ordered: nodes → ways → relations.
+ * We need three sequential streaming passes:
+ *   1. Relations: determine which admin boundaries to extract and their
+ *      required way/node dependencies.
+ *   2. Ways: collect required ways, which reveals additional required nodes.
+ *   3. Nodes: collect all required nodes (from relations + ways).
+ *
+ * A single pass cannot work because nodes appear first in the file but
+ * their required IDs are only known after reading relations and ways.
+ */
+async function extractAllFromPbf(pbfPath: string, signal: AbortSignal): Promise<ExtractedOsmData> {
+  const requiredWayIds = new Set<number>();
+  const requiredNodeIds = new Set<number>();
+  const relations: OsmRelation[] = [];
+  const ways: OsmWay[] = [];
+  const nodes: OsmNode[] = [];
 
-  // ------------------------------------------
-  // PASS 1: Identify Relations & Dependencies
-  // ------------------------------------------
-  console.log('Extracting boundaries...');
-  for await (const block of toAsyncGenerator(getBlockStream())) {
+  const checkAborted = () => {
     if (signal.aborted) throw new Error('Stream aborted');
+  };
 
-    // Type Guard: Skip the Header Block
-    if (!isPrimitiveBlock(block)) continue;
+  // ---- Pass 1: Relations ----
+  console.log('Pass 1: Scanning relations for admin boundaries...');
+  let blockCount = 0;
+  for await (const block of toAsyncGenerator(openBlockStream(pbfPath))) {
+    checkAborted();
+    blockCount++;
+    if (!isPrimitiveBlock(block) || !blockHasRelations(block)) continue;
 
-    // Low-level skip: Only pay the JSON tax if the block contains relations
-    const hasRelations = block.primitivegroup?.some((g) => g.relations && g.relations.length > 0);
-    if (!hasRelations) continue;
-
-    // Manually hydrate only this specific block
     for (const entity of blocksToJsonEntities(block)) {
-      if (isOsmEntity(entity) && isOsmRelation(entity)) {
-        const isBoundary = entity.tags?.boundary === 'administrative';
-        const adminLevel = String(entity.tags?.admin_level);
+      if (!isOsmRelation(entity)) continue;
 
-        if (isBoundary && VALID_ADMIN_LEVELS.has(adminLevel)) {
-          extractedElements.set(`relation_${entity.id}`, entity);
+      const tags = entity.tags;
+      if (tags?.boundary !== 'administrative') continue;
+      if (!VALID_ADMIN_LEVELS.has(`${tags.admin_level}`)) continue;
 
-          for (const member of entity.members) {
-            if (member.type === 'way') {
-              requiredWays.add(member.ref);
-            } else if (member.type === 'node' && member.role === 'admin_centre') {
-              requiredNodes.add(member.ref);
-            }
-          }
+      relations.push(entity);
+      for (const member of entity.members) {
+        if (member.type === 'way') {
+          requiredWayIds.add(member.ref);
+        } else if (member.type === 'node' && member.role === 'admin_centre') {
+          requiredNodeIds.add(member.ref);
         }
       }
     }
+
+    if (blockCount % 1000 === 0) {
+      console.log(
+        `  Scanned ${blockCount} blocks - relations: ${relations.length}, required ways: ${requiredWayIds.size}`,
+      );
+    }
+  }
+  console.log(
+    `Pass 1 complete. Relations: ${relations.length}, required ways: ${requiredWayIds.size}, required nodes (from relations): ${requiredNodeIds.size}`,
+  );
+
+  // ---- Pass 2: Ways ----
+  if (requiredWayIds.size === 0) {
+    return { relations, ways, nodes };
   }
 
-  // ------------------------------------------
-  // PASS 2: Extract Required Ways
-  // ------------------------------------------
-
-  for await (const block of toAsyncGenerator(getBlockStream())) {
-    console.log('Extracting ways...');
-    if (signal.aborted) throw new Error('Stream aborted');
-
-    // Type Guard: Skip the Header Block
-    if (!isPrimitiveBlock(block)) continue;
-
-    // Low-level skip: Only pay the JSON tax if the block contains ways
-    const hasWays = block.primitivegroup?.some((g) => g.ways && g.ways.length > 0);
-    if (!hasWays) continue;
+  console.log('Pass 2: Extracting required ways...');
+  let remainingWays = requiredWayIds.size;
+  for await (const block of toAsyncGenerator(openBlockStream(pbfPath))) {
+    checkAborted();
+    if (!isPrimitiveBlock(block) || !blockHasWays(block)) continue;
+    if (remainingWays === 0) break;
 
     for (const entity of blocksToJsonEntities(block)) {
-      if (isOsmEntity(entity) && isOsmWay(entity) && requiredWays.has(entity.id)) {
-        extractedElements.set(`way_${entity.id}`, entity);
+      if (!isOsmWay(entity) || !requiredWayIds.has(entity.id)) continue;
 
-        for (const nodeId of entity.refs) {
-          requiredNodes.add(nodeId);
-        }
+      ways.push(entity);
+      remainingWays--;
+      for (const nodeId of entity.refs) {
+        requiredNodeIds.add(nodeId);
       }
     }
   }
+  console.log(
+    `Pass 2 complete. Ways: ${ways.length}, total required nodes: ${requiredNodeIds.size}`,
+  );
 
-  // ------------------------------------------
-  // PASS 3: Extract Required Nodes
-  // ------------------------------------------
+  // ---- Pass 3: Nodes ----
+  if (requiredNodeIds.size === 0) {
+    return { relations, ways, nodes };
+  }
 
-  for await (const block of toAsyncGenerator(getBlockStream())) {
-    console.log('Extracting nodes...');
-    if (signal.aborted) throw new Error('Stream aborted');
+  console.log('Pass 3: Extracting required nodes...');
+  let remainingNodes = requiredNodeIds.size;
+  for await (const block of toAsyncGenerator(openBlockStream(pbfPath))) {
+    checkAborted();
+    if (!isPrimitiveBlock(block) || !blockHasNodes(block)) continue;
+    if (remainingNodes === 0) break;
+    // Nodes come before ways in PBF, so stop scanning once we hit ways.
+    if (blockHasWays(block)) break;
 
-    // Type Guard: Skip the Header Block
-    if (!isPrimitiveBlock(block)) continue;
+    for (const entity of blocksToJsonEntities(block)) {
+      if (!isOsmNode(entity) || !requiredNodeIds.has(entity.id)) continue;
 
-    // Low-level skip: Only pay the JSON tax if the block contains nodes
-    const hasNodes = block.primitivegroup?.some(
-      (g) => (g.dense && g.dense.id.length > 0) || (g.nodes && g.nodes.length > 0),
+      nodes.push(entity);
+      remainingNodes--;
+    }
+  }
+  console.log(`Pass 3 complete. Nodes: ${nodes.length}`);
+
+  return { relations, ways, nodes };
+}
+
+async function extractAndCacheBoundaries(
+  countryCode: string,
+  signal: AbortSignal,
+): Promise<ExtractedOsmData> {
+  const pbfPath = await ensureRawPbf(countryCode, signal);
+  console.log(`Extracting admin boundaries for ${countryCode}...`);
+
+  const { relations, ways, nodes } = await extractAllFromPbf(pbfPath, signal);
+
+  const cache = getCache();
+  const writes: Promise<unknown>[] = [];
+
+  if (relations.length > 0) {
+    writes.push(
+      cache
+        .set(relationsCacheKey(countryCode), { elements: relations })
+        .catch((err) => console.error(`Failed to cache relations for ${countryCode}:`, err)),
     );
-    if (!hasNodes) continue;
-
-    for (const entity of blocksToJsonEntities(block)) {
-      if (isOsmEntity(entity) && isOsmNode(entity) && requiredNodes.has(entity.id)) {
-        extractedElements.set(`node_${entity.id}`, entity);
-      }
-    }
+  }
+  if (ways.length > 0) {
+    writes.push(
+      cache
+        .set(waysCacheKey(countryCode), { elements: ways })
+        .catch((err) => console.error(`Failed to cache ways for ${countryCode}:`, err)),
+    );
+  }
+  if (nodes.length > 0) {
+    writes.push(
+      cache
+        .set(nodesCacheKey(countryCode), { elements: nodes })
+        .catch((err) => console.error(`Failed to cache nodes for ${countryCode}:`, err)),
+    );
   }
 
-  const finalElements = Array.from(extractedElements.values());
-  console.log(`Extraction complete. Total elements extracted: ${finalElements.length}`);
+  await Promise.all(writes);
 
-  return { elements: finalElements };
+  return { relations, ways, nodes };
 }
 
 export async function fetchGeofabrikBoundaries(
@@ -204,25 +274,30 @@ export async function fetchGeofabrikBoundaries(
   signal: AbortSignal,
 ): Promise<OsmData> {
   const cache = getCache();
-  const cacheKey = geofabrikCacheKey(countryCode);
 
-  const cached = await cache.get<OsmData>(cacheKey);
-  if (cached) {
-    console.log(`Geofabrik cache hit for ${countryCode}`);
-    return cached;
+  const [relationsData, waysData, nodesData] = await Promise.all([
+    cache.get<{ elements: OsmRelation[] }>(relationsCacheKey(countryCode)),
+    cache.get<{ elements: OsmWay[] }>(waysCacheKey(countryCode)),
+    cache.get<{ elements: OsmNode[] }>(nodesCacheKey(countryCode)),
+  ]);
+
+  if (relationsData && waysData && nodesData) {
+    console.log(
+      `Geofabrik cache hit for ${countryCode} (relations: ${relationsData.elements.length}, ways: ${waysData.elements.length}, nodes: ${nodesData.elements.length})`,
+    );
+    return {
+      elements: [...relationsData.elements, ...waysData.elements, ...nodesData.elements],
+    };
   }
 
-  const pbfPath = await ensureRawPbf(countryCode, signal);
-  console.log(`Extracting admin boundaries...`);
-  const osmData = await extractAdminBoundaries(pbfPath, signal);
+  console.log(`Geofabrik cache miss for ${countryCode}. Running extraction...`);
+  const extracted = await extractAndCacheBoundaries(countryCode, signal);
 
-  if (osmData.elements.length === 0) {
+  if (extracted.relations.length === 0) {
     throw new Error(`No admin boundaries found for country code: ${countryCode}`);
   }
 
-  await cache.set(cacheKey, osmData).catch((err) => {
-    console.error(`Failed to write extraction to local cache for "${countryCode}":`, err);
-  });
-
-  return osmData;
+  return {
+    elements: [...extracted.relations, ...extracted.ways, ...extracted.nodes],
+  };
 }
