@@ -1,4 +1,5 @@
 - [ ] Add support for tracking admin centre points
+- [ ] Consider dropping Overpass integration entirely
 - [ ] Mount GCS volume and refactor to just use local cache system
 - [ ] Ensure map tile export works on prod (currently broken due to mkdir)
 - [ ] Provide link from frontend to https://wiki.openstreetmap.org/wiki/Tag:boundary%3Dadministrative
