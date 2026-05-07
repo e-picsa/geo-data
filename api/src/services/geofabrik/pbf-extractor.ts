@@ -37,14 +37,38 @@ export class PbfBoundaryExtractor {
   }
 
   async extract(): Promise<ExtractedOsmData> {
+    const overallStart = performance.now();
+
     await this.scanRelations();
+    const pass1Time = performance.now();
 
     if (this.requiredWayIds.size > 0) {
       await this.scanWays();
     }
+    const pass2Time = performance.now();
+
     if (this.requiredNodeIds.size > 0) {
       await this.scanNodes();
     }
+    const pass3Time = performance.now();
+
+    const totalTime = Math.round(pass3Time - overallStart);
+    const p1Time = Math.round(pass1Time - overallStart);
+    const p2Time = Math.round(pass2Time - pass1Time);
+    const p3Time = Math.round(pass3Time - pass2Time);
+
+    console.log(
+      `[PERF] Pass 1: ${p1Time}ms - found ${this.relations.length} relations, ${this.requiredWayIds.size} way refs, ${this.requiredNodeIds.size} node refs`,
+    );
+    if (this.requiredWayIds.size > 0) {
+      console.log(
+        `[PERF] Pass 2: ${p2Time}ms - found ${this.ways.length} ways, total ${this.requiredNodeIds.size} node refs`,
+      );
+    }
+    if (this.requiredNodeIds.size > 0) {
+      console.log(`[PERF] Pass 3: ${p3Time}ms - found ${this.nodes.length} nodes`);
+    }
+    console.log(`[PERF] Total: ${totalTime}ms`);
 
     return {
       relations: this.relations,
