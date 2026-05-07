@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "bun run --filter '*' start",
+    "start:api": "cd api && bun run start && cd ../.",
+    "start:web": "bun run --filter 'web' start",
     "test": "bun test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

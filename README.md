@@ -4,6 +4,33 @@ A bun monorepo for managing Geo data within the E-PICSA App
 
 ![](./home-screen.png)
 
+## Quickstart
+
+Prerequisites: [Bun](https://bun.sh/) installed. The API uses `sharp` for converting PNG map tiles into WebP images. Node's package manager handles the precompiled binaries during install automatically.
+
+```bash
+# Install dependencies (both workspaces)
+bun install
+
+# Run both API and frontend concurrently
+bun start
+```
+
+The Vite dev server proxies `/api` requests to the Bun API at [localhost:8080](http://localhost:8080), so the frontend works seamlessly in development without CORS issues.
+
+Use a rest client like [Insomnia](https://insomnia.rest) to test requests
+
+E.g. POST request for admin_4 boundaries
+
+```shell
+curl --request POST --url http://localhost:8080/ --data '{"country_code":"ZM","admin_level":2}'
+```
+
+First request will attempt to retrieve from GeoFabrik with fallback to Overpass
+This may take significant time as it involves downloading full `.pbf` for a given country http://download.geofabrik.de/, which could be > 100MB in size
+
+Subsequent requests will be served from local cache [./api/.cache](./api/.cache)
+
 ## Architecture
 
 | Component        | Stack                       | Deployment                  |
@@ -53,20 +80,6 @@ The API does not currently support levels greater than 5, as these are not used 
 
 **Further Reference:**
 [OSM Wiki for admin_level](https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries).
-
-## Local Development
-
-Prerequisites: [Bun](https://bun.sh/) installed. The API uses `sharp` for converting PNG map tiles into WebP images. Node's package manager handles the precompiled binaries during install automatically.
-
-```bash
-# Install dependencies (both workspaces)
-bun install
-
-# Run both API and frontend concurrently
-bun start
-```
-
-The Vite dev server proxies `/api` requests to the Bun API at `localhost:8080`, so the frontend works seamlessly in development without CORS issues.
 
 ## Cloud Run Deployment (API)
 

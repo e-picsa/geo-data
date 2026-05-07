@@ -7,6 +7,7 @@ import { getCache, type CacheProvider } from '../utils/cache.ts';
 import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
 import { fetchOverpassData } from './overpass.ts';
+import { fetchGeofabrikBoundaries, shouldUseGeofabrik } from './geofabrik.ts';
 
 /**
  * Bust cache if conversion or processing methods change.
@@ -39,21 +40,38 @@ export const adminBoundaries = async (req: Request) => {
     const cache = getCache();
     const paths = buildCachePaths(country_code, admin_level);
 
-    const cachedTopojson = await readCache<any>(cache, paths.topojson);
-    if (cachedTopojson) {
-      console.log(`TopoJSON cache hit for ${country_code} admin level ${admin_level}.`);
-      return buildSuccessResponse(params, 'cache', cachedTopojson);
-    }
+    // const cachedTopojson = await readCache<any>(cache, paths.topojson);
+    // if (cachedTopojson) {
+    //   console.log(`TopoJSON cache hit for ${country_code} admin level ${admin_level}.`);
+    //   return buildSuccessResponse(params, 'cache', cachedTopojson);
+    // }
 
-    // fetchOverpassData is cache-through — it reads/writes the Overpass
-    // response cache internally, so we don't manage it here.
-    const osmData = await fetchOverpassData(req.signal, country_code, admin_level);
+    let osmData: unknown;
+    let dataSource: 'geofabrik' | 'overpass' = 'overpass';
+
+    if (shouldUseGeofabrik(country_code)) {
+      try {
+        console.log(`Attempting to fetch boundaries from Geofabrik for ${country_code}...`);
+        osmData = await fetchGeofabrikBoundaries(country_code, req.signal);
+        dataSource = 'geofabrik';
+        console.log(`Successfully fetched boundaries from Geofabrik for ${country_code}`);
+      } catch (geofabrikError) {
+        console.warn(
+          `Geofabrik failed for ${country_code}, falling back to Overpass:`,
+          geofabrikError,
+        );
+        osmData = await fetchOverpassData(req.signal, country_code, admin_level);
+        dataSource = 'overpass';
+      }
+    } else {
+      osmData = await fetchOverpassData(req.signal, country_code, admin_level);
+    }
 
     const topojson = await convertOsmToTopojson(osmData, admin_level, cache, paths);
 
     writeCache(cache, paths.topojson, topojson);
 
-    return buildSuccessResponse(params, 'generated', topojson);
+    return buildSuccessResponse(params, 'generated', topojson, dataSource);
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -204,6 +222,7 @@ function buildSuccessResponse(
   params: BoundaryRequestParams,
   source: Source,
   topojson: any,
+  dataSource: 'geofabrik' | 'overpass' = 'overpass',
 ): Response {
   const { size_kb, feature_count, bbox } = summarizeTopojson(topojson);
 
@@ -212,6 +231,7 @@ function buildSuccessResponse(
       country_code: params.country_code,
       admin_level: params.admin_level,
       source,
+      data_source: dataSource,
       size_kb,
       feature_count,
       bbox,
