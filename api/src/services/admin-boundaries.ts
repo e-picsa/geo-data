@@ -6,7 +6,7 @@ import { validateBody } from '../utils/validation.ts';
 import { getCache, type CacheProvider } from '../utils/cache.ts';
 import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
-import { fetchGeofabrikBoundaries } from './geofabrik.ts';
+import { fetchGeofabrikBoundaries } from './geofabrik';
 
 /**
  * Bust cache if conversion or processing methods change.
@@ -39,16 +39,20 @@ export const adminBoundaries = async (req: Request) => {
     const cache = getCache();
     const paths = buildCachePaths(country_code, admin_level);
 
-    const cachedTopojson = await readCache<any>(cache, paths.topojson);
-    if (cachedTopojson) {
-      console.log(`TopoJSON cache hit for ${country_code} admin level ${admin_level}.`);
-      return buildSuccessResponse(params, 'cache', cachedTopojson);
-    }
+    // const cachedTopojson = await readCache<any>(cache, paths.topojson);
+    // if (cachedTopojson) {
+    //   console.log(`TopoJSON cache hit for ${country_code} admin level ${admin_level}.`);
+    //   return buildSuccessResponse(params, 'cache', cachedTopojson);
+    // }
 
     const dataSource = 'geofabrik';
 
     console.log(`Attempting to fetch boundaries from Geofabrik for ${country_code}...`);
-    const osmData = await fetchGeofabrikBoundaries(country_code, req.signal);
+    const osmData = await fetchGeofabrikBoundaries({
+      countryCode: country_code,
+      adminLevel: admin_level,
+      signal: req.signal,
+    });
     console.log(`Successfully fetched boundaries from Geofabrik for ${country_code}`);
 
     const topojson = await convertOsmToTopojson(osmData, admin_level, cache, paths);
