@@ -13,7 +13,7 @@ import {
 } from './pbf-entity-guards.ts';
 
 export interface ExtractorOptions {
-  adminLevel: string;
+  adminLevel: number;
   progressEveryNBlocks?: number;
 }
 

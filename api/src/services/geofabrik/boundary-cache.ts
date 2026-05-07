@@ -14,7 +14,7 @@ interface CachedElements<T> {
 export class BoundaryCache {
   constructor(
     private readonly countryCode: string,
-    private readonly adminLevel: string,
+    private readonly adminLevel: number,
     private readonly cacheVersion: number,
   ) {}
 
@@ -50,7 +50,7 @@ export class BoundaryCache {
     ) => {
       if (elements.length === 0) return;
       writes.push(
-        cache.set(key, { elements }).catch((err) => {
+        cache.set(key, elements).catch((err) => {
           console.error(
             `Failed to cache ${label} for ${this.countryCode} admin-${this.adminLevel}:`,
             err,

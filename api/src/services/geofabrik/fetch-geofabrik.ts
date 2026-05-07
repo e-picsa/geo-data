@@ -11,7 +11,7 @@ export interface OsmData {
 
 export interface FetchGeofabrikOptions {
   countryCode: string;
-  adminLevel: string;
+  adminLevel: number;
   signal: AbortSignal;
 }
 
