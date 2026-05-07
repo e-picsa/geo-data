@@ -2,15 +2,7 @@ import { blocksToJsonEntities } from '@osmix/json';
 import { OsmPbfBytesToBlocksTransformStream, toAsyncGenerator } from '@osmix/pbf';
 import type { OsmNode, OsmRelation, OsmWay } from 'osmix';
 import type { ExtractedOsmData } from './boundary-cache.ts';
-import {
-  blockHasNodes,
-  blockHasRelations,
-  blockHasWays,
-  isOsmNode,
-  isOsmRelation,
-  isOsmWay,
-  isPrimitiveBlock,
-} from './pbf-entity-guards.ts';
+import { isOsmNode, isOsmRelation, isOsmWay, isPrimitiveBlock } from './pbf-entity-guards.ts';
 
 export interface ExtractorOptions {
   adminLevel: number;
@@ -18,12 +10,14 @@ export interface ExtractorOptions {
   progressEveryNBlocks?: number;
 }
 
+type WayRefs = number[];
+
+type LatLon = [number, number];
+
 export class PbfBoundaryExtractor {
-  private readonly requiredWayIds = new Set<number>();
-  private readonly requiredNodeIds = new Set<number>();
-  private readonly relations: OsmRelation[] = [];
-  private readonly ways: OsmWay[] = [];
-  private readonly nodes: OsmNode[] = [];
+  private wayIndex = new Map<number, WayRefs>();
+  private nodeIndex = new Map<number, LatLon>();
+  private relationsIndex = new Map<number, OsmRelation>();
 
   private readonly adminLevel: string;
   private readonly countryCode: string;
@@ -41,157 +35,124 @@ export class PbfBoundaryExtractor {
 
   async extract(): Promise<ExtractedOsmData> {
     const overallStart = performance.now();
+    await this.singlePass();
 
-    await this.scanRelations();
-    const pass1Time = performance.now();
+    const { nodes, ways, relations } = this.buildResults();
 
-    if (this.requiredWayIds.size > 0) {
-      await this.scanWays();
-    }
-    const pass2Time = performance.now();
+    console.log(`[PERF] Total: ${Math.round(performance.now() - overallStart)}ms`);
 
-    if (this.requiredNodeIds.size > 0) {
-      await this.scanNodes();
-    }
-    const pass3Time = performance.now();
-
-    const totalTime = Math.round(pass3Time - overallStart);
-    const p1Time = Math.round(pass1Time - overallStart);
-    const p2Time = Math.round(pass2Time - pass1Time);
-    const p3Time = Math.round(pass3Time - pass2Time);
-
-    console.log(
-      `[PERF] Pass 1: ${p1Time}ms - found ${this.relations.length} relations, ${this.requiredWayIds.size} way refs, ${this.requiredNodeIds.size} node refs`,
-    );
-    if (this.requiredWayIds.size > 0) {
-      console.log(
-        `[PERF] Pass 2: ${p2Time}ms - found ${this.ways.length} ways, total ${this.requiredNodeIds.size} node refs`,
-      );
-    }
-    if (this.requiredNodeIds.size > 0) {
-      console.log(`[PERF] Pass 3: ${p3Time}ms - found ${this.nodes.length} nodes`);
-    }
-    console.log(`[PERF] Total: ${totalTime}ms`);
-
-    return {
-      relations: this.relations,
-      ways: this.ways,
-      nodes: this.nodes,
-    };
-  }
-
-  private openBlockStream() {
-    return Bun.file(this.pbfPath).stream().pipeThrough(new OsmPbfBytesToBlocksTransformStream());
+    return { relations, ways, nodes };
   }
 
   private checkAborted(): void {
     if (this.signal.aborted) throw new Error('Stream aborted');
   }
 
-  private async scanRelations(): Promise<void> {
-    console.log(`Pass 1: Scanning relations for admin_level=${this.adminLevel}...`);
+  private async singlePass(): Promise<void> {
     let blockCount = 0;
+
+    console.log(`Single pass: Scanning for admin_level=${this.adminLevel}...`);
 
     for await (const block of toAsyncGenerator(this.openBlockStream())) {
       this.checkAborted();
       blockCount++;
-      if (!isPrimitiveBlock(block) || !blockHasRelations(block)) continue;
 
-      for (const entity of blocksToJsonEntities(block)) {
-        if (!isOsmRelation(entity)) continue;
-
-        const tags = entity.tags;
-        if (!tags) continue;
-        if (tags.boundary !== 'administrative') continue;
-
-        // Admin level 2 will often include full data for bordering countries, filter tags available
-        if (this.adminLevel === '2' && this.countryCode) {
-          const isoCode = tags['ISO3166-1'];
-          if (isoCode && isoCode !== this.countryCode) {
+      if (isPrimitiveBlock(block)) {
+        for (const entity of blocksToJsonEntities(block)) {
+          if (isOsmNode(entity)) {
+            this.nodeIndex.set(entity.id, [entity.lat, entity.lon]);
+            continue;
+          }
+          if (isOsmRelation(entity)) {
+            this.processRelation(entity);
+            continue;
+          }
+          if (isOsmWay(entity)) {
+            this.wayIndex.set(entity.id, entity.refs);
             continue;
           }
         }
-
-        if (`${tags.admin_level}` !== this.adminLevel) continue;
-
-        this.relations.push(entity);
-        this.recordRelationDependencies(entity);
       }
 
       if (blockCount % this.progressEveryNBlocks === 0) {
-        console.log(
-          `  Scanned ${blockCount} blocks - relations: ${this.relations.length}, required ways: ${this.requiredWayIds.size}`,
-        );
-      }
-    }
-
-    console.log(
-      `Pass 1 complete. Relations: ${this.relations.length}, required ways: ${this.requiredWayIds.size}, required nodes (from relations): ${this.requiredNodeIds.size}`,
-    );
-  }
-
-  private isTargetBoundary(relation: OsmRelation): boolean {
-    const tags = relation.tags;
-    if (!tags) return false;
-    if (tags.boundary !== 'administrative') return false;
-    return `${tags.admin_level}` === this.adminLevel;
-  }
-
-  private recordRelationDependencies(relation: OsmRelation): void {
-    for (const member of relation.members) {
-      if (member.type === 'way') {
-        this.requiredWayIds.add(member.ref);
-      } else if (member.type === 'node' && member.role === 'admin_centre') {
-        this.requiredNodeIds.add(member.ref);
+        console.log(`  Scanned ${blockCount} blocks`);
       }
     }
   }
 
-  private async scanWays(): Promise<void> {
-    console.log('Pass 2: Extracting required ways...');
-    let remaining = this.requiredWayIds.size;
+  private openBlockStream() {
+    return Bun.file(this.pbfPath).stream().pipeThrough(new OsmPbfBytesToBlocksTransformStream());
+  }
 
-    for await (const block of toAsyncGenerator(this.openBlockStream())) {
-      this.checkAborted();
-      if (!isPrimitiveBlock(block) || !blockHasWays(block)) continue;
-      if (remaining === 0) break;
+  private processRelation(entity: OsmRelation): void {
+    const tags = entity.tags;
+    if (!tags) return;
+    if (tags.boundary !== 'administrative') return;
 
-      for (const entity of blocksToJsonEntities(block)) {
-        if (!isOsmWay(entity) || !this.requiredWayIds.has(entity.id)) continue;
+    if (this.adminLevel === '2' && this.countryCode) {
+      const isoCode = tags['ISO3166-1'];
+      if (isoCode && isoCode !== this.countryCode) {
+        return;
+      }
+    }
 
-        this.ways.push(entity);
-        remaining--;
-        for (const nodeId of entity.refs) {
-          this.requiredNodeIds.add(nodeId);
+    if (`${tags.admin_level}` !== this.adminLevel) return;
+
+    this.relationsIndex.set(entity.id, entity);
+  }
+
+  private buildResults() {
+    const relations: OsmRelation[] = [];
+    const ways: OsmWay[] = [];
+    const nodes: OsmNode[] = [];
+
+    const requiredWayIds = new Set<number>();
+    const requiredNodeIds = new Set<number>();
+
+    for (const relation of this.relationsIndex.values()) {
+      relations.push(relation);
+
+      for (const member of relation.members || []) {
+        if (member.type === 'way') {
+          requiredWayIds.add(member.ref);
+        } else if (member.type === 'node' && member.role === 'admin_centre') {
+          requiredNodeIds.add(member.ref);
         }
       }
     }
 
-    console.log(
-      `Pass 2 complete. Ways: ${this.ways.length}, total required nodes: ${this.requiredNodeIds.size}`,
-    );
-  }
+    for (const wayId of requiredWayIds) {
+      const refs = this.wayIndex.get(wayId);
+      if (!refs) continue;
 
-  private async scanNodes(): Promise<void> {
-    console.log('Pass 3: Extracting required nodes...');
-    let remaining = this.requiredNodeIds.size;
+      ways.push({
+        id: wayId,
+        refs: refs,
+        tags: {},
+        members: [],
+      } as OsmWay);
 
-    for await (const block of toAsyncGenerator(this.openBlockStream())) {
-      this.checkAborted();
-      if (!isPrimitiveBlock(block)) continue;
-      if (blockHasWays(block)) break;
-      if (!blockHasNodes(block)) continue;
-      if (remaining === 0) break;
-
-      for (const entity of blocksToJsonEntities(block)) {
-        if (!isOsmNode(entity) || !this.requiredNodeIds.has(entity.id)) {
-          continue;
-        }
-        this.nodes.push(entity);
-        remaining--;
+      for (const nodeId of refs) {
+        requiredNodeIds.add(nodeId);
       }
     }
 
-    console.log(`Pass 3 complete. Nodes: ${this.nodes.length}`);
+    for (const nodeId of requiredNodeIds) {
+      const latlon = this.nodeIndex.get(nodeId);
+      if (!latlon) continue;
+
+      nodes.push({
+        id: nodeId,
+        lat: latlon[0],
+        lon: latlon[1],
+        tags: {},
+      } as OsmNode);
+    }
+
+    console.log(
+      `[PERF] Results: ${relations.length} relations, ${ways.length} ways, ${nodes.length} nodes`,
+    );
+
+    return { ways, nodes, relations };
   }
 }
