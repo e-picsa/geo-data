@@ -200,7 +200,7 @@ function App() {
           <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-[400] flex items-center justify-center">
             <div className="bg-white px-6 py-3 rounded-full shadow-lg border border-slate-200 font-medium text-slate-700 flex items-center gap-3">
               <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
-              Processing Overpass Data...
+              Processing Data...
             </div>
           </div>
         )}

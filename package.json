@@ -6,7 +6,7 @@
   "scripts": {
     "start": "bun run --filter '*' start",
     "start:api": "cd api && bun run start && cd ../.",
-    "start:web": "bun run --filter 'web' start",
+    "start:web": "cd web && bun run start && cd ../",
     "test": "bun test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
