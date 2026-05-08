@@ -38,11 +38,11 @@ export const adminBoundaries = async (req: Request) => {
     const cache = getCache();
     const paths = buildCachePaths(country_code, admin_level);
 
-    // const cachedTopojson = await readCache<any>(cache, paths.topojson);
-    // if (cachedTopojson) {
-    //   console.log(`TopoJSON cache hit for ${country_code} admin level ${admin_level}.`);
-    //   return buildSuccessResponse(params, 'cache', cachedTopojson);
-    // }
+    const cachedTopojson = await readCache<any>(cache, paths.topojson);
+    if (cachedTopojson) {
+      console.log(`TopoJSON cache hit for ${country_code} admin level ${admin_level}.`);
+      return buildSuccessResponse(params, 'cache', cachedTopojson);
+    }
 
     const dataSource = 'geofabrik';
 
