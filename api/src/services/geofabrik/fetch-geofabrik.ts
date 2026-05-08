@@ -22,24 +22,21 @@ function flatten(data: ExtractedOsmData): OsmData {
 }
 
 export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions): Promise<OsmData> {
-  const overallStart = performance.now();
   const { countryCode, adminLevel, signal } = options;
   const cache = new BoundaryCache(countryCode, adminLevel, CACHE_VERSION);
 
   const cached = await cache.load();
   if (cached) {
-    const cacheTime = Math.round(performance.now() - overallStart);
+    console.log(`Geofabrik cache hit for ${countryCode} admin-${adminLevel}`);
     console.log(
-      `Geofabrik cache hit for ${countryCode} admin-${adminLevel} (${cacheTime}ms) - relations: ${cached.relations.length}, ways: ${cached.ways.length}, nodes: ${cached.nodes.length}`,
+      `relations: ${cached.relations.length}, ways: ${cached.ways.length}, nodes: ${cached.nodes.length}`,
     );
     return flatten(cached);
   }
 
   console.log(`Geofabrik cache miss for ${countryCode} admin-${adminLevel}. Running extraction...`);
 
-  const pbfStart = performance.now();
   const pbfPath = await ensureRawPbf(countryCode, CACHE_VERSION, signal);
-  const pbfTime = Math.round(performance.now() - pbfStart);
 
   const extractor = new PbfBoundaryExtractor(pbfPath, signal, { adminLevel, countryCode });
   const extracted = await extractor.extract();
@@ -47,10 +44,6 @@ export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions): 
   if (extracted.relations.length === 0) {
     throw new Error(`No admin-${adminLevel} boundaries found for country code: ${countryCode}`);
   }
-
   await cache.save(extracted);
-  const totalTime = Math.round(performance.now() - overallStart);
-  console.log(`[PERF] Extraction for ${countryCode}: ${totalTime}ms (PBF: ${pbfTime}ms)`);
-
   return flatten(extracted);
 }
