@@ -110,7 +110,7 @@ export class PbfBoundaryExtractor {
             break streamLoop;
           }
           if (type === 'way' && isOsmType('relation', entity)) {
-            console.log(`Relation detected, stop processing nodes`);
+            console.log(`Relation detected, stop processing ways`);
             break streamLoop;
           }
           // 2. Under shoot check
@@ -131,7 +131,7 @@ export class PbfBoundaryExtractor {
     }
     const end = performance.now();
     const duration = ((end - start) / 1000).toFixed(1);
-    console.log(`${type} extracted in (${duration})ms`);
+    console.log(`${type} extracted in (${duration})s`);
     return entities;
   }
 }

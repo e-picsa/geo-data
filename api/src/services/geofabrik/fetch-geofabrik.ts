@@ -2,6 +2,7 @@ import type { OsmEntity } from 'osmix';
 import { BoundaryCache, type ExtractedOsmData } from './boundary-cache.ts';
 import { PbfBoundaryExtractor } from './pbf-extractor.ts';
 import { ensureRawPbf } from './raw-pbf.ts';
+import { convertToGeoJSON } from './geojson-converter.ts';
 
 const CACHE_VERSION = 4;
 
@@ -15,13 +16,7 @@ export interface FetchGeofabrikOptions {
   signal: AbortSignal;
 }
 
-function flatten(data: ExtractedOsmData): OsmData {
-  return {
-    elements: [...data.relations, ...data.ways, ...data.nodes],
-  };
-}
-
-export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions): Promise<OsmData> {
+export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions) {
   const { countryCode, adminLevel, signal } = options;
   const cache = new BoundaryCache(countryCode, adminLevel, CACHE_VERSION);
 
@@ -31,7 +26,7 @@ export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions): 
     console.log(
       `relations: ${cached.relations.length}, ways: ${cached.ways.length}, nodes: ${cached.nodes.length}`,
     );
-    return flatten(cached);
+    return convertToGeoJSON(cached);
   }
 
   console.log(`Geofabrik cache miss for ${countryCode} admin-${adminLevel}. Running extraction...`);
@@ -45,5 +40,5 @@ export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions): 
     throw new Error(`No admin-${adminLevel} boundaries found for country code: ${countryCode}`);
   }
   await cache.save(extracted);
-  return flatten(extracted);
+  return convertToGeoJSON(extracted);
 }

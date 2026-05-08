@@ -1,4 +1,3 @@
-import osmtogeojson from 'osmtogeojson';
 import mapshaper from 'mapshaper';
 
 import { ErrorResponse, JSONResponse } from '../utils/response.ts';
@@ -55,7 +54,7 @@ export const adminBoundaries = async (req: Request) => {
     });
     console.log(`Successfully fetched boundaries from Geofabrik for ${country_code}`);
 
-    const topojson = await convertOsmToTopojson(osmData, admin_level, cache, paths);
+    const topojson = await convertGeoJsonToTopojson(osmData, admin_level, cache, paths);
 
     writeCache(cache, paths.topojson, topojson);
 
@@ -145,14 +144,13 @@ function buildMapshaperInputsAndCommands(
   return { input, commands };
 }
 
-async function convertOsmToTopojson(
-  osmData: unknown,
+async function convertGeoJsonToTopojson(
+  geojson: unknown,
   adminLevel: number,
   cache: import('../utils/cache.ts').CacheProvider,
   paths: CachePaths,
 ): Promise<any> {
   console.log('Converting to GeoJSON...');
-  let geojson: any = osmtogeojson(osmData as any);
 
   // Optional/debug cache
   writeCache(cache, paths.geojson, geojson);
