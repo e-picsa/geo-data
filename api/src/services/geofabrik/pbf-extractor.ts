@@ -49,7 +49,7 @@ export class PbfBoundaryExtractor {
    * (e.g. relations usually near the end, nodes only at the start)
    */
   private async extractData() {
-    console.log(`Single pass: Scanning for admin_level=${this.adminLevel}...`);
+    console.log(`Multi-pass extraction: Scanning for admin_level=${this.adminLevel}...`);
 
     // List of required ways and nodes will be updated during processing
     const requiredWays = new Set<number>();
@@ -115,7 +115,7 @@ export class PbfBoundaryExtractor {
           }
           // 2. Under shoot check
           if (!isOsmType(type, entity)) {
-            break;
+            continue;
           }
 
           // 3. TARGET ZONE:
