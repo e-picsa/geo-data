@@ -11,6 +11,17 @@ export function isPrimitiveBlock(block: OsmPbfHeaderBlock | OsmPbfBlock): block 
   return 'primitivegroup' in block;
 }
 
+const OSM_TYPE_CHECK = {
+  node: isOsmNode,
+  way: isOsmWay,
+  relation: isOsmRelation,
+} as const;
+type OsmType = keyof typeof OSM_TYPE_CHECK;
+
+export function isOsmType(type: OsmType, entity: OsmEntity) {
+  return OSM_TYPE_CHECK[type](entity);
+}
+
 export function isOsmRelation(entity: OsmEntity): entity is OsmRelation {
   return 'members' in entity;
 }

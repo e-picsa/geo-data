@@ -7,10 +7,6 @@ export interface ExtractedOsmData {
   nodes: OsmNode[];
 }
 
-interface CachedElements<T> {
-  elements: T[];
-}
-
 export class BoundaryCache {
   constructor(
     private readonly countryCode: string,
@@ -25,18 +21,14 @@ export class BoundaryCache {
   async load(): Promise<ExtractedOsmData | null> {
     const cache = getCache();
     const [relations, ways, nodes] = await Promise.all([
-      cache.get<CachedElements<OsmRelation>>(this.key('relations')),
-      cache.get<CachedElements<OsmWay>>(this.key('ways')),
-      cache.get<CachedElements<OsmNode>>(this.key('nodes')),
+      cache.get<OsmRelation[]>(this.key('relations')),
+      cache.get<OsmWay[]>(this.key('ways')),
+      cache.get<OsmNode[]>(this.key('nodes')),
     ]);
 
     if (!relations || !ways || !nodes) return null;
 
-    return {
-      relations: relations.elements,
-      ways: ways.elements,
-      nodes: nodes.elements,
-    };
+    return { relations, ways, nodes };
   }
 
   async save(data: ExtractedOsmData): Promise<void> {

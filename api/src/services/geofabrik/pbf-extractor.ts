@@ -1,8 +1,8 @@
 import { blocksToJsonEntities } from '@osmix/json';
 import { OsmPbfBytesToBlocksTransformStream, toAsyncGenerator } from '@osmix/pbf';
-import type { OsmNode, OsmRelation, OsmWay } from 'osmix';
+import type { OsmEntity, OsmNode, OsmRelation, OsmWay } from 'osmix';
 import type { ExtractedOsmData } from './boundary-cache.ts';
-import { isOsmNode, isOsmRelation, isOsmWay, isPrimitiveBlock } from './pbf-entity-guards.ts';
+import { isOsmType, isPrimitiveBlock } from './pbf-entity-guards.ts';
 
 export interface ExtractorOptions {
   adminLevel: number;
@@ -10,15 +10,7 @@ export interface ExtractorOptions {
   progressEveryNBlocks?: number;
 }
 
-type WayRefs = number[];
-
-type LatLon = [number, number];
-
 export class PbfBoundaryExtractor {
-  private wayIndex = new Map<number, WayRefs>();
-  private nodeIndex = new Map<number, LatLon>();
-  private relationsIndex = new Map<number, OsmRelation>();
-
   private readonly adminLevel: string;
   private readonly countryCode: string;
   private readonly progressEveryNBlocks: number;
@@ -34,13 +26,7 @@ export class PbfBoundaryExtractor {
   }
 
   async extract(): Promise<ExtractedOsmData> {
-    const overallStart = performance.now();
-    await this.singlePass();
-
-    const { nodes, ways, relations } = this.buildResults();
-
-    console.log(`[PERF] Total: ${Math.round(performance.now() - overallStart)}ms`);
-
+    const { nodes, ways, relations } = await this.extractData();
     return { relations, ways, nodes };
   }
 
@@ -48,111 +34,104 @@ export class PbfBoundaryExtractor {
     if (this.signal.aborted) throw new Error('Stream aborted');
   }
 
-  private async singlePass(): Promise<void> {
-    let blockCount = 0;
-
-    console.log(`Single pass: Scanning for admin_level=${this.adminLevel}...`);
-
-    for await (const block of toAsyncGenerator(this.openBlockStream())) {
-      this.checkAborted();
-      blockCount++;
-
-      if (isPrimitiveBlock(block)) {
-        for (const entity of blocksToJsonEntities(block)) {
-          if (isOsmNode(entity)) {
-            this.nodeIndex.set(entity.id, [entity.lat, entity.lon]);
-            continue;
-          }
-          if (isOsmRelation(entity)) {
-            this.processRelation(entity);
-            continue;
-          }
-          if (isOsmWay(entity)) {
-            this.wayIndex.set(entity.id, entity.refs);
-            continue;
-          }
-        }
-      }
-
-      if (blockCount % this.progressEveryNBlocks === 0) {
-        console.log(`  Scanned ${blockCount} blocks`);
-      }
-    }
-  }
-
   private openBlockStream() {
     return Bun.file(this.pbfPath).stream().pipeThrough(new OsmPbfBytesToBlocksTransformStream());
   }
 
-  private processRelation(entity: OsmRelation): void {
-    const tags = entity.tags;
-    if (!tags) return;
-    if (tags.boundary !== 'administrative') return;
+  /**
+   * OSM stores data bottom-up [...nodes, ...ways, ...relations], however
+   * filtering is typically top-down (relations specify ways which have nodes).
+   * We essentially need to process in reverse to build full dependency chains,
+   * however this is not possible with protobuf format, so instead need to make multiple passes
+   *
+   * TODO - performance could be drastically improved either using native osmium bindings
+   * to extract each data type, or smarter methods to identify where to start processing blocks from
+   * (e.g. relations usually near the end, nodes only at the start)
+   */
+  private async extractData() {
+    console.log(`Single pass: Scanning for admin_level=${this.adminLevel}...`);
 
-    if (this.adminLevel === '2' && this.countryCode) {
-      const isoCode = tags['ISO3166-1'];
-      if (isoCode && isoCode !== this.countryCode) {
-        return;
-      }
-    }
+    // List of required ways and nodes will be updated during processing
+    const requiredWays = new Set<number>();
+    const requiredNodes = new Set<number>();
 
-    if (`${tags.admin_level}` !== this.adminLevel) return;
-
-    this.relationsIndex.set(entity.id, entity);
-  }
-
-  private buildResults() {
-    const relations: OsmRelation[] = [];
-    const ways: OsmWay[] = [];
-    const nodes: OsmNode[] = [];
-
-    const requiredWayIds = new Set<number>();
-    const requiredNodeIds = new Set<number>();
-
-    for (const relation of this.relationsIndex.values()) {
-      relations.push(relation);
-
-      for (const member of relation.members || []) {
-        if (member.type === 'way') {
-          requiredWayIds.add(member.ref);
-        } else if (member.type === 'node' && member.role === 'admin_centre') {
-          requiredNodeIds.add(member.ref);
+    // Relations
+    const relations = await this.filterBlocks<OsmRelation>('relation', ({ tags }) => {
+      if (!tags) return false;
+      if (tags.boundary !== 'administrative') return false;
+      // If filtering level 2 ignore relations for countries that share border (if tagged)
+      if (this.adminLevel === '2' && this.countryCode) {
+        const isoCode = tags['ISO3166-1'];
+        if (isoCode && isoCode !== this.countryCode) {
+          return false;
         }
       }
-    }
+      if (tags.admin_level && `${tags.admin_level}` !== this.adminLevel) return false;
+      return true;
+    });
 
-    for (const wayId of requiredWayIds) {
-      const refs = this.wayIndex.get(wayId);
-      if (!refs) continue;
-
-      ways.push({
-        id: wayId,
-        refs: refs,
-        tags: {},
-        members: [],
-      } as OsmWay);
-
-      for (const nodeId of refs) {
-        requiredNodeIds.add(nodeId);
-      }
-    }
-
-    for (const nodeId of requiredNodeIds) {
-      const latlon = this.nodeIndex.get(nodeId);
-      if (!latlon) continue;
-
-      nodes.push({
-        id: nodeId,
-        lat: latlon[0],
-        lon: latlon[1],
-        tags: {},
-      } as OsmNode);
-    }
-
-    console.log(
-      `[PERF] Results: ${relations.length} relations, ${ways.length} ways, ${nodes.length} nodes`,
+    // Relation-specified ways and admin centre nodes
+    relations.forEach(({ members }) =>
+      members.forEach(({ type, ref, role }) => {
+        if (type === 'way') requiredWays.add(ref);
+        else if (type === 'node' && role === 'admin_centre') {
+          requiredNodes.add(ref);
+        }
+      }),
     );
 
-    return { ways, nodes, relations };
+    // Ways
+    const ways = await this.filterBlocks<OsmWay>('way', ({ id }) => requiredWays.has(id));
+    ways.forEach(({ refs }) => refs.forEach((ref) => requiredNodes.add(ref)));
+
+    // Nodes
+    const nodes = await this.filterBlocks<OsmNode>('node', ({ id }) => requiredNodes.has(id));
+    return { nodes, ways, relations };
+  }
+
+  private async filterBlocks<T = OsmEntity>(
+    type: 'relation' | 'way' | 'node',
+    filterFn = (entity: OsmEntity) => true,
+  ): Promise<T[]> {
+    const start = performance.now();
+    let blockCount = 0;
+    const entities: T[] = [];
+
+    // Label the outer loop so we can kill the stream from inside the entity loop
+    streamLoop: for await (const block of toAsyncGenerator(this.openBlockStream())) {
+      this.checkAborted();
+      blockCount++;
+      if (isPrimitiveBlock(block)) {
+        for (const entity of blocksToJsonEntities(block)) {
+          // 1. OVER-SHOOT CHECK:
+          // If we see an entity type that comes AFTER our target, kill the entire stream.
+          if (type === 'node' && isOsmType('way', entity)) {
+            console.log(`Way detected, stop processing nodes`);
+            break streamLoop;
+          }
+          if (type === 'way' && isOsmType('relation', entity)) {
+            console.log(`Relation detected, stop processing nodes`);
+            break streamLoop;
+          }
+          // 2. Under shoot check
+          if (!isOsmType(type, entity)) {
+            break;
+          }
+
+          // 3. TARGET ZONE:
+          // We are in the correct topological zone. Apply any other filter functions.
+          if (filterFn(entity)) {
+            entities.push(entity as T);
+          }
+        }
+      }
+      if (blockCount % this.progressEveryNBlocks === 0) {
+        console.log(`  Scanned ${blockCount} blocks`);
+      }
+    }
+    const end = performance.now();
+    const duration = ((end - start) / 1000).toFixed(1);
+    console.log(`${type} extracted in (${duration})ms`);
+    return entities;
   }
 }
