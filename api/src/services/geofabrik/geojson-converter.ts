@@ -49,12 +49,9 @@ export function convertToGeoJSON(data: ExtractedOsmData): FeatureCollection {
     }
   }
 
-  // Convert admin nodes
+  // Include nodes identified during extraction (admin_centre)
   for (const node of nodes) {
-    // Only convert admin_centre nodes, skip raw geometry nodes to save space
-    if (node.tags?.role === 'admin_centre' || node.tags?.admin_level) {
-      features.push(nodeToFeature(node));
-    }
+    features.push(nodeToFeature(node));
   }
 
   console.log(`Conversion complete. Generated ${features.length} features.`);

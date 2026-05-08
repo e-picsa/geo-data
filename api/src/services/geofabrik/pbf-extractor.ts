@@ -10,6 +10,8 @@ export interface ExtractorOptions {
   progressEveryNBlocks?: number;
 }
 
+const IGNORED_TAGS = new Set(['created_by']);
+
 export class PbfBoundaryExtractor {
   private readonly adminLevel: string;
   private readonly countryCode: string;
@@ -89,9 +91,9 @@ export class PbfBoundaryExtractor {
     return { nodes, ways, relations };
   }
 
-  private async filterBlocks<T = OsmEntity>(
+  private async filterBlocks<T extends OsmEntity>(
     type: 'relation' | 'way' | 'node',
-    filterFn = (entity: OsmEntity) => true,
+    filterFn = (entity: T) => true,
   ): Promise<T[]> {
     const start = performance.now();
     let blockCount = 0;
@@ -120,8 +122,8 @@ export class PbfBoundaryExtractor {
 
           // 3. TARGET ZONE:
           // We are in the correct topological zone. Apply any other filter functions.
-          if (filterFn(entity)) {
-            entities.push(entity as T);
+          if (filterFn(entity as T)) {
+            entities.push(this.cleanEntityData(entity as T));
           }
         }
       }
@@ -133,5 +135,25 @@ export class PbfBoundaryExtractor {
     const duration = ((end - start) / 1000).toFixed(1);
     console.log(`${type} extracted in (${duration})s`);
     return entities;
+  }
+
+  /** Strip localised metadata from relations (e.g. ISO3166-1:alpha3 or name:ar) */
+  private cleanEntityData<T extends OsmEntity>(entity: T) {
+    const { id, tags, ...rest } = entity;
+    // clean and remove empty tags
+    if (tags) {
+      // TODO - eventually define list of tags to include
+
+      const cleanedTags = Object.fromEntries(
+        Object.entries(tags).filter(([key]) => !key.includes(':') && !IGNORED_TAGS.has(key)),
+      );
+      if (Object.keys(cleanedTags).length > 0) {
+        return { id, tags: cleanedTags, ...rest } as T;
+      } else {
+        return { id, ...rest } as T;
+      }
+    }
+    // order so tags appear after id (easier debugging)
+    return { id, tags, ...rest } as T;
   }
 }
