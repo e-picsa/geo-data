@@ -115,7 +115,7 @@ export class PbfBoundaryExtractor {
           }
           // 2. Under shoot check
           if (!isOsmType(type, entity)) {
-            break;
+            continue;
           }
 
           // 3. TARGET ZONE:
