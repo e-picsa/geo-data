@@ -11,8 +11,8 @@ Welcome! This system is a monorepo consisting of:
 
 - Written in TypeScript and runs on **Bun**.
 - Uses `Bun.serve()` in `api/src/main.ts` as the webserver.
-- The core logic constructs Overpass API queries, then translates them via Mapshaper into TopoJSON.
-- Environment variables are accessed via `process.env`. Make sure `OVERPASS_CACHE_BUCKET` is present if you want caching.
+- The core logic downloads Geofabrik PBF extracts, extracts boundary relations, then translates them via Mapshaper into TopoJSON.
+- Environment variables are accessed via `process.env`. Make sure `CACHE_BUCKET` is present if you want GCS caching.
 - To add dependencies, use `bun add <pkg> --cwd api`.
 - To test the API, run `bun test` in the `api` folder.
 

@@ -26,8 +26,8 @@ E.g. POST request for admin_4 boundaries
 curl --request POST --url http://localhost:8080/ --data '{"country_code":"ZM","admin_level":2}'
 ```
 
-First request will attempt to retrieve from GeoFabrik with fallback to Overpass
-This may take significant time as it involves downloading full `.pbf` for a given country http://download.geofabrik.de/, which could be > 100MB in size
+First request will download the Geofabrik PBF extract for the country
+This may take significant time as it involves downloading the full `.pbf` from http://download.geofabrik.de/, which could be > 100MB
 
 Subsequent requests will be served from local cache [./api/.cache](./api/.cache)
 
@@ -40,27 +40,27 @@ Subsequent requests will be served from local cache [./api/.cache](./api/.cache)
 
 ## Environment Variables
 
-| Variable                | Description                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------ |
-| `PORT`                  | The port the API server listens on (default: `8080`)                                 |
-| `OVERPASS_CACHE_BUCKET` | GCS bucket name for caching raw Overpass responses. If not set, caching is disabled. |
-| `VITE_API_URL`          | (Frontend build-time) The production API URL. Defaults to `/api` for local dev.      |
+| Variable       | Description                                                                                     |
+| -------------- | ----------------------------------------------------------------------------------------------- |
+| `PORT`         | The port the API server listens on (default: `8080`)                                            |
+| `CACHE_BUCKET` | GCS bucket name for caching PBF extracts and derived TopoJSON. If not set, caching is disabled. |
+| `VITE_API_URL` | (Frontend build-time) The production API URL. Defaults to `/api` for local dev.                 |
 
 ### Caching Configuration (GCS)
 
-To speed up requests and prevent rate-limiting against the Overpass API, raw OSM responses are cached in Google Cloud Storage before TopoJSON conversion.
+To speed up requests, raw Geofabrik PBF extracts and derived TopoJSON are cached in Google Cloud Storage.
 
 **Setup Requirements:**
 
 1. A GCS bucket.
-2. Provide the bucket name via the `OVERPASS_CACHE_BUCKET` environment variable.
+2. Provide the bucket name via the `CACHE_BUCKET` environment variable.
 3. Configure **Object Lifecycle Management** on the bucket to automatically delete objects older than 90 days.
 4. The compute identity running this service (e.g., Cloud Run service account) needs `roles/storage.objectAdmin` on the target bucket.
 
 ## Features
 
-- Fetches OSM relation boundaries via Overpass API for `admin_level`s 2 through 8.
-- Converts fetched GeoJSON natively into TopoJSON.
+- Fetches OSM boundary data from Geofabrik PBF extracts for `admin_level`s 2 through 8.
+- Converts GeoJSON natively into TopoJSON.
 - Uses Mapshaper (`-clean`, `-simplify`, `-filter-islands`) to aggressively reduce file size and complexity.
 - Validates requests via Zod.
 - Interactive React frontend with Leaflet map visualization and TopoJSON download.
@@ -104,7 +104,7 @@ The easiest way to deploy is through the Google Cloud Run Console using **Develo
 2. Click **Create Service** → **Continuously deploy from a repository**.
 3. Select **Developer Connect** and link your repository.
 4. Cloud Run will automatically detect the `Dockerfile` at the repo root.
-5. Set environment variables (`OVERPASS_CACHE_BUCKET`, etc.) as needed.
+5. Set environment variables (`CACHE_BUCKET`, etc.) as needed.
 6. Cloud Run will automatically build and deploy on every push to your selected branch.
 
 The API is currently deployed at `https://geo-data-api.picsa.app`.
@@ -187,6 +187,7 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 ```json
 {
   "country_code": "MW",
+  "bbox": [32.668, -17.129, 35.92, -9.364],
   "minZoom": 0,
   "maxZoom": 8
 }
