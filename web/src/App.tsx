@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as topojsonClient from 'topojson-client';
 import { CountrySelect } from './components/CountrySelect';
@@ -15,7 +15,8 @@ interface BoundaryResponse {
   size_kb: number;
   feature_count: number;
   bbox: number[];
-  topojson: any;
+  /** topojson stringified already */
+  topojson: string;
 }
 
 function App() {
@@ -50,13 +51,11 @@ function App() {
       setData(payload);
 
       // Convert TopoJSON to GeoJSON for Leaflet
-      if (payload.topojson && payload.topojson.objects) {
-        const objectKey = Object.keys(payload.topojson.objects)[0];
+      const topojson = JSON.parse(payload.topojson);
+      if (topojson && topojson.objects) {
+        const objectKey = Object.keys(topojson.objects)[0];
         if (objectKey) {
-          const geojson = topojsonClient.feature(
-            payload.topojson,
-            payload.topojson.objects[objectKey],
-          );
+          const geojson = topojsonClient.feature(topojson, topojson.objects[objectKey]);
           setGeoJsonData(geojson);
         }
       }
@@ -73,7 +72,7 @@ function App() {
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
-    const blob = new Blob([JSON.stringify(data.topojson)], { type: 'application/json' });
+    const blob = new Blob([data.topojson], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

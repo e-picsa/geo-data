@@ -77,7 +77,13 @@ export class PbfBoundaryExtractor {
       relation.members = relation.members.filter((member) => {
         const { type, role = '' } = member;
         if (type === 'way' && VALID_BOUNDARY_ROLES.has(role)) return true;
-        if (type === 'node' && role === 'admin_centre') return true;
+
+        // NOTE - admin_centre nodes can be included by uncommenting below
+        // However they also bloat the topojson slightly (can have properties trimmed)
+        // and so only useful if planning to actively use. Centroid for polygon can always
+        // be calculated on the fly
+
+        // if (type === 'node' && role === 'admin_centre') return true;
         return false;
       });
       return relation;

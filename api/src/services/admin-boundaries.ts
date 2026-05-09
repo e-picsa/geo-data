@@ -6,6 +6,7 @@ import { getCache, type CacheProvider } from '../utils/cache/index.ts';
 import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
 import { fetchGeofabrikBoundaries } from './geofabrik';
+import { stringifyTopojsonReadable, summarizeTopojson } from '../utils/topojson.utils.ts';
 
 /**
  * Bust cache if conversion or processing methods change.
@@ -24,12 +25,6 @@ type CachePaths = {
   topojson: string;
 };
 
-type TopojsonSummary = {
-  size_kb: number;
-  feature_count: number;
-  bbox: unknown[];
-};
-
 export const adminBoundaries = async (req: Request) => {
   try {
     const params = await validateBody(req, BOUNDARY_REQUEST_SCHEMA);
@@ -41,7 +36,8 @@ export const adminBoundaries = async (req: Request) => {
     const cachedTopojson = await readCache<any>(cache, paths.topojson);
     if (cachedTopojson) {
       console.log(`TopoJSON cache hit for ${country_code} admin level ${admin_level}.`);
-      return buildSuccessResponse(params, 'cache', cachedTopojson);
+      const serializedTopojson = stringifyTopojsonReadable(cachedTopojson);
+      return buildSuccessResponse(params, 'cache', serializedTopojson);
     }
 
     const dataSource = 'geofabrik';
@@ -54,11 +50,15 @@ export const adminBoundaries = async (req: Request) => {
     });
     console.log(`Successfully fetched boundaries from Geofabrik for ${country_code}`);
 
-    const topojson = await convertGeoJsonToTopojson(osmData, paths);
+    const topojsonString = await convertGeoJsonToTopojson(osmData, paths);
 
-    writeTopojsonCache(cache, paths.topojson, topojson);
+    const serializedTopojson = stringifyTopojsonReadable(JSON.parse(topojsonString));
+    const key = paths.topojson;
+    cache.set(key, serializedTopojson).catch((err) => {
+      console.error(`Non-fatal error saving cache key "${key}":`, err);
+    });
 
-    return buildSuccessResponse(params, 'generated', topojson, dataSource);
+    return buildSuccessResponse(params, 'generated', serializedTopojson, dataSource);
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -106,32 +106,6 @@ function writeCache(cache: CacheProvider, key: string, value: unknown): void {
  * `cache.set(key, topojson)` and move the formatting to a separate
  * disk-write path.
  */
-function writeTopojsonCache(cache: CacheProvider, key: string, topojson: any): void {
-  const serialized = stringifyTopojsonReadable(topojson);
-  cache.set(key, serialized as any).catch((err) => {
-    console.error(`Non-fatal error saving cache key "${key}":`, err);
-  });
-}
-
-/**
- * Pretty-prints a TopoJSON object with `arcs` placed at the end,
- * one arc per line. Produces valid JSON.
- */
-function stringifyTopojsonReadable(topo: any): string {
-  const { arcs, ...rest } = topo ?? {};
-  const prettyRest = JSON.stringify(rest, null, 2);
-
-  const arcsBlock =
-    Array.isArray(arcs) && arcs.length > 0
-      ? '[\n' + arcs.map((a: any) => '    ' + JSON.stringify(a)).join(',\n') + '\n  ]'
-      : '[]';
-
-  // Inject "arcs" as the last key inside the top-level object.
-  const trimmed = prettyRest.replace(/\}\s*$/, '').trimEnd();
-  const sep = trimmed.endsWith('{') ? '' : ',';
-
-  return `${trimmed}${sep}\n  "arcs": ${arcsBlock}\n}\n`;
-}
 
 function buildMapshaperInputsAndCommands(geojson: any): {
   input: Record<string, unknown>;
@@ -154,7 +128,7 @@ function buildMapshaperInputsAndCommands(geojson: any): {
   return { input, commands };
 }
 
-async function convertGeoJsonToTopojson(geojson: unknown, paths: CachePaths): Promise<any> {
+async function convertGeoJsonToTopojson(geojson: unknown, paths: CachePaths): Promise<string> {
   console.log('Converting to GeoJSON...');
   const cache = getCache();
 
@@ -183,37 +157,13 @@ async function convertGeoJsonToTopojson(geojson: unknown, paths: CachePaths): Pr
   });
 
   console.log('Mapshaper processing complete.');
-  return JSON.parse(topojsonString);
-}
-
-function summarizeTopojson(topojson: any): TopojsonSummary {
-  const topojsonString = JSON.stringify(topojson);
-  const bytes = new TextEncoder().encode(topojsonString).length;
-  const size_kb = Math.round(bytes / 1024);
-
-  const feature_count = Object.values(topojson.objects || {}).reduce((sum: number, obj: any) => {
-    if (Array.isArray(obj?.geometries)) {
-      return sum + obj.geometries.length;
-    }
-    if (obj?.type) {
-      return sum + 1;
-    }
-    return sum;
-  }, 0);
-
-  const bbox = Array.isArray(topojson.bbox) ? topojson.bbox : [];
-
-  return {
-    size_kb,
-    feature_count,
-    bbox,
-  };
+  return topojsonString;
 }
 
 function buildSuccessResponse(
   params: BoundaryRequestParams,
   source: Source,
-  topojson: any,
+  topojson: string,
   dataSource: 'geofabrik' | 'overpass' = 'overpass',
 ): Response {
   const { size_kb, feature_count, bbox } = summarizeTopojson(topojson);
