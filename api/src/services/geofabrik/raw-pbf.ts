@@ -9,7 +9,7 @@ const MIN_VALID_PBF_BYTES = 50_000;
 // by default. On Cloud Run, PBF cache is written to /tmp/.cache. On local dev,
 // falls back to LOCAL_CACHE_DIR env var or ./cache relative to cwd.
 // This is separate from getCache() — which caches TopoJSON results in GCS.
-const isCloudRun = !!process.env.CLOUD_RUN_EXECUTION;
+const isCloudRun = !!(process.env.K_SERVICE || process.env.CLOUD_RUN_JOB);
 const cacheDir = isCloudRun ? '/tmp/.cache' : (process.env.LOCAL_CACHE_DIR ?? './.cache');
 
 export function rawPbfPath(countryCode: string, cacheVersion: number): string {
