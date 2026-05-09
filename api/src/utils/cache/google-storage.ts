@@ -1,5 +1,5 @@
-import { getAuthHeaders } from './google-auth.ts';
-import type { CacheProvider } from './cache.ts';
+import { getAuthHeaders } from '../google-auth.ts';
+import type { CacheProvider } from './cache.types.ts';
 
 export class GCSCacheProvider implements CacheProvider {
   private bucketName: string;

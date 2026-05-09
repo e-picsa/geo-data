@@ -1,21 +1,7 @@
+import type { CacheProvider } from './cache.types.ts';
 import { GCSCacheProvider } from './google-storage.ts';
 import { LocalCacheProvider } from './local-storage.ts';
-
-export interface CacheProvider {
-  get<T>(key: string): Promise<T | null>;
-  set(key: string, data: any): Promise<void>;
-  clear(): Promise<void>;
-  clearPrefix?(prefix: string): Promise<void>;
-}
-
-export class NoOpCacheProvider implements CacheProvider {
-  async get<T>(_key: string): Promise<T | null> {
-    return null;
-  }
-  async set(_key: string, _data: any): Promise<void> {}
-  async clear(): Promise<void> {}
-  async clearPrefix(_prefix: string): Promise<void> {}
-}
+import { NoOpCacheProvider } from './noop.provider.ts';
 
 let cacheInstance: CacheProvider;
 

@@ -4,7 +4,7 @@ import * as tar from 'tar';
 import sharp from 'sharp';
 import { getTilesForBbox } from '../utils/tiles.ts';
 import { fetchWithRetry } from '../utils/fetch.ts';
-import { getBboxForCountry } from './overpass.ts';
+import { getBboxForCountry } from './overpass/overpass.ts';
 
 const TILES_DIR = path.join(process.cwd(), '.cache', 'tiles');
 
