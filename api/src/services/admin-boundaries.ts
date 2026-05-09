@@ -119,25 +119,26 @@ function buildMapshaperInputsAndCommands(
     `-each 'this.properties = { id: this.properties["@id"] || this.id, name: this.properties.name || "" }'`,
   ];
 
-  if (adminLevel === 5) {
-    const countryFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 2));
-    const targetFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 5));
+  // TODO - revisit to see if admin 5 clip actually necessary still
+  // if (adminLevel === 5) {
+  //   const countryFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 2));
+  //   const targetFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 5));
 
-    input['input.geojson'] = {
-      type: 'FeatureCollection',
-      features: targetFeatures,
-    };
+  //   input['input.geojson'] = {
+  //     type: 'FeatureCollection',
+  //     features: targetFeatures,
+  //   };
 
-    input['mask.geojson'] = {
-      type: 'FeatureCollection',
-      features: countryFeatures,
-    };
+  //   input['mask.geojson'] = {
+  //     type: 'FeatureCollection',
+  //     features: countryFeatures,
+  //   };
 
-    commands.push(`-clip mask.geojson`);
-    // Filter out slivers along the border.
-    // 5km2 is arbitrary but should drop the border overlaps while keeping real districts.
-    commands.push(`-filter-islands min-area=5km2`);
-  }
+  //   commands.push(`-clip mask.geojson`);
+  //   // Filter out slivers along the border.
+  //   // 5km2 is arbitrary but should drop the border overlaps while keeping real districts.
+  //   commands.push(`-filter-islands min-area=5km2`);
+  // }
 
   commands.push(`-o output.topojson format=topojson quantization=1e3 bbox`);
 
