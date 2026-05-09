@@ -79,8 +79,6 @@ export function convertToGeoJSON(data: ExtractedOsmData, adminLevel: number): Fe
     }
   }
 
-  // TODO - handle admin_centre node as feature(?)
-
   console.log(`Conversion complete. Generated ${features.length} features.`);
 
   return {
