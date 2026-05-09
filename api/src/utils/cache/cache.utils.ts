@@ -8,15 +8,14 @@ let cacheInstance: CacheProvider;
 export function getCache(): CacheProvider {
   if (cacheInstance) return cacheInstance;
 
-  const provider =
-    process.env.CACHE_PROVIDER || (process.env.OVERPASS_CACHE_BUCKET ? 'gcs' : 'local');
+  const provider = process.env.CACHE_PROVIDER || (process.env.CACHE_BUCKET ? 'gcs' : 'local');
 
   if (provider === 'local') {
     const dir = process.env.LOCAL_CACHE_DIR || './.cache';
     cacheInstance = new LocalCacheProvider(dir);
     console.log(`Initialized local cache provider at ${dir}`);
   } else if (provider === 'gcs') {
-    const bucket = process.env.OVERPASS_CACHE_BUCKET;
+    const bucket = process.env.CACHE_BUCKET;
     if (bucket && bucket.trim().length > 0) {
       cacheInstance = new GCSCacheProvider(bucket);
       console.log(`Initialized GCS cache provider for bucket ${bucket}`);
