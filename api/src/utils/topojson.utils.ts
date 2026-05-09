@@ -6,7 +6,7 @@
  *
  * Produces valid JSON.
  */
-export function stringifyTopojsonReadable(topo: any): string {
+export function stringifyTopojsonReadable(topo: Record<string, unknown>): string {
   if (!topo || typeof topo !== 'object') {
     return JSON.stringify(topo, null, 2);
   }
@@ -60,20 +60,23 @@ type TopojsonSummary = {
   bbox: unknown[];
 };
 
-export function summarizeTopojson(topojson: any): TopojsonSummary {
+export function summarizeTopojson(topojson: Record<string, unknown>): TopojsonSummary {
   const topojsonString = JSON.stringify(topojson);
   const bytes = new TextEncoder().encode(topojsonString).length;
   const size_kb = Math.round(bytes / 1024);
 
-  const feature_count = Object.values(topojson.objects || {}).reduce((sum: number, obj: any) => {
-    if (Array.isArray(obj?.geometries)) {
-      return sum + obj.geometries.length;
-    }
-    if (obj?.type) {
-      return sum + 1;
-    }
-    return sum;
-  }, 0);
+  const feature_count = Object.values(topojson.objects || {}).reduce(
+    (sum: number, obj: Record<string, unknown>) => {
+      if (Array.isArray(obj?.geometries)) {
+        return sum + obj.geometries.length;
+      }
+      if (obj?.type) {
+        return sum + 1;
+      }
+      return sum;
+    },
+    0,
+  );
 
   const bbox = Array.isArray(topojson.bbox) ? topojson.bbox : [];
 

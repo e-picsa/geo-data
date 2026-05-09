@@ -53,10 +53,7 @@ export const adminBoundaries = async (req: Request) => {
     const topojsonString = await convertGeoJsonToTopojson(osmData, paths);
 
     const serializedTopojson = stringifyTopojsonReadable(JSON.parse(topojsonString));
-    const key = paths.topojson;
-    cache.set(key, serializedTopojson).catch((err) => {
-      console.error(`Non-fatal error saving cache key "${key}":`, err);
-    });
+    await writeCache(cache, paths.topojson, serializedTopojson);
 
     return buildSuccessResponse(params, 'generated', serializedTopojson, dataSource);
   } catch (error) {
@@ -90,8 +87,8 @@ async function readCache<T>(cache: CacheProvider, key: string): Promise<T | null
   return await cache.get<T>(key);
 }
 
-function writeCache(cache: CacheProvider, key: string, value: unknown): void {
-  cache.set(key, value).catch((err) => {
+async function writeCache(cache: CacheProvider, key: string, value: unknown) {
+  return cache.set(key, value).catch((err) => {
     console.error(`Non-fatal error saving cache key "${key}":`, err);
   });
 }
@@ -133,7 +130,7 @@ async function convertGeoJsonToTopojson(geojson: unknown, paths: CachePaths): Pr
   const cache = getCache();
 
   // Optional/debug cache
-  writeCache(cache, paths.geojson, geojson);
+  await writeCache(cache, paths.geojson, geojson);
 
   console.log('Optimizing with Mapshaper...');
 
@@ -166,7 +163,7 @@ function buildSuccessResponse(
   topojson: string,
   dataSource: 'geofabrik' | 'overpass' = 'overpass',
 ): Response {
-  const { size_kb, feature_count, bbox } = summarizeTopojson(topojson);
+  const { size_kb, feature_count, bbox } = summarizeTopojson(JSON.parse(topojson));
 
   return JSONResponse(
     {
