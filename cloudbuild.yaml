@@ -1,0 +1,46 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: geo-boundaries-topojson-git
+  labels:
+    managed-by: gcp-cloud-build-deploy-cloud-run
+    cloud.googleapis.com/location: europe-west1
+spec:
+  template:
+    metadata:
+      annotations:
+        # REQUIRED: Without this, GCP assumes 100 instances for quota checks
+        autoscaling.knative.dev/maxScale: '1'
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/startup-cpu-boost: 'true'
+    spec:
+      containerConcurrency: 1
+      timeoutSeconds: 300
+      serviceAccountName: geo-boundaries-topojson-git@picsa-apps.iam.gserviceaccount.com
+      containers:
+        - name: placeholder-1
+          image: europe-west1-docker.pkg.dev/picsa-apps/cloud-run-source-deploy/geo-data/geo-boundaries-topojson-git:5b9ac3b93bd8042406df9c981ed545b470e11081
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: OVERPASS_CACHE_BUCKET
+              value: e-picsa-geo-cache
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          # Attach 10GB ephemeral /tmp to allow download and process of larger pbf files
+          volumeMounts:
+            - name: ephemeral-storage
+              mountPath: /tmp
+          startupProbe:
+            timeoutSeconds: 240
+            periodSeconds: 240
+            failureThreshold: 1
+            tcpSocket:
+              port: 8080
+      volumes:
+        - name: ephemeral-storage
+          emptyDir:
+            sizeLimit: 10Gi
