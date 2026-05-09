@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "bun --watch run src/main.ts",
+    "start": "bun --watch --no-clear-screen run src/main.ts",
     "test": "bun test"
   },
   "devDependencies": {

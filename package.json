@@ -1,12 +1,12 @@
 {
   "name": "geo-data",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Monorepo for managing Geo data within the E-PICSA App",
   "main": "index.js",
   "scripts": {
-    "start": "bun run --filter '*' start",
-    "start:api": "cd api && bun run start && cd ../.",
-    "start:web": "cd web && bun run start && cd ../",
+    "start": "concurrently --names \"API,WEB\" --prefix-colors \"cyan,magenta\" \"npm:start:api\" \"npm:start:web\"",
+    "start:api": "cd api && bun run start -- --no-clear && cd ../.",
+    "start:web": "cd web && bun run start -- --clearScreen false && cd ../",
     "test": "bun test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -41,6 +41,7 @@
   ],
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "concurrently": "^9.2.1",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.0.1",

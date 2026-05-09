@@ -1,5 +1,5 @@
 import type { OsmRelation } from 'osmix';
-import { getCache } from '../../utils/cache.ts';
+import { getCache } from '../../utils/cache';
 
 export interface ExtractedOsmData {
   relations: OsmRelation[];

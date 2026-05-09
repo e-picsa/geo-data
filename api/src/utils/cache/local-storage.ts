@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { CacheProvider } from './cache.ts';
+import type { CacheProvider } from './cache.types.ts';
 
 export class LocalCacheProvider implements CacheProvider {
   private baseDir: string;
@@ -35,7 +35,8 @@ export class LocalCacheProvider implements CacheProvider {
     try {
       const filePath = this.getFilePath(key);
       await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+      const stringData = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      await fs.writeFile(filePath, stringData, 'utf-8');
       console.log(`Successfully saved to local cache: ${key}`);
     } catch (err) {
       console.error(`Failed to save to local cache (${key}):`, err);
