@@ -90,7 +90,7 @@ function App() {
         <div>
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Geo Boundaries</h1>
-            <span className="text-xs text-slate-400 font-mono">
+            <span className="text-xs text-slate-500 font-mono">
               v{import.meta.env.VITE_APP_VERSION}
             </span>
           </div>
