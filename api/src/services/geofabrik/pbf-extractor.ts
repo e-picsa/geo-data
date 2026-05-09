@@ -1,35 +1,45 @@
 import { blocksToJsonEntities } from '@osmix/json';
 import { OsmPbfBytesToBlocksTransformStream, toAsyncGenerator } from '@osmix/pbf';
 import type { OsmEntity, OsmNode, OsmRelation, OsmWay } from 'osmix';
-import type { ExtractedOsmData } from './boundary-cache.ts';
 import { isOsmType, isPrimitiveBlock } from './pbf-entity-guards.ts';
+import type { ExtractedOsmData } from './boundary-cache.ts';
 
 export interface ExtractorOptions {
-  adminLevel: number;
-  countryCode?: string;
-  progressEveryNBlocks?: number;
+  countryCode: string;
 }
 
-const IGNORED_TAGS = new Set(['created_by']);
+// Strictly allow only tags necessary for admin identification and rendering.
+// This prevents wikidata/population/history bloat.
+const RELATION_TAG_ALLOWLIST = new Set([
+  'name',
+  'admin_level',
+  'boundary',
+  'type',
+  'ISO3166-1',
+  'ISO3166-2',
+]);
+
+const PROGRESS_EVERY_BLOCKS = 1000;
+
+const ADMIN_LEVELS = new Set([2, 3, 4, 5]);
+
+// Valid roles for boundary geometries. Explicitly excludes 'subarea' and 'label'.
+const VALID_BOUNDARY_ROLES = new Set(['outer', 'inner', '']);
 
 export class PbfBoundaryExtractor {
-  private readonly adminLevel: string;
-  private readonly countryCode: string;
-  private readonly progressEveryNBlocks: number;
-
   constructor(
     private readonly pbfPath: string,
     private readonly signal: AbortSignal,
-    options: ExtractorOptions,
-  ) {
-    this.adminLevel = `${options.adminLevel}`;
-    this.countryCode = options.countryCode ?? '';
-    this.progressEveryNBlocks = options.progressEveryNBlocks ?? 1000;
-  }
+    public options: ExtractorOptions,
+  ) {}
 
   async extract(): Promise<ExtractedOsmData> {
     const { nodes, ways, relations } = await this.extractData();
-    return { relations, ways, nodes };
+    return {
+      relations,
+      ways,
+      nodes,
+    };
   }
 
   private checkAborted(): void {
@@ -40,120 +50,165 @@ export class PbfBoundaryExtractor {
     return Bun.file(this.pbfPath).stream().pipeThrough(new OsmPbfBytesToBlocksTransformStream());
   }
 
-  /**
-   * OSM stores data bottom-up [...nodes, ...ways, ...relations], however
-   * filtering is typically top-down (relations specify ways which have nodes).
-   * We essentially need to process in reverse to build full dependency chains,
-   * however this is not possible with protobuf format, so instead need to make multiple passes
-   *
-   * TODO - performance could be drastically improved either using native osmium bindings
-   * to extract each data type, or smarter methods to identify where to start processing blocks from
-   * (e.g. relations usually near the end, nodes only at the start)
-   */
   private async extractData() {
-    console.log(`Multi-pass extraction: Scanning for admin_level=${this.adminLevel}...`);
+    console.log(`Scanning for admin_levels=[${Array.from(ADMIN_LEVELS).join(',')}]...`);
+    const { countryCode } = this.options;
 
-    // List of required ways and nodes will be updated during processing
     const requiredWays = new Set<number>();
     const requiredNodes = new Set<number>();
 
-    // Relations
-    const relations = await this.filterBlocks<OsmRelation>('relation', ({ tags }) => {
-      if (!tags) return false;
-      if (tags.boundary !== 'administrative') return false;
-      // If filtering level 2 ignore relations for countries that share border (if tagged)
-      if (this.adminLevel === '2' && this.countryCode) {
-        const isoCode = tags['ISO3166-1'];
-        if (isoCode && isoCode !== this.countryCode) {
-          return false;
-        }
-      }
-      if (tags.admin_level && `${tags.admin_level}` !== this.adminLevel) return false;
+    // PASS 1: Relations
+    const relationsRaw = await this.filterBlocks<OsmRelation>('relation', (entity) => {
+      const tags = entity.tags;
+      if (!tags || tags.boundary !== 'administrative' || !tags.admin_level) return false;
+      if (!ADMIN_LEVELS.has(Number(tags.admin_level))) return false;
+
+      // Filter to includ target country (where tagged)
+      const iso1Code = tags['ISO3166-1'];
+      if (iso1Code && iso1Code !== countryCode) return false;
+      const iso2Code = tags['ISO3166-2'];
+      if (iso2Code && !`${iso2Code}`.startsWith(`${countryCode}-`)) return false;
+
       return true;
     });
 
-    // Relation-specified ways and admin centre nodes
-    relations.forEach(({ members }) =>
-      members.forEach(({ type, ref, role }) => {
-        if (type === 'way') requiredWays.add(ref);
-        else if (type === 'node' && role === 'admin_centre') {
-          requiredNodes.add(ref);
+    // Filter relation members to only include valid ways and nodes (no subareas)
+    const relations = relationsRaw.map((relation) => {
+      relation.members = relation.members.filter((member) => {
+        const { type, role = '' } = member;
+        if (type === 'way' && VALID_BOUNDARY_ROLES.has(role)) return true;
+        if (type === 'node' && role === 'admin_centre') return true;
+        return false;
+      });
+      return relation;
+    });
+
+    // Mark required ways and nodes
+    for (const relation of relations) {
+      for (const member of relation.members) {
+        if (member.type === 'way') {
+          requiredWays.add(member.ref);
+        } else if (member.type === 'node') {
+          requiredNodes.add(member.ref);
         }
-      }),
-    );
+      }
+    }
 
-    // Ways
+    console.log(`Found ${relations.length} relations requiring ${requiredWays.size} ways.`);
+
+    // PASS 2: Ways
     const ways = await this.filterBlocks<OsmWay>('way', ({ id }) => requiredWays.has(id));
-    ways.forEach(({ refs }) => refs.forEach((ref) => requiredNodes.add(ref)));
+    const waysRecord: Record<number, number[]> = {};
+    for (const way of ways) {
+      if (!way.refs) continue;
+      waysRecord[way.id] = way.refs;
+      for (const ref of way.refs) {
+        requiredNodes.add(ref);
+      }
+    }
 
-    // Nodes
-    const nodes = await this.filterBlocks<OsmNode>('node', ({ id }) => requiredNodes.has(id));
-    return { nodes, ways, relations };
+    console.log(`Found ${ways.length} ways requiring ${requiredNodes.size} nodes.`);
+
+    // PASS 3: Nodes (Convert to flat coordinate map to save memory/JSON space)
+    const rawNodes = await this.filterBlocks<OsmNode>('node', ({ id }) => requiredNodes.has(id));
+    const nodesRecord: Record<number, [number, number]> = {};
+    rawNodes.forEach(({ id, lat, lon }) => (nodesRecord[id] = [lon, lat]));
+
+    return {
+      relations,
+      ways: waysRecord,
+      nodes: nodesRecord,
+    } satisfies ExtractedOsmData;
   }
 
   private async filterBlocks<T extends OsmEntity>(
-    type: 'relation' | 'way' | 'node',
-    filterFn = (entity: T) => true,
+    targetType: 'relation' | 'way' | 'node',
+    filterFn: (entity: T) => boolean,
   ): Promise<T[]> {
     const start = performance.now();
     let blockCount = 0;
     const entities: T[] = [];
 
-    // Label the outer loop so we can kill the stream from inside the entity loop
     streamLoop: for await (const block of toAsyncGenerator(this.openBlockStream())) {
       this.checkAborted();
       blockCount++;
-      if (isPrimitiveBlock(block)) {
-        for (const entity of blocksToJsonEntities(block)) {
-          // 1. OVER-SHOOT CHECK:
-          // If we see an entity type that comes AFTER our target, kill the entire stream.
-          if (type === 'node' && isOsmType('way', entity)) {
-            console.log(`Way detected, stop processing nodes`);
-            break streamLoop;
-          }
-          if (type === 'way' && isOsmType('relation', entity)) {
-            console.log(`Relation detected, stop processing ways`);
-            break streamLoop;
-          }
-          // 2. Under shoot check
-          if (!isOsmType(type, entity)) {
-            continue;
-          }
 
-          // 3. TARGET ZONE:
-          // We are in the correct topological zone. Apply any other filter functions.
+      if (isPrimitiveBlock(block)) {
+        const entityIterator = blocksToJsonEntities(block);
+
+        // Peek at the first entity to determine block type (Fast-Forward logic)
+        const firstIteration = entityIterator.next();
+        if (firstIteration.done) continue;
+
+        const firstEntity = firstIteration.value;
+
+        // 1. OVER-SHOOT CHECK (Stream Termination)
+        if (
+          (targetType === 'node' && isOsmType('way', firstEntity)) ||
+          (targetType === 'way' && isOsmType('relation', firstEntity))
+        ) {
+          break streamLoop;
+        }
+
+        // 2. UNDER-SHOOT CHECK (Block Skipping)
+        // If the block is not our target type, skip the rest of the iterator instantly.
+        if (!isOsmType(targetType, firstEntity)) {
+          continue streamLoop;
+        }
+
+        // 3. TARGET ZONE (Process the block)
+        // Process the first entity we already peeked at
+        if (filterFn(firstEntity as T)) {
+          const cleaned = this.cleanEntity(targetType, firstEntity) as T;
+          entities.push(cleaned);
+        }
+
+        // Process the rest of the block
+        for (const entity of entityIterator) {
           if (filterFn(entity as T)) {
-            entities.push(this.cleanEntityData(entity as T));
+            const cleaned = this.cleanEntity(targetType, entity) as T;
+            entities.push(cleaned);
           }
         }
       }
-      if (blockCount % this.progressEveryNBlocks === 0) {
-        console.log(`  Scanned ${blockCount} blocks`);
+
+      if (blockCount % PROGRESS_EVERY_BLOCKS === 0) {
+        process.stdout.write(`\rScanned ${blockCount} blocks for ${targetType}s...`);
       }
     }
+
+    process.stdout.write('\n');
     const end = performance.now();
-    const duration = ((end - start) / 1000).toFixed(1);
-    console.log(`${type} extracted in (${duration})s`);
+    console.log(`${targetType} extracted in (${((end - start) / 1000).toFixed(1)}s)`);
     return entities;
   }
 
-  /** Strip localised metadata from relations (e.g. ISO3166-1:alpha3 or name:ar) */
-  private cleanEntityData<T extends OsmEntity>(entity: T) {
-    const { id, tags, ...rest } = entity;
-    // clean and remove empty tags
-    if (tags) {
-      // TODO - eventually define list of tags to include
-
-      const cleanedTags = Object.fromEntries(
-        Object.entries(tags).filter(([key]) => !key.includes(':') && !IGNORED_TAGS.has(key)),
-      );
-      if (Object.keys(cleanedTags).length > 0) {
-        return { id, tags: cleanedTags, ...rest } as T;
-      } else {
-        return { id, ...rest } as T;
+  // Strictly enforces the allowlist for Relation tags
+  private cleanEntity<T extends OsmEntity>(type: 'relation' | 'way' | 'node', entity: T) {
+    // Clean tags, and omit empty
+    if (type === 'relation') {
+      const relation = entity as OsmRelation;
+      const { id, members, tags } = relation;
+      if (tags) {
+        const cleaned = Object.entries(tags).filter(([key]) => RELATION_TAG_ALLOWLIST.has(key));
+        if (cleaned.length > 0) {
+          return { id, tags: Object.fromEntries(cleaned), members };
+        }
       }
+      return { id, members };
     }
-    // order so tags appear after id (easier debugging)
-    return { id, tags, ...rest } as T;
+    // Keep minimal id and refs for ways
+    if (type === 'way') {
+      const way = entity as OsmWay;
+      const { id, refs } = way;
+      return { id, refs };
+    }
+    // Keep minimal id, lat and lon for nodes
+    // (tags like admin_centre also defined in relation members data)
+    if (type === 'node') {
+      const node = entity as OsmNode;
+      const { id, lat, lon } = node;
+      return { id, lat, lon };
+    }
   }
 }

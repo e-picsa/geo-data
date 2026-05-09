@@ -6,6 +6,7 @@
 - [ ] Update readme
 - [ ] Fix tests
 - [ ] Move pbf file to global cache level, not processor cache level
+- [ ] Forward errors from parser
 
 - [ ] Check whether mapshaper still required now using geofabrik
 - [ ] Consider 1-pass to extract all admin levels (?)
