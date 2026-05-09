@@ -22,7 +22,10 @@ COPY api/package.json ./api/
 COPY api/src ./api/src
 
 EXPOSE 8080
-USER bun
 
 WORKDIR /app/api
+RUN mkdir -p .cache && chown -R bun:bun .cache
+
+USER bun
+
 CMD ["bun", "run", "src/main.ts"]
