@@ -77,7 +77,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${data.country_code}_admin_${data.admin_level}.topojson`;
+    a.download = `${data.country_code}_admin_${data.admin_level}.topo.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

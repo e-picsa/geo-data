@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fetchWithRetry } from '../../utils/fetch.ts';
-import { getGeofabrikUrl } from '../geofabrik-mapping.ts';
+import { getGeofabrikUrl } from './url-mapping.ts';
 
 const MIN_VALID_PBF_BYTES = 50_000;
 

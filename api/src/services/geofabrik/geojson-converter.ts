@@ -2,7 +2,7 @@ import { nodeToFeature, relationToFeature } from '@osmix/geojson';
 import type { ExtractedOsmData } from './boundary-cache.ts';
 // Note: You may need to install @types/geojson for the FeatureCollection types
 import type { FeatureCollection, Feature } from 'geojson';
-import type { OsmWay } from 'osmix';
+import type { OsmNode, OsmWay } from 'osmix';
 
 /**
  * Converts extracted OSM entities into a valid GeoJSON FeatureCollection.
@@ -10,6 +10,7 @@ import type { OsmWay } from 'osmix';
 export function convertToGeoJSON(data: ExtractedOsmData, adminLevel: number): FeatureCollection {
   const { nodes, ways, relations } = data;
 
+  // 1. Filter out relations that are part of external data sets (e.g. partial border relation)
   const filteredRelations = relations.filter((relation) => {
     const { tags = {}, members } = relation;
     // Ensure admin level matches and all ways and nodes exist
@@ -62,6 +63,19 @@ export function convertToGeoJSON(data: ExtractedOsmData, adminLevel: number): Fe
     } catch (error) {
       console.error(`Failed to generate feature for relation ${relation.id}:`, error);
       throw error;
+    }
+  }
+
+  // Add admin centre nodes as features
+  for (const { members } of filteredRelations) {
+    for (const { ref, type, role } of members) {
+      if (type === 'node' && role === 'admin_centre') {
+        const node = nodes[ref];
+        if (node) {
+          const [lon, lat] = node;
+          features.push(nodeToFeature({ id: ref, lat, lon }));
+        }
+      }
     }
   }
 
