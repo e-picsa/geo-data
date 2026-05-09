@@ -88,7 +88,12 @@ function App() {
       {/* Sidebar Controls */}
       <div className="w-full md:w-80 bg-white border-r border-slate-200 p-6 flex flex-col gap-6 shadow-sm z-10 overflow-y-auto">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Geo Boundaries</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Geo Boundaries</h1>
+            <span className="text-xs text-slate-500 font-mono">
+              v{import.meta.env.VITE_APP_VERSION}
+            </span>
+          </div>
           <p className="text-sm text-slate-500 mt-1">API Testing Interface</p>
         </div>
 
