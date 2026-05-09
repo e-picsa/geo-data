@@ -4,7 +4,6 @@ import * as tar from 'tar';
 import sharp from 'sharp';
 import { getTilesForBbox } from '../utils/tiles.ts';
 import { fetchWithRetry } from '../utils/fetch.ts';
-import { getBboxForCountry } from './overpass/overpass.ts';
 
 const TILES_DIR = path.join(process.cwd(), '.cache', 'tiles');
 
@@ -13,6 +12,7 @@ const MAX_ZOOM = 8;
 
 interface ExportTilesParams {
   country_code: string;
+  bbox: [number, number, number, number];
   minZoom: number;
   maxZoom: number;
 }
@@ -21,13 +21,11 @@ export async function exportTiles(
   params: ExportTilesParams,
   signal?: AbortSignal,
 ): Promise<ReadableStream> {
-  const { country_code, minZoom } = params;
+  const { country_code, bbox, minZoom } = params;
 
   const maxZoom = Math.min(params.maxZoom, MAX_ZOOM);
 
-  // Derive bbox from country boundary (admin_level 2)
-  console.log(`Looking up bounding box for ${country_code}...`);
-  const [minLon, minLat, maxLon, maxLat] = await getBboxForCountry(country_code, signal);
+  const [minLon, minLat, maxLon, maxLat] = bbox;
   console.log(`Bounding box for ${country_code}: [${minLon}, ${minLat}, ${maxLon}, ${maxLat}]`);
 
   // Generate all required tiles

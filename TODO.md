@@ -7,7 +7,6 @@
 - [ ] Consider dropping osmix in favour of native osmium (run via docker container)
       Placeholder methods created
 
-- [ ] Consider dropping Overpass integration entirely
 - [ ] Provide link from frontend to https://wiki.openstreetmap.org/wiki/Tag:boundary%3Dadministrative
 
 TODO - revisit to see if admin 5 useful at all (some lone features persist, but think mostly shared borders)

@@ -11,9 +11,6 @@ import { stringifyTopojsonReadable, summarizeTopojson } from '../utils/topojson.
 /**
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
- *
- * NOTE: The raw Overpass response cache version lives in overpass.ts.
- * This version only covers the derived geojson/topojson artefacts.
  */
 const CACHE_VERSION = 1;
 
@@ -40,8 +37,6 @@ export const adminBoundaries = async (req: Request) => {
       return buildSuccessResponse(params, 'cache', serializedTopojson);
     }
 
-    const dataSource = 'geofabrik';
-
     console.log(`Attempting to fetch boundaries from Geofabrik for ${country_code}...`);
     const osmData = await fetchGeofabrikBoundaries({
       countryCode: country_code,
@@ -55,7 +50,7 @@ export const adminBoundaries = async (req: Request) => {
     const serializedTopojson = stringifyTopojsonReadable(JSON.parse(topojsonString));
     await writeCache(cache, paths.topojson, serializedTopojson);
 
-    return buildSuccessResponse(params, 'generated', serializedTopojson, dataSource);
+    return buildSuccessResponse(params, 'generated', serializedTopojson);
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -161,7 +156,6 @@ function buildSuccessResponse(
   params: BoundaryRequestParams,
   source: Source,
   topojson: string,
-  dataSource: 'geofabrik' | 'overpass' = 'overpass',
 ): Response {
   const { size_kb, feature_count, bbox } = summarizeTopojson(JSON.parse(topojson));
 
@@ -170,7 +164,6 @@ function buildSuccessResponse(
       country_code: params.country_code,
       admin_level: params.admin_level,
       source,
-      data_source: dataSource,
       size_kb,
       feature_count,
       bbox,
