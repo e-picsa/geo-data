@@ -1,4 +1,4 @@
-- [ ] Add support for tracking admin centre points
+- [ ] Add support for tracking admin centre points (use nodeToFeature to extract from relation member)
       Note - not all admin levels include (e.g. mw mangochi no level)
 - [ ] Wipe server cache
 - [ ] Consider dropping osmix in favour of native osmium (run via docker container)

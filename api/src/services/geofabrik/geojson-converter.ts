@@ -10,7 +10,25 @@ import type { OsmWay } from 'osmix';
 export function convertToGeoJSON(data: ExtractedOsmData, adminLevel: number): FeatureCollection {
   const { nodes, ways, relations } = data;
 
-  const adminRelations = relations.filter(({ tags = {} }) => tags.admin_level === `${adminLevel}`);
+  const filteredRelations = relations.filter((relation) => {
+    const { tags = {}, members } = relation;
+    // Ensure admin level matches and all ways and nodes exist
+    if (tags.admin_level === `${adminLevel}`) {
+      const missingEntry = members.find(
+        ({ type, ref }) =>
+          (type === 'way' && !(ref in ways)) || (type === 'node' && !(ref in nodes)),
+      );
+      if (missingEntry) {
+        const { type, ref } = missingEntry;
+        const { id, tags } = relation;
+        const url1 = `https://www.openstreetmap.org/relation/${id}`;
+        const url2 = `https://www.openstreetmap.org/${type}/${ref}`;
+        console.warn('Skip missing entry (likely different country)', url1, url2, { id, tags });
+        return false;
+      }
+      return true;
+    }
+  });
 
   // 2. Define resolution callbacks
   const refToPosition = (ref: number): [number, number] => {
@@ -38,7 +56,7 @@ export function convertToGeoJSON(data: ExtractedOsmData, adminLevel: number): Fe
 
   // Convert Relations
   // Administrative boundaries are primarily built from multipolygon relations.
-  for (const relation of adminRelations) {
+  for (const relation of filteredRelations) {
     try {
       features.push(relationToFeature(relation, refToPosition, getWay));
     } catch (error) {
