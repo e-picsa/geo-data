@@ -21,6 +21,8 @@
       "name": "api",
       "dependencies": {
         "@osmix/geojson": "^0.0.13",
+        "@osmix/json": "^0.0.14",
+        "@osmix/pbf": "^0.0.9",
         "mapshaper": "^0.6.113",
         "osmix": "^0.2.0",
         "sharp": "^0.34.5",
