@@ -1,6 +1,3 @@
-- [ ] Fix map tile download
-
-- [ ] Update readme
 - [ ] Fix tests
 - [ ] Move pbf file to global cache level, not processor cache level
 
