@@ -1,6 +1,6 @@
+import { getCache } from '../../utils/cache/cache.utils.ts';
 import { corsHeaders } from '../../utils/cors.ts';
 import { fetchWithRetry } from '../../utils/fetch.ts';
-import { getCache } from '../utils/cache.ts';
 import { OVERPASS_QUERY_MAPPING } from './overpass-mapping.ts';
 
 export { OVERPASS_QUERY_MAPPING };

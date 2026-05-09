@@ -31,6 +31,7 @@ export class GCSCacheProvider implements CacheProvider {
     try {
       const headers = await getAuthHeaders();
       const url = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(this.bucketName)}/o?uploadType=media&name=${encodeURIComponent(key)}`;
+      const stringData = typeof data === 'string' ? data : JSON.stringify(data);
 
       const res = await fetch(url, {
         method: 'POST',
@@ -38,7 +39,7 @@ export class GCSCacheProvider implements CacheProvider {
           ...headers,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: stringData,
       });
 
       if (!res.ok) {

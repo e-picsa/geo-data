@@ -1,5 +1,5 @@
+import { getCache } from '../utils/cache/cache.utils.ts';
 import { corsHeaders } from '../utils/cors.ts';
-import { getCache } from '../utils/cache.ts';
 
 export const handleAdminRoutes = async (req: Request, pathname: string): Promise<Response> => {
   // Only enable these routes if we are running in a development environment

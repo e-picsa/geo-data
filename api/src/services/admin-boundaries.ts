@@ -2,7 +2,7 @@ import mapshaper from 'mapshaper';
 
 import { ErrorResponse, JSONResponse } from '../utils/response.ts';
 import { validateBody } from '../utils/validation.ts';
-import { getCache, type CacheProvider } from '../utils/cache.ts';
+import { getCache, type CacheProvider } from '../utils/cache/index.ts';
 import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
 import { fetchGeofabrikBoundaries } from './geofabrik';
@@ -54,9 +54,9 @@ export const adminBoundaries = async (req: Request) => {
     });
     console.log(`Successfully fetched boundaries from Geofabrik for ${country_code}`);
 
-    const topojson = await convertGeoJsonToTopojson(osmData, admin_level, cache, paths);
+    const topojson = await convertGeoJsonToTopojson(osmData, paths);
 
-    writeCache(cache, paths.topojson, topojson);
+    writeTopojsonCache(cache, paths.topojson, topojson);
 
     return buildSuccessResponse(params, 'generated', topojson, dataSource);
   } catch (error) {
@@ -96,14 +96,44 @@ function writeCache(cache: CacheProvider, key: string, value: unknown): void {
   });
 }
 
-function hasAdminLevel(feature: any, level: number): boolean {
-  return Number(feature?.properties?.admin_level) === level;
+/**
+ * Writes the topojson to cache using a human-readable serialization:
+ * - Top-level metadata (type, bbox, transform, objects) is pretty-printed.
+ * - The `arcs` array is placed at the end with one arc per line, so the
+ *   file remains greppable/diffable without exploding in size.
+ *
+ * If your CacheProvider only accepts objects, swap this to call
+ * `cache.set(key, topojson)` and move the formatting to a separate
+ * disk-write path.
+ */
+function writeTopojsonCache(cache: CacheProvider, key: string, topojson: any): void {
+  const serialized = stringifyTopojsonReadable(topojson);
+  cache.set(key, serialized as any).catch((err) => {
+    console.error(`Non-fatal error saving cache key "${key}":`, err);
+  });
 }
 
-function buildMapshaperInputsAndCommands(
-  geojson: any,
-  adminLevel: number,
-): {
+/**
+ * Pretty-prints a TopoJSON object with `arcs` placed at the end,
+ * one arc per line. Produces valid JSON.
+ */
+function stringifyTopojsonReadable(topo: any): string {
+  const { arcs, ...rest } = topo ?? {};
+  const prettyRest = JSON.stringify(rest, null, 2);
+
+  const arcsBlock =
+    Array.isArray(arcs) && arcs.length > 0
+      ? '[\n' + arcs.map((a: any) => '    ' + JSON.stringify(a)).join(',\n') + '\n  ]'
+      : '[]';
+
+  // Inject "arcs" as the last key inside the top-level object.
+  const trimmed = prettyRest.replace(/\}\s*$/, '').trimEnd();
+  const sep = trimmed.endsWith('{') ? '' : ',';
+
+  return `${trimmed}${sep}\n  "arcs": ${arcsBlock}\n}\n`;
+}
+
+function buildMapshaperInputsAndCommands(geojson: any): {
   input: Record<string, unknown>;
   commands: string[];
 } {
@@ -119,46 +149,21 @@ function buildMapshaperInputsAndCommands(
     `-each 'this.properties = { id: this.properties["@id"] || this.id, name: this.properties.name || "" }'`,
   ];
 
-  // TODO - revisit to see if admin 5 clip actually necessary still
-  // if (adminLevel === 5) {
-  //   const countryFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 2));
-  //   const targetFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 5));
-
-  //   input['input.geojson'] = {
-  //     type: 'FeatureCollection',
-  //     features: targetFeatures,
-  //   };
-
-  //   input['mask.geojson'] = {
-  //     type: 'FeatureCollection',
-  //     features: countryFeatures,
-  //   };
-
-  //   commands.push(`-clip mask.geojson`);
-  //   // Filter out slivers along the border.
-  //   // 5km2 is arbitrary but should drop the border overlaps while keeping real districts.
-  //   commands.push(`-filter-islands min-area=5km2`);
-  // }
-
   commands.push(`-o output.topojson format=topojson quantization=1e3 bbox`);
 
   return { input, commands };
 }
 
-async function convertGeoJsonToTopojson(
-  geojson: unknown,
-  adminLevel: number,
-  cache: import('../utils/cache.ts').CacheProvider,
-  paths: CachePaths,
-): Promise<any> {
+async function convertGeoJsonToTopojson(geojson: unknown, paths: CachePaths): Promise<any> {
   console.log('Converting to GeoJSON...');
+  const cache = getCache();
 
   // Optional/debug cache
   writeCache(cache, paths.geojson, geojson);
 
   console.log('Optimizing with Mapshaper...');
 
-  const { input, commands } = buildMapshaperInputsAndCommands(geojson, adminLevel);
+  const { input, commands } = buildMapshaperInputsAndCommands(geojson);
 
   const topojsonString = await new Promise<string>((resolve, reject) => {
     mapshaper.applyCommands(commands.join(' '), input, (err: Error | null, output: any) => {
