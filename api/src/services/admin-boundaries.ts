@@ -1,4 +1,3 @@
-import osmtogeojson from 'osmtogeojson';
 import mapshaper from 'mapshaper';
 
 import { ErrorResponse, JSONResponse } from '../utils/response.ts';
@@ -6,7 +5,7 @@ import { validateBody } from '../utils/validation.ts';
 import { getCache, type CacheProvider } from '../utils/cache.ts';
 import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
-import { fetchOverpassData } from './overpass.ts';
+import { fetchGeofabrikBoundaries } from './geofabrik';
 
 /**
  * Bust cache if conversion or processing methods change.
@@ -45,15 +44,21 @@ export const adminBoundaries = async (req: Request) => {
       return buildSuccessResponse(params, 'cache', cachedTopojson);
     }
 
-    // fetchOverpassData is cache-through — it reads/writes the Overpass
-    // response cache internally, so we don't manage it here.
-    const osmData = await fetchOverpassData(req.signal, country_code, admin_level);
+    const dataSource = 'geofabrik';
 
-    const topojson = await convertOsmToTopojson(osmData, admin_level, cache, paths);
+    console.log(`Attempting to fetch boundaries from Geofabrik for ${country_code}...`);
+    const osmData = await fetchGeofabrikBoundaries({
+      countryCode: country_code,
+      adminLevel: admin_level,
+      signal: req.signal,
+    });
+    console.log(`Successfully fetched boundaries from Geofabrik for ${country_code}`);
+
+    const topojson = await convertGeoJsonToTopojson(osmData, admin_level, cache, paths);
 
     writeCache(cache, paths.topojson, topojson);
 
-    return buildSuccessResponse(params, 'generated', topojson);
+    return buildSuccessResponse(params, 'generated', topojson, dataSource);
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -114,39 +119,39 @@ function buildMapshaperInputsAndCommands(
     `-each 'this.properties = { id: this.properties["@id"] || this.id, name: this.properties.name || "" }'`,
   ];
 
-  if (adminLevel === 5) {
-    const countryFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 2));
-    const targetFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 5));
+  // TODO - revisit to see if admin 5 clip actually necessary still
+  // if (adminLevel === 5) {
+  //   const countryFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 2));
+  //   const targetFeatures = geojson.features.filter((f: any) => hasAdminLevel(f, 5));
 
-    input['input.geojson'] = {
-      type: 'FeatureCollection',
-      features: targetFeatures,
-    };
+  //   input['input.geojson'] = {
+  //     type: 'FeatureCollection',
+  //     features: targetFeatures,
+  //   };
 
-    input['mask.geojson'] = {
-      type: 'FeatureCollection',
-      features: countryFeatures,
-    };
+  //   input['mask.geojson'] = {
+  //     type: 'FeatureCollection',
+  //     features: countryFeatures,
+  //   };
 
-    commands.push(`-clip mask.geojson`);
-    // Filter out slivers along the border.
-    // 5km2 is arbitrary but should drop the border overlaps while keeping real districts.
-    commands.push(`-filter-islands min-area=5km2`);
-  }
+  //   commands.push(`-clip mask.geojson`);
+  //   // Filter out slivers along the border.
+  //   // 5km2 is arbitrary but should drop the border overlaps while keeping real districts.
+  //   commands.push(`-filter-islands min-area=5km2`);
+  // }
 
   commands.push(`-o output.topojson format=topojson quantization=1e3 bbox`);
 
   return { input, commands };
 }
 
-async function convertOsmToTopojson(
-  osmData: unknown,
+async function convertGeoJsonToTopojson(
+  geojson: unknown,
   adminLevel: number,
   cache: import('../utils/cache.ts').CacheProvider,
   paths: CachePaths,
 ): Promise<any> {
   console.log('Converting to GeoJSON...');
-  let geojson: any = osmtogeojson(osmData as any);
 
   // Optional/debug cache
   writeCache(cache, paths.geojson, geojson);
@@ -204,6 +209,7 @@ function buildSuccessResponse(
   params: BoundaryRequestParams,
   source: Source,
   topojson: any,
+  dataSource: 'geofabrik' | 'overpass' = 'overpass',
 ): Response {
   const { size_kb, feature_count, bbox } = summarizeTopojson(topojson);
 
@@ -212,6 +218,7 @@ function buildSuccessResponse(
       country_code: params.country_code,
       admin_level: params.admin_level,
       source,
+      data_source: dataSource,
       size_kb,
       feature_count,
       bbox,

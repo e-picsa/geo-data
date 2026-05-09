@@ -35,7 +35,7 @@ export class LocalCacheProvider implements CacheProvider {
     try {
       const filePath = this.getFilePath(key);
       await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
       console.log(`Successfully saved to local cache: ${key}`);
     } catch (err) {
       console.error(`Failed to save to local cache (${key}):`, err);
@@ -48,6 +48,20 @@ export class LocalCacheProvider implements CacheProvider {
       console.log(`Successfully cleared local cache at ${this.baseDir}`);
     } catch (err) {
       console.error(`Failed to clear local cache at ${this.baseDir}:`, err);
+    }
+  }
+
+  getBaseDir(): string {
+    return this.baseDir;
+  }
+
+  async clearPrefix(prefix: string): Promise<void> {
+    try {
+      const prefixPath = path.join(this.baseDir, prefix);
+      await fs.rm(prefixPath, { recursive: true, force: true });
+      console.log(`Successfully cleared local cache prefix: ${prefix}`);
+    } catch (err) {
+      console.error(`Failed to clear local cache prefix ${prefix}:`, err);
     }
   }
 }
