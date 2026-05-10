@@ -12,7 +12,7 @@ import { stringifyTopojsonReadable, summarizeTopojson } from '../utils/topojson.
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 3;
 
 type Source = 'cache' | 'generated';
 
@@ -25,14 +25,13 @@ type CachePaths = {
 export const adminBoundaries = async (req: Request) => {
   try {
     const params = await validateBody(req, BOUNDARY_REQUEST_SCHEMA);
-    const { country_code, admin_level } = params;
-
+    const { country_code } = params;
     const cache = getCache();
-    const paths = buildCachePaths(country_code, admin_level);
+    const paths = buildCachePaths(country_code);
 
     const cachedTopojson = await readCache<any>(cache, paths.topojson);
     if (cachedTopojson) {
-      console.log(`TopoJSON cache hit for ${country_code} admin level ${admin_level}.`);
+      console.log(`TopoJSON cache hit for ${country_code}.`);
       const serializedTopojson = stringifyTopojsonReadable(cachedTopojson);
       return buildSuccessResponse(params, 'cache', serializedTopojson);
     }
@@ -40,7 +39,6 @@ export const adminBoundaries = async (req: Request) => {
     console.log(`Attempting to fetch boundaries from Geofabrik for ${country_code}...`);
     const osmData = await fetchGeofabrikBoundaries({
       countryCode: country_code,
-      adminLevel: admin_level,
       signal: req.signal,
     });
     console.log(`Successfully fetched boundaries from Geofabrik for ${country_code}`);
@@ -68,8 +66,8 @@ export const adminBoundaries = async (req: Request) => {
   }
 };
 
-function buildCachePaths(countryCode: string, adminLevel: number): CachePaths {
-  const prefix = `derived/v${CACHE_VERSION}/country=${countryCode}/admin_level=${adminLevel}`;
+function buildCachePaths(countryCode: string): CachePaths {
+  const prefix = `derived/v${CACHE_VERSION}/country=${countryCode}`;
 
   return {
     prefix,
@@ -109,10 +107,10 @@ function buildMapshaperInputsAndCommands(geojson: any): {
 
   const commands: string[] = [
     `-i input.geojson`,
-    `-clean`,
+    `-clean allow-overlaps`,
     `-simplify weighting=0.5 10%`,
     `-filter-islands min-area=10km2`,
-    `-each 'this.properties = { id: this.properties["@id"] || this.id, name: this.properties.name || "" }'`,
+    `-each 'this.properties = { id: this.properties["@id"] || this.id, name: this.properties.name || "", admin_level: this.properties.admin_level }'`,
   ];
 
   commands.push(`-o output.topojson format=topojson quantization=1e3 bbox`);
@@ -162,7 +160,6 @@ function buildSuccessResponse(
   return JSONResponse(
     {
       country_code: params.country_code,
-      admin_level: params.admin_level,
       source,
       size_kb,
       feature_count,

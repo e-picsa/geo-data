@@ -12,21 +12,20 @@ export interface OsmData {
 
 export interface FetchGeofabrikOptions {
   countryCode: string;
-  adminLevel: number;
   signal: AbortSignal;
 }
 
 export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions) {
-  const { countryCode, adminLevel, signal } = options;
+  const { countryCode, signal } = options;
   const cache = new BoundaryCache(countryCode, CACHE_VERSION);
 
   const cached = await cache.load();
   if (cached) {
-    console.log(`Geofabrik cache hit for ${countryCode} admin-${adminLevel}`);
-    return convertToGeoJSON(cached, adminLevel);
+    console.log(`Geofabrik cache hit for ${countryCode}`);
+    return convertToGeoJSON(cached);
   }
 
-  console.log(`Geofabrik cache miss for ${countryCode} admin-${adminLevel}. Running extraction...`);
+  console.log(`Geofabrik cache miss for ${countryCode}. Running extraction...`);
 
   const pbfPath = await ensureRawPbf(countryCode, CACHE_VERSION, signal);
 
@@ -36,9 +35,8 @@ export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions) {
   const extracted = await extractor.extract();
 
   if (extracted.relations.length === 0) {
-    throw new Error(`No admin-${adminLevel} boundaries found for country code: ${countryCode}`);
+    throw new Error(`No boundaries found for country code: ${countryCode}`);
   }
   await cache.save(extracted);
-  // TODO - filter for admin level (possibly in next step)
-  return convertToGeoJSON(extracted, adminLevel);
+  return convertToGeoJSON(extracted);
 }

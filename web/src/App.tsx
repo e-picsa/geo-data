@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as topojsonClient from 'topojson-client';
@@ -10,7 +10,6 @@ import { TrashIcon } from '@heroicons/react/20/solid';
 
 interface BoundaryResponse {
   country_code: string;
-  admin_level: number;
   source: string;
   size_kb: number;
   feature_count: number;
@@ -29,6 +28,23 @@ function App() {
 
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
+  // Update GeoJSON whenever data or adminLevel changes
+  useEffect(() => {
+    if (data?.topojson) {
+      const topojson = JSON.parse(data.topojson);
+      if (topojson && topojson.objects) {
+        const objectKey = Object.keys(topojson.objects)[0];
+        if (objectKey) {
+          const fullGeojson = topojsonClient.feature(topojson, topojson.objects[objectKey]) as any;
+          const filteredFeatures = fullGeojson.features.filter(
+            (f: any) => Number(f.properties.admin_level) === adminLevel,
+          );
+          setGeoJsonData({ ...fullGeojson, features: filteredFeatures });
+        }
+      }
+    }
+  }, [data, adminLevel]);
+
   const fetchBoundaries = async () => {
     setLoading(true);
     setError(null);
@@ -39,7 +55,7 @@ function App() {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country_code: countryCode, admin_level: adminLevel }),
+        body: JSON.stringify({ country_code: countryCode }),
       });
 
       if (!res.ok) {
@@ -49,16 +65,6 @@ function App() {
 
       const payload: BoundaryResponse = await res.json();
       setData(payload);
-
-      // Convert TopoJSON to GeoJSON for Leaflet
-      const topojson = JSON.parse(payload.topojson);
-      if (topojson && topojson.objects) {
-        const objectKey = Object.keys(topojson.objects)[0];
-        if (objectKey) {
-          const geojson = topojsonClient.feature(topojson, topojson.objects[objectKey]);
-          setGeoJsonData(geojson);
-        }
-      }
     } catch (err: any) {
       if (err instanceof Error) {
         setError(err.message);
@@ -76,7 +82,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${data.country_code}_admin_${data.admin_level}.topo.json`;
+    a.download = `${data.country_code}_all_levels.topo.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -145,7 +151,11 @@ function App() {
               Download TopoJSON
             </button>
 
-            <ExportTilesButton countryCode={data.country_code} bbox={data.bbox} apiUrl={API_URL} />
+            <ExportTilesButton
+              countryCode={data.country_code}
+              bbox={data.bbox as [number, number, number, number]}
+              apiUrl={API_URL}
+            />
           </div>
         )}
 

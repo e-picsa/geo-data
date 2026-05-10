@@ -2,34 +2,45 @@ import { nodeToFeature, relationToFeature } from '@osmix/geojson';
 import type { ExtractedOsmData } from './boundary-cache.ts';
 // Note: You may need to install @types/geojson for the FeatureCollection types
 import type { FeatureCollection, Feature } from 'geojson';
-import type { OsmNode, OsmWay } from 'osmix';
+import type { OsmEntityType, OsmTags, OsmWay } from 'osmix';
 
 /**
  * Converts extracted OSM entities into a valid GeoJSON FeatureCollection.
  */
-export function convertToGeoJSON(data: ExtractedOsmData, adminLevel: number): FeatureCollection {
+export function convertToGeoJSON(data: ExtractedOsmData): FeatureCollection {
   const { nodes, ways, relations } = data;
+
+  const skippedFeatures: { id: number; ref: number; type: OsmEntityType; tags?: OsmTags }[] = [];
 
   // 1. Filter out relations that are part of external data sets (e.g. partial border relation)
   const filteredRelations = relations.filter((relation) => {
-    const { tags = {}, members } = relation;
-    // Ensure admin level matches and all ways and nodes exist
-    if (tags.admin_level === `${adminLevel}`) {
-      const missingEntry = members.find(
-        ({ type, ref }) =>
-          (type === 'way' && !(ref in ways)) || (type === 'node' && !(ref in nodes)),
-      );
-      if (missingEntry) {
-        const { type, ref } = missingEntry;
-        const { id, tags } = relation;
-        const url1 = `https://www.openstreetmap.org/relation/${id}`;
-        const url2 = `https://www.openstreetmap.org/${type}/${ref}`;
-        console.warn('Skip missing entry (likely different country)', url1, url2, { id, tags });
-        return false;
-      }
-      return true;
+    const { members } = relation;
+    // Ensure all ways and nodes exist
+    const missingEntry = members.find(
+      ({ type, ref }) => (type === 'way' && !(ref in ways)) || (type === 'node' && !(ref in nodes)),
+    );
+    if (missingEntry) {
+      const { type, ref } = missingEntry;
+      const { id, tags } = relation;
+      skippedFeatures.push({ id, type, ref, tags });
+      return false;
     }
+    return true;
   });
+
+  // debug logging
+  const relationsByAdminLevel: Record<string, number> = {};
+  filteredRelations.forEach(({ tags }) => {
+    const adminLevel = tags?.admin_level || 'unknown';
+    relationsByAdminLevel[adminLevel] ??= 0;
+    relationsByAdminLevel[adminLevel]++;
+  });
+  skippedFeatures.forEach(({ id, ref, type, tags }) => {
+    const url1 = `https://www.openstreetmap.org/relation/${id}`;
+    const url2 = `https://www.openstreetmap.org/${type}/${ref}`;
+    console.warn('Skip missing entry (likely different country)', url1, url2, { id, tags });
+  });
+  console.log({ relationsByAdminLevel });
 
   // 2. Define resolution callbacks
   const refToPosition = (ref: number): [number, number] => {
@@ -67,17 +78,17 @@ export function convertToGeoJSON(data: ExtractedOsmData, adminLevel: number): Fe
   }
 
   // Add admin centre nodes as features
-  for (const { members } of filteredRelations) {
-    for (const { ref, type, role } of members) {
-      if (type === 'node' && role === 'admin_centre') {
-        const node = nodes[ref];
-        if (node) {
-          const [lon, lat] = node;
-          features.push(nodeToFeature({ id: ref, lat, lon }));
-        }
-      }
-    }
-  }
+  // for (const { members } of filteredRelations) {
+  //   for (const { ref, type, role } of members) {
+  //     if (type === 'node' && role === 'admin_centre') {
+  //       const node = nodes[ref];
+  //       if (node) {
+  //         const [lon, lat] = node;
+  //         features.push(nodeToFeature({ id: ref, lat, lon }));
+  //       }
+  //     }
+  //   }
+  // }
 
   console.log(`Conversion complete. Generated ${features.length} features.`);
 
