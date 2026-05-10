@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as topojsonClient from 'topojson-client';
@@ -24,13 +24,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
-  const [geoJsonData, setGeoJsonData] = useState<any>(null);
 
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
   // Update GeoJSON whenever data or adminLevel changes
-  useEffect(() => {
-    if (data?.topojson) {
+  const geoJsonData = useMemo(() => {
+    if (!data?.topojson) return null;
+    try {
       const topojson = JSON.parse(data.topojson);
       if (topojson && topojson.objects) {
         const objectKey = Object.keys(topojson.objects)[0];
@@ -39,17 +39,19 @@ function App() {
           const filteredFeatures = fullGeojson.features.filter(
             (f: any) => Number(f.properties.admin_level) === adminLevel,
           );
-          setGeoJsonData({ ...fullGeojson, features: filteredFeatures });
+          return { ...fullGeojson, features: filteredFeatures };
         }
       }
+    } catch (e) {
+      console.error('Failed to parse topojson', e);
     }
+    return null;
   }, [data, adminLevel]);
 
-  const fetchBoundaries = async () => {
+  const fetchBoundaries = useCallback(async () => {
     setLoading(true);
     setError(null);
     setData(null);
-    setGeoJsonData(null);
 
     try {
       const res = await fetch(API_URL, {
@@ -74,7 +76,14 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [countryCode, API_URL]);
+
+  // Automatically fetch boundaries when country changes
+  useEffect(() => {
+    if (countryCode) {
+      fetchBoundaries();
+    }
+  }, [countryCode, fetchBoundaries]);
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
@@ -113,14 +122,6 @@ function App() {
             <label className="text-sm font-medium text-slate-700">Admin Level</label>
             <AdminLevelSelect value={adminLevel} onChange={setAdminLevel} />
           </div>
-
-          <button
-            onClick={fetchBoundaries}
-            disabled={loading || !countryCode}
-            className="w-full bg-slate-900 text-white font-medium py-2 px-4 rounded-md shadow-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            {loading ? 'Generating...' : 'Load Boundaries'}
-          </button>
         </div>
 
         {error && (
