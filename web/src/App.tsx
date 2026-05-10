@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as topojsonClient from 'topojson-client';
@@ -10,7 +10,6 @@ import { TrashIcon } from '@heroicons/react/20/solid';
 
 interface BoundaryResponse {
   country_code: string;
-  admin_level: number;
   source: string;
   size_kb: number;
   feature_count: number;
@@ -25,21 +24,47 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
-  const [geoJsonData, setGeoJsonData] = useState<any>(null);
 
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
-  const fetchBoundaries = async () => {
+  // Update GeoJSON whenever data or adminLevel changes
+  const parsedTopojson = useMemo(() => {
+    if (!data?.topojson) return null;
+    try {
+      return JSON.parse(data.topojson);
+    } catch (e) {
+      console.error('Failed to parse topojson', e);
+      return null;
+    }
+  }, [data?.topojson]);
+
+  const fullGeoJson = useMemo(() => {
+    if (!parsedTopojson?.objects) return null;
+    const objectKey = Object.keys(parsedTopojson.objects)[0];
+    if (!objectKey) return null;
+    return topojsonClient.feature(parsedTopojson, parsedTopojson.objects[objectKey]) as any;
+  }, [parsedTopojson]);
+
+  const geoJsonData = useMemo(() => {
+    if (!fullGeoJson) return null;
+    return {
+      ...fullGeoJson,
+      features: fullGeoJson.features.filter(
+        (f: any) => Number(f.properties.admin_level) === adminLevel,
+      ),
+    };
+  }, [fullGeoJson, adminLevel]);
+
+  const fetchBoundaries = useCallback(async () => {
     setLoading(true);
     setError(null);
     setData(null);
-    setGeoJsonData(null);
 
     try {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country_code: countryCode, admin_level: adminLevel }),
+        body: JSON.stringify({ country_code: countryCode }),
       });
 
       if (!res.ok) {
@@ -49,16 +74,6 @@ function App() {
 
       const payload: BoundaryResponse = await res.json();
       setData(payload);
-
-      // Convert TopoJSON to GeoJSON for Leaflet
-      const topojson = JSON.parse(payload.topojson);
-      if (topojson && topojson.objects) {
-        const objectKey = Object.keys(topojson.objects)[0];
-        if (objectKey) {
-          const geojson = topojsonClient.feature(topojson, topojson.objects[objectKey]);
-          setGeoJsonData(geojson);
-        }
-      }
     } catch (err: any) {
       if (err instanceof Error) {
         setError(err.message);
@@ -68,7 +83,14 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [countryCode, API_URL]);
+
+  // Automatically fetch boundaries when country changes
+  useEffect(() => {
+    if (countryCode) {
+      fetchBoundaries();
+    }
+  }, [countryCode, fetchBoundaries]);
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
@@ -76,7 +98,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${data.country_code}_admin_${data.admin_level}.topo.json`;
+    a.download = `${data.country_code}.topo.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -107,14 +129,6 @@ function App() {
             <label className="text-sm font-medium text-slate-700">Admin Level</label>
             <AdminLevelSelect value={adminLevel} onChange={setAdminLevel} />
           </div>
-
-          <button
-            onClick={fetchBoundaries}
-            disabled={loading || !countryCode}
-            className="w-full bg-slate-900 text-white font-medium py-2 px-4 rounded-md shadow-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            {loading ? 'Generating...' : 'Load Boundaries'}
-          </button>
         </div>
 
         {error && (
@@ -145,7 +159,11 @@ function App() {
               Download TopoJSON
             </button>
 
-            <ExportTilesButton countryCode={data.country_code} bbox={data.bbox} apiUrl={API_URL} />
+            <ExportTilesButton
+              countryCode={data.country_code}
+              bbox={data.bbox as [number, number, number, number]}
+              apiUrl={API_URL}
+            />
           </div>
         )}
 
