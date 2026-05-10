@@ -28,25 +28,32 @@ function App() {
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
   // Update GeoJSON whenever data or adminLevel changes
-  const geoJsonData = useMemo(() => {
+  const parsedTopojson = useMemo(() => {
     if (!data?.topojson) return null;
     try {
-      const topojson = JSON.parse(data.topojson);
-      if (topojson && topojson.objects) {
-        const objectKey = Object.keys(topojson.objects)[0];
-        if (objectKey) {
-          const fullGeojson = topojsonClient.feature(topojson, topojson.objects[objectKey]) as any;
-          const filteredFeatures = fullGeojson.features.filter(
-            (f: any) => Number(f.properties.admin_level) === adminLevel,
-          );
-          return { ...fullGeojson, features: filteredFeatures };
-        }
-      }
+      return JSON.parse(data.topojson);
     } catch (e) {
       console.error('Failed to parse topojson', e);
+      return null;
     }
-    return null;
-  }, [data, adminLevel]);
+  }, [data?.topojson]);
+
+  const fullGeoJson = useMemo(() => {
+    if (!parsedTopojson?.objects) return null;
+    const objectKey = Object.keys(parsedTopojson.objects)[0];
+    if (!objectKey) return null;
+    return topojsonClient.feature(parsedTopojson, parsedTopojson.objects[objectKey]) as any;
+  }, [parsedTopojson]);
+
+  const geoJsonData = useMemo(() => {
+    if (!fullGeoJson) return null;
+    return {
+      ...fullGeoJson,
+      features: fullGeoJson.features.filter(
+        (f: any) => Number(f.properties.admin_level) === adminLevel,
+      ),
+    };
+  }, [fullGeoJson, adminLevel]);
 
   const fetchBoundaries = useCallback(async () => {
     setLoading(true);
@@ -91,7 +98,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${data.country_code}_all_levels.topo.json`;
+    a.download = `${data.country_code}.topo.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
