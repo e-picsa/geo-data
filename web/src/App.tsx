@@ -6,7 +6,8 @@ import { CountrySelect } from './components/CountrySelect';
 import { AdminLevelSelect } from './components/AdminLevelSelect';
 import { BoundsFitter } from './components/BoundsFitter';
 import { ExportTilesButton } from './components/ExportTilesButton';
-import { TrashIcon } from '@heroicons/react/20/solid';
+import { TrashIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
+import { getCountryOsmLevels } from './data/osm-admin-levels';
 
 interface BoundaryResponse {
   country_code: string;
@@ -57,7 +58,15 @@ function App() {
     return Array.from(levels).sort((a: number, b: number) => a - b);
   }, [fullGeoJson]);
 
-  // Adjust selected admin level if not present in the current dataset
+  // When country changes, ensure selected admin level is applicable for that country
+  useEffect(() => {
+    const osmInfo = getCountryOsmLevels(countryCode);
+    if (osmInfo?.levels && !osmInfo.levels[String(adminLevel)]) {
+      setAdminLevel(2);
+    }
+  }, [countryCode, adminLevel]);
+
+  // Adjust selected admin level if not present in the current dataset once loaded
   useEffect(() => {
     if (availableLevels.length > 0 && !availableLevels.includes(adminLevel)) {
       setAdminLevel(availableLevels.includes(2) ? 2 : availableLevels[0]);
@@ -145,10 +154,23 @@ function App() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Admin Level</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-700">Admin Level</label>
+              <a
+                href="https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
+                title="View OSM admin levels definition for specific countries"
+              >
+                <span>OSM Guide</span>
+                <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden="true" />
+              </a>
+            </div>
             <AdminLevelSelect
               value={adminLevel}
               onChange={setAdminLevel}
+              countryCode={countryCode}
               availableLevels={availableLevels}
             />
           </div>
@@ -198,7 +220,9 @@ function App() {
                 if (!confirm('Are you sure you want to clear the server cache?')) return;
                 try {
                   const baseUrl = API_URL.replace(/\/$/, '');
-                  const res = await fetch(`${baseUrl}/admin/clear-cache`, { method: 'POST' });
+                  const res = await fetch(`${baseUrl}/admin/clear-cache`, {
+                    method: 'POST',
+                  });
                   if (!res.ok) throw new Error('Failed to clear cache');
                   alert('Cache cleared successfully!');
                 } catch (e: any) {

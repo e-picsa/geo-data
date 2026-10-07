@@ -1,0 +1,2115 @@
+{
+  "_meta": {
+    "source": "https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries",
+    "updatedAt": "2026-10-07"
+  },
+  "defaultLabels": {
+    "2": "Country",
+    "3": "Region",
+    "4": "State / Province",
+    "5": "District / Council",
+    "6": "District / County",
+    "7": "Municipality / Sub-district",
+    "8": "Municipality / City / Town"
+  },
+  "countries": {
+    "AF": {
+      "name": "Afghanistan",
+      "levels": {
+        "2": "Country",
+        "4": "Province (ولايت wilayah)",
+        "5": "Districts (Wuleswali)"
+      }
+    },
+    "AL": {
+      "name": "Albania",
+      "levels": {
+        "2": "Country",
+        "4": "Counties qark NUTS 3",
+        "7": "Municipalities bashkia LAU",
+        "8": "Administrative unit (njësia administrative)",
+        "9": "Subdistricts njësi bashkiake"
+      }
+    },
+    "DZ": {
+      "name": "Algeria",
+      "levels": {
+        "2": "Country",
+        "4": "Wilayah borders (departements and / or provinces)",
+        "6": "Daïras borders (group of municipalities or districts)",
+        "8": "Communes borders (municipalities)"
+      }
+    },
+    "AD": {
+      "name": "Andorra",
+      "levels": {
+        "2": "Country",
+        "7": "Parròquies borders (communes)",
+        "8": "Municipality borders"
+      }
+    },
+    "AO": {
+      "name": "Angola",
+      "levels": {
+        "2": "Country",
+        "4": "Províncias (Provinces)",
+        "6": "Municípios (Municipalities)",
+        "7": "Comunas (Urban districts or Communes)"
+      }
+    },
+    "AG": {
+      "name": "Antigua and Barbuda",
+      "levels": {
+        "2": "Country",
+        "4": "Territorial borders",
+        "6": "Parishes and dependencies borders"
+      }
+    },
+    "AR": {
+      "name": "Argentina",
+      "levels": {
+        "2": "Country",
+        "4": "Province / Ciudad Autónoma de Buenos Aires",
+        "5": "Departamento / partido",
+        "6": "Distrito (Mendoza Province, Entre Ríos Province), Pedanías (Córdoba Province)",
+        "7": "Municipio (except for Buenos Aires Province, Mendoza, La Rioja and San Juan, where municipio is the same as departmento or partido)",
+        "8": "Villages, City, town",
+        "9": "Barrio"
+      }
+    },
+    "AM": {
+      "name": "Armenia",
+      "levels": {
+        "2": "Country",
+        "4": "Marz (Province) / Yerevan",
+        "5": "Municipality / Yerevan districts",
+        "6": "City/Town",
+        "7": "Village",
+        "8": "Neighbourhood"
+      }
+    },
+    "AU": {
+      "name": "Australia",
+      "levels": {
+        "2": "Country",
+        "4": "State/Territory borders",
+        "6": "Local Government Areas (LGAs), and Unincorporated Areas borders",
+        "7": "(ACT only) District borders",
+        "9": "Locality borders"
+      }
+    },
+    "AT": {
+      "name": "Austria",
+      "levels": {
+        "2": "Country",
+        "4": "State/province Bundesland NUTS 2",
+        "6": "District Politischer Bezirk Gemeindekennzahl: xxx",
+        "8": "Municipality Gemeinde Gemeindekennzahl: xxxyy LAU",
+        "9": "Wiener / Grazer / ... Stadt- / Gemeindebezirk",
+        "10": "(opt.) Stadtteile / Katastralgemeinde"
+      }
+    },
+    "AZ": {
+      "name": "Azerbaijan",
+      "levels": {
+        "2": "Country",
+        "4": "Economic Regions (Economic Regions) Autonomous republic (Nakhchivan Autonomous Republic)",
+        "5": "Regions ( ) and cities with authority of republic level ( )",
+        "8": "Municipalities ( )"
+      }
+    },
+    "BS": {
+      "name": "Bahamas",
+      "levels": {
+        "2": "Country",
+        "6": "Central government district - New Providence only",
+        "8": "Districts of the Bahamas (Local government)"
+      }
+    },
+    "BH": {
+      "name": "Bahrain",
+      "levels": {
+        "2": "Country",
+        "4": "Governorate",
+        "6": "Municipality Example: Al Manamah, Ras Rumman etc",
+        "9": "Neighbourhood"
+      }
+    },
+    "BD": {
+      "name": "Bangladesh",
+      "levels": {
+        "2": "Country",
+        "4": "Division",
+        "5": "District",
+        "6": "Subdistrict (Upazila / Thana)",
+        "7": "City Corporation",
+        "8": "Municipal Corporation / Pourashava",
+        "9": "Union"
+      }
+    },
+    "BB": {
+      "name": "Barbados",
+      "levels": {
+        "2": "Country",
+        "3": "National Border (Island coastline)",
+        "6": "Parishes of Barbados",
+        "9": "Suburbs, Hamlets and Villages",
+        "10": "Neighbourhoods, Housing Developments"
+      }
+    },
+    "BY": {
+      "name": "Belarus",
+      "levels": {
+        "2": "Country",
+        "4": "Oblasts (вобласьць / область)",
+        "6": "Regions (раён / район)",
+        "8": "Soviets of settlement (сельсавет / cельсовет)",
+        "9": "Suburbs (раён гораду / район города)",
+        "10": "Municipalities (населены пункт / населённый пункт)"
+      }
+    },
+    "BE": {
+      "name": "Belgium",
+      "levels": {
+        "2": "Country",
+        "4": "Regions Gewesten / Régions NUTS 1",
+        "6": "Provinces NUTS 2",
+        "7": "Administrative arrondissements Arrondissementen / Arrondissements NUTS 3",
+        "8": "Municipalities LAU",
+        "9": "Deelgemeenten / sections",
+        "10": "Wijken / quartiers"
+      }
+    },
+    "BZ": {
+      "name": "Belize",
+      "levels": {
+        "2": "Country",
+        "4": "Districts",
+        "7": "Cities",
+        "8": "Towns",
+        "9": "Villages, Suburbs",
+        "10": "Hamlets, Neighbourhoods"
+      }
+    },
+    "BJ": {
+      "name": "Benin",
+      "levels": {
+        "2": "Country",
+        "4": "Département",
+        "6": "Commune",
+        "7": "Arrondissement",
+        "8": "Village/Quartier de ville"
+      }
+    },
+    "BT": {
+      "name": "Bhutan",
+      "levels": {
+        "2": "Country",
+        "4": "Dzongkhag",
+        "5": "Dungkhag",
+        "6": "Gewog",
+        "7": "Thromde"
+      }
+    },
+    "BO": {
+      "name": "Bolivia",
+      "levels": {
+        "2": "Country",
+        "4": "División administrativa de primer nivel (First-level administrative division): → Departamentos (State)",
+        "5": "Regiones (Regions)",
+        "6": "División administrativa de segundo nivel (Second-level administrative division): → Provincias (Provinces)",
+        "7": "Regiones metropolitanas (Metropolitan regions)",
+        "8": "División administrativa de tercer nivel (Third-level administrative division): → Municipios, Territorio indígena originario campesinos (Municipalities, Indigenous originary campesino territories / Native community lands)",
+        "9": "Distritos (Districts)",
+        "10": "Subdistritos (Subdistricts)"
+      }
+    },
+    "BA": {
+      "name": "Bosnia and Herzegovina",
+      "levels": {
+        "2": "Country",
+        "4": "Entity entitet / eнтитет / district distrikt / дистрикт note",
+        "5": "Canton (FBiH) kanton (FBiH) / županija (FBiH) / кантон (ФБиХ)",
+        "6": "City grad / град",
+        "7": "Muncipality općina / opština / општина",
+        "8": "Local committee mjesna zajednica / мјесна заједницa",
+        "9": "Settlement naselje / насеље"
+      }
+    },
+    "BW": {
+      "name": "Botswana",
+      "levels": {
+        "2": "Country",
+        "4": "10 Districts (rural districts), 2 Cities, 5 Towns (urban districts)",
+        "6": "Subdistricts",
+        "8": "Towns and Villages"
+      }
+    },
+    "BR": {
+      "name": "Brazil",
+      "levels": {
+        "2": "Country",
+        "3": "Regiões (Sul, Sudeste, Centro-Oeste, Norte, Nordeste) (regions)",
+        "4": "Unidades Federativas (Estados e Distrito Federal) (states and Federal District)",
+        "5": "Regiões Geográficas Intermediárias (Intermediate Geographic Regions) Mesorregiões (meso-regions)",
+        "6": "Regiões metropolitanas (metropolitan areas)",
+        "7": "Regiões Geográficas Imediatas (Immediate Geographic Regions) Microrregiões (micro-regions)",
+        "8": "Municípios e regiões administrativas do Distrito Federal (municipalities and administrative regions of the Federal District)",
+        "9": "Distritos e Sub-Prefeituras (districts)",
+        "10": "Bairros e SubDistritos (suburbs and neighborhoods)"
+      }
+    },
+    "BN": {
+      "name": "Brunei",
+      "levels": {
+        "2": "Country",
+        "4": "Districts (daerah)",
+        "6": "Mukims (subdistricts)",
+        "8": "Villages (kampung or kampong), as designated by the Survey Department"
+      }
+    },
+    "BG": {
+      "name": "Bulgaria",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces области NUTS 3",
+        "5": "Municipalities общини) LAU",
+        "6": "City Districts райони в София, Пловдив и Варна",
+        "7": "Borders of mayoraltites кметства",
+        "8": "Borders of cities, towns and villages землища",
+        "9": "Districts and suburbs квартали и предградия",
+        "10": "Suburb parts, neighborhoods части от квартали, махали"
+      }
+    },
+    "BF": {
+      "name": "Burkina Faso",
+      "levels": {
+        "2": "Country",
+        "4": "Régions",
+        "5": "Provinces",
+        "6": "Départements/Communes",
+        "7": "Arrondissements (only in the 2 cities of Ouagadougou and Bobo Dioulasso)",
+        "8": "Towns or villages (excluding their surrounding rural areas)",
+        "9": "Urban sectors (only in cities, and in the capital town of other urban municipalities)"
+      }
+    },
+    "BI": {
+      "name": "Burundi",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces",
+        "6": "Communes",
+        "8": "Collines",
+        "10": "Sous-Collines"
+      }
+    },
+    "KH": {
+      "name": "Cambodia",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces (ខេត្ត khaet)",
+        "6": "Districts (ស្រុក srok), Sections (ខណ្ឌ khan), Municipalities (ក្រុង krong)",
+        "8": "Communes (ឃុំ khum), Quarters (សង្កាត់ sangkat)"
+      }
+    },
+    "CM": {
+      "name": "Cameroon",
+      "levels": {
+        "2": "Country",
+        "3": "Reserved for historic constituent states",
+        "4": "Regions, like Extrême-Nord (similar to NUTS 2)",
+        "6": "Départements, like Mayo-Danay (similar to NUTS 3)",
+        "7": "Arrondissements, like Njombe Penja",
+        "8": "Communes, like Melong. Use to indicate the name of the commune",
+        "10": "Non-offical quartiers"
+      }
+    },
+    "CA": {
+      "name": "Canada",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces & territories",
+        "5": "Major divisions (only some provinces)",
+        "6": "Regional municipalities & single-tier municipalities",
+        "7": "Boroughs/arrondissements of some cities",
+        "8": "Lower-tier municipalities in rural areas; Districts/communities within cities",
+        "9": "Localities/wards; some cities call this level 'neighbourhoods'",
+        "10": "Neighbourhoods"
+      }
+    },
+    "CV": {
+      "name": "Cabo Verde|Cape Verde",
+      "levels": {
+        "2": "Country",
+        "6": "Municipalities",
+        "8": "In use, fixme",
+        "9": "Civil parishes"
+      }
+    },
+    "CF": {
+      "name": "Central African Republic",
+      "levels": {
+        "2": "Country",
+        "4": "Préfectures, like Ouham",
+        "6": "Sous-préfectures, like Bouca",
+        "7": "Communes",
+        "8": "Arrondisements",
+        "9": "Quartiers",
+        "10": "Sub-quartiers"
+      }
+    },
+    "TD": {
+      "name": "Chad",
+      "levels": {
+        "2": "Country",
+        "4": "Régions (23)",
+        "6": "Départments (61)",
+        "7": "Sous-préfectures (200)",
+        "8": "Cantons (446)",
+        "9": "Villages ou localités",
+        "10": "Quartiers (subdivisions internes au village)"
+      }
+    },
+    "CL": {
+      "name": "Chile",
+      "levels": {
+        "2": "Country",
+        "4": "Regiones",
+        "6": "Provincias",
+        "8": "Comunas"
+      }
+    },
+    "CN": {
+      "name": "China",
+      "levels": {
+        "2": "Country",
+        "3": "Reserved for Greater administrative region 预留为大行政区",
+        "4": "Municipality / Province / Autonomous Region 省级行政区",
+        "5": "Prefectures 地级行政区",
+        "6": "County 县级行政区",
+        "7": "State-level new areas and other special areas in large scale 国家级新区、国家级高新区、非行政区界等大尺度特殊情况",
+        "8": "Township (Town / Subdistrict) 乡镇级行政区（镇、街道）",
+        "9": "Other special areas in small scale 林业局、农垦管局等小尺度特殊情况",
+        "10": "(Administrative) Village / Community (Quarter) 行政村、社区"
+      }
+    },
+    "CO": {
+      "name": "Colombia",
+      "levels": {
+        "2": "Country",
+        "3": "Administrative Region of planning / Región Administrativa de Planificación",
+        "4": "Department / Departamento",
+        "5": "Province / Provincia",
+        "6": "Municipality / Municipio",
+        "7": "Urban / Urbano: city / ciudad Rural / Rural: township / corregimiento / área no municipalizada / isla",
+        "8": "Urban / Urbano: locality or commune / localidad o comuna Rural / Rural: village / vereda",
+        "9": "Urban / Urbano: neighbourhood (For Bogota, this is UPZs) / barrio (Para Bogotá, son las UPZs) Rural / Rural: N/A"
+      }
+    },
+    "KM": {
+      "name": "Comoros",
+      "levels": {
+        "2": "Country",
+        "4": "Les 3 îles (préfectures)",
+        "8": "Communes"
+      }
+    },
+    "CG": {
+      "name": "Congo|Congo-Brazzaville",
+      "levels": {
+        "2": "Country",
+        "4": "Départements",
+        "5": "In use, arrondissements",
+        "6": "Districts",
+        "8": "In use, fixme",
+        "9": "In use, fixme",
+        "10": "In use, fixme"
+      }
+    },
+    "CD": {
+      "name": "Democratic Republic of the Congo",
+      "levels": {
+        "2": "Country",
+        "4": "Province (26)",
+        "5": "\"Ancienne\" province",
+        "6": "Territoire / Ville",
+        "7": "Collectivité (secteur, chefferie, cité) / Commune",
+        "8": "Groupement / Quartier",
+        "9": "Localité ou village (terroir) / Cellule",
+        "10": "Subdivision interne au village / Bloc"
+      }
+    },
+    "CR": {
+      "name": "Costa Rica",
+      "levels": {
+        "2": "Country",
+        "4": "Provincia",
+        "6": "Cantón",
+        "8": "Distrito",
+        "10": "Barrio"
+      }
+    },
+    "CI": {
+      "name": "Côte d'Ivoire",
+      "levels": {
+        "2": "Country",
+        "4": "District (example: Lagunes) ou District autonome (example: Abidjan) place=state (not place=district )",
+        "5": "Region (example: Agnéby-Tiassa) place=region",
+        "6": "Département (example: Département Sikensi) place=province",
+        "7": "Sous-préfecture (example: Sous-prefecture Bingerville) place=county",
+        "8": "Commune (example: Yopougon) place=municipality",
+        "9": "Village place=village",
+        "10": "Quartier place=neighbourhood"
+      }
+    },
+    "HR": {
+      "name": "Croatia",
+      "levels": {
+        "2": "Country",
+        "4": "Counties županije NUTS 3",
+        "7": "Cities/towns or municipalities gradovi ili općine LAU",
+        "8": "Settlements naselja",
+        "9": "City districts or local committees gradske četvrti/kotari ili mjesni odbori",
+        "10": "Local committees of Zagreb mjesni odbori Zagreba"
+      }
+    },
+    "CU": {
+      "name": "Cuba",
+      "levels": {
+        "2": "Country",
+        "4": "Provincia",
+        "6": "Municipio",
+        "8": "Ciudades",
+        "10": "Barrios"
+      }
+    },
+    "CY": {
+      "name": "Cyprus",
+      "levels": {
+        "2": "Country",
+        "3": "De facto partitions: → Republic of Cyprus (RoC) → Turkish Republic of Northern Cyprus (TRNC) → UN buffer zone",
+        "4": "The 6 de jure Districts",
+        "5": "The 5 districs of RoC and 6 districts of TRNC (ex LAU 1)",
+        "6": "Municipalities & Community Clusters LAU",
+        "7": "Municipal Quarters",
+        "8": "Communities",
+        "9": "Municipality Districts/ Parishes",
+        "10": "Settlement"
+      }
+    },
+    "CZ": {
+      "name": "Czechia",
+      "levels": {
+        "2": "Country",
+        "4": "Regions kraje NUTS 3",
+        "5": "Districts okresy (ex LAU 1) / Prague municipal districts obvody Prahy",
+        "6": "/ Prague administrative districts Prahy",
+        "8": "Municipalities obce LAU / Military areas vojenské újezdy",
+        "9": "Municipal boroughs of statutory cities městské části/městské obvody",
+        "10": "Local committees místní výbory / Local commissions místní komise"
+      }
+    },
+    "DK": {
+      "name": "Denmark",
+      "levels": {
+        "2": "Country",
+        "4": "Regions Regioner NUTS 2",
+        "7": "Municipalities Kommune LAU",
+        "9": "Christiansø Administration"
+      }
+    },
+    "DJ": {
+      "name": "Djibouti",
+      "levels": {
+        "2": "Country",
+        "4": "Régions (إقليم)",
+        "6": "Districts (ar:?)",
+        "8": "Villes, villages (ar:?)"
+      }
+    },
+    "DM": {
+      "name": "Dominica",
+      "levels": {
+        "2": "Country",
+        "4": "Parishes",
+        "6": "In use, city",
+        "10": "In use, quarter"
+      }
+    },
+    "DO": {
+      "name": "Dominican Republic",
+      "levels": {
+        "2": "Country",
+        "4": "Province (Provincia)",
+        "6": "Municipality (Municipio)",
+        "8": "District (Distrito municipal)"
+      }
+    },
+    "EC": {
+      "name": "Ecuador",
+      "levels": {
+        "2": "Country",
+        "4": "Provincia",
+        "6": "Cantón",
+        "7": "Límite Urbano (ciudades)",
+        "8": "Parroquia",
+        "9": "Barrio (Urbano), Comunidad (Rural)"
+      }
+    },
+    "EG": {
+      "name": "Egypt",
+      "levels": {
+        "2": "Country",
+        "4": "Governorate (Muhafazah محافظة)",
+        "7": "Municipal division",
+        "8": "Fixme",
+        "9": "Fixme"
+      }
+    },
+    "SV": {
+      "name": "El Salvador",
+      "levels": {
+        "2": "Country",
+        "4": "Departamento",
+        "5": "Distrito",
+        "6": "Municipio",
+        "7": "Cantón",
+        "8": "Caserío",
+        "9": "Barrio/Colonia"
+      }
+    },
+    "GQ": {
+      "name": "Equatorial Guinea",
+      "levels": {
+        "2": "Country",
+        "3": "Regiones (Insular Region and Continental Region)",
+        "4": "Provincias",
+        "6": "Districts"
+      }
+    },
+    "ER": {
+      "name": "Eritrea",
+      "levels": {
+        "2": "Country",
+        "4": "Régions (ti:ዞባ, ar:إقليم)"
+      }
+    },
+    "EE": {
+      "name": "Estonia",
+      "levels": {
+        "2": "Country",
+        "6": "Countys maakonnad (ex LAU 1)",
+        "7": "Municipalities vallad, omavalitsuslikud linnad LAU",
+        "8": "Tallinn and Kohtla-Järve (as settlement units)",
+        "9": "Settlement units asustusüksused: külad, alevikud, alevid, vallasisesed linnad / city districts linnaosad, in Tallinn and Kohtla-Järve",
+        "10": "Subdistricts asumid, in Tallinn"
+      }
+    },
+    "SZ": {
+      "name": "Eswatini|Swaziland",
+      "levels": {
+        "2": "Country",
+        "4": "Tifundza (regions)",
+        "6": "Tinkhundla (constituencies)",
+        "8": "Imiphakatsi (chiefdoms)"
+      }
+    },
+    "ET": {
+      "name": "Ethiopia",
+      "levels": {
+        "2": "Country",
+        "4": "Administrative States (9)",
+        "5": "Zones (68+2)",
+        "6": "Woreda (550+6)",
+        "8": "Kebele",
+        "10": "Villages (Gots)"
+      }
+    },
+    "FJ": {
+      "name": "Fiji",
+      "levels": {
+        "2": "Country",
+        "4": "Divisions",
+        "6": "Provinces"
+      }
+    },
+    "FI": {
+      "name": "Finland",
+      "levels": {
+        "2": "Country",
+        "3": "Main areas Pääalueet NUTS 1 Manner-Suomi",
+        "4": "Regions Maakunnat NUTS 3 [//www.openstreetmap.org/browse/relation/37355 Uusimaa]",
+        "7": "Sub-regions Seutukunnat (ex LAU 1) [//www.openstreetmap.org/browse/relation/38101 Helsingin seutukunta]",
+        "8": "Municipalities Kunnat / Kaupungit LAU",
+        "9": "Villages kylät, Kaupunginosien/kunnanosien suuralueet",
+        "10": "City/municipal districts kaupunginosat/kunnanosat [//www.openstreetmap.org/browse/relation/188175 Kulosaari]"
+      }
+    },
+    "FR": {
+      "name": "France",
+      "levels": {
+        "2": "Country",
+        "3": "Territorial areas Overseas collectivities",
+        "4": "Régions",
+        "5": "Circonscription départementale",
+        "6": "Départements",
+        "7": "Arrondissements",
+        "8": "Communes LAU",
+        "9": "Arrondissements municipaux (in Paris, Lyon, Marseille only), or communes associées and communes déléguées (in partially merged communes)",
+        "10": "Quartiers"
+      }
+    },
+    "PF": {
+      "name": "French Polynesia",
+      "levels": {
+        "2": "Country",
+        "5": "Administrative subdivisions",
+        "7": "Communes",
+        "8": "Communes associées",
+        "9": "Districts, quartiers, ou ile"
+      }
+    },
+    "GA": {
+      "name": "Gabon",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces",
+        "6": "Departments"
+      }
+    },
+    "GM": {
+      "name": "Gambia",
+      "levels": {
+        "2": "Country",
+        "4": "Regions (Divisions)",
+        "5": "LGAs",
+        "6": "Districts"
+      }
+    },
+    "GE": {
+      "name": "Georgia",
+      "levels": {
+        "2": "Country",
+        "3": "Borders of the disputed territories (Abkhazia/Autonomous Republic of Abkhazia, South Ossetia/Samachablo)",
+        "4": "Borders of autonomous republics, regions and Tbilisi (as a region itself)",
+        "6": "Borders of municipalities",
+        "8": "Cities limits",
+        "10": "Borders of cities' administrative districts"
+      }
+    },
+    "DE": {
+      "name": "Germany",
+      "levels": {
+        "2": "Country",
+        "4": "Federal states Bundesland NUTS 1",
+        "5": "State-districts Regierungsbezirk NUTS 2",
+        "6": "Districts Landkreis / Kreis / kreisfreie Stadt NUTS 3",
+        "7": "Amts Samtgemeinde, Verwaltungsgemeinschaft LAU 1",
+        "8": "Municipalities, Towns / City-districts Stadt, Gemeinde LAU",
+        "9": "Parts of a municipality with parish councils / self government Stadtbezirk / Gemeindeteil mit Selbstverwaltung",
+        "10": "Parts of a municipality without ..."
+      }
+    },
+    "GH": {
+      "name": "Ghana",
+      "levels": {
+        "2": "Country",
+        "4": "Region",
+        "6": "District",
+        "8": "Town/Village",
+        "10": "Neighborhood/Borrow"
+      }
+    },
+    "GR": {
+      "name": "Greece",
+      "levels": {
+        "2": "Country",
+        "3": "Autonomous monastic state of Mount Athos αυτόνομη μοναστική πολιτεία Αγίου Όρους",
+        "4": "Decentralized administrations Αποκεντρωμένες διοικήσεις",
+        "5": "Regions Περιφέρειες NUTS 2",
+        "6": "Regional units Περιφερειακές ενότητες NUTS 3",
+        "7": "Municipalities Δήμοι",
+        "8": "Municipal units Δημοτικές ενότητες",
+        "9": "Municipal communes Δημοτικές κοινότητες LAU"
+      }
+    },
+    "GD": {
+      "name": "Grenada|Grenada|Grenada",
+      "levels": {
+        "2": "Country",
+        "6": "Parriches (6) / Dependency (1)"
+      }
+    },
+    "GT": {
+      "name": "Guatemala",
+      "levels": {
+        "2": "Country",
+        "4": "State border (Departamentos)",
+        "6": "Municipal border (Municipios)",
+        "8": "City and town border (Zonas)"
+      }
+    },
+    "GG": {
+      "name": "Guernsey",
+      "levels": {
+        "2": "Country",
+        "4": "Islands with separate jurisdictions: Guernsey (incl.",
+        "8": "Parishes",
+        "9": "Subdivisions of Vale (Vingtaine de l'Epine and Clos du Valle)",
+        "10": "Cantons (St. Peter Port)"
+      }
+    },
+    "GN": {
+      "name": "Guinea",
+      "levels": {
+        "2": "Country",
+        "4": "Region",
+        "6": "Prefectures",
+        "8": "Sub-prefectures (Communes)",
+        "9": "Villages / Towns",
+        "10": "Quartiers (Neighbourhoods)"
+      }
+    },
+    "GW": {
+      "name": "Guinea-Bissau",
+      "levels": {
+        "2": "Country",
+        "3": "Bissau Autonomous Sector (Sector autónomo de Bissau) / Provinces (provincias)",
+        "4": "Regions (regiões)",
+        "6": "Sectors (sectores)"
+      }
+    },
+    "GY": {
+      "name": "Guyana",
+      "levels": {
+        "2": "Country",
+        "4": "Regions",
+        "6": "Neighbourhood Democratic Councils",
+        "8": "Districts",
+        "10": "Quarters/Neighbourhoods"
+      }
+    },
+    "HT": {
+      "name": "Haiti",
+      "levels": {
+        "2": "Country",
+        "4": "State border (Départements) (Layer 1)",
+        "5": "Districts (Arrondissements)",
+        "6": "Search-And-Rescue sectors (temporary)",
+        "8": "City and town border (communes) (Layer 2)",
+        "10": "Suburbs (sections) (Layer 3)"
+      }
+    },
+    "VA": {
+      "name": "Vatican City|Holy See (Vatican City)",
+      "levels": {
+        "2": "Country"
+      }
+    },
+    "HN": {
+      "name": "Honduras",
+      "levels": {
+        "2": "Country",
+        "4": "Departamentos (State Border)",
+        "6": "Municipios (Municipal Border)",
+        "8": "Aldeas (Admin level border which encompass several towns / cities)",
+        "9": "Ciudades (Cities)",
+        "10": "Barrios y Colonias (Neighborhoods)"
+      }
+    },
+    "HU": {
+      "name": "Hungary",
+      "levels": {
+        "2": "Country",
+        "4": "Groups of Regions Statisztikai nagyrégiók NUTS 1 Statistical unit",
+        "5": "Regions Tervezési-statisztikai régiók NUTS 2 Statistical unit",
+        "6": "Counties / capital city Megyék / főváros NUTS 3",
+        "7": "Districts Járások (ex LAU 1)",
+        "8": "Settlements Települések LAU",
+        "9": "Boroughs Kerületek",
+        "10": "Suburbs Városrészek"
+      }
+    },
+    "IS": {
+      "name": "Iceland",
+      "levels": {
+        "2": "Country",
+        "5": "Regions Landshlutar",
+        "6": "Municipalities Sveitarfélög LAU",
+        "9": "Districts Hverfi",
+        "10": "Neighbourhoods Hverfahlutar"
+      }
+    },
+    "IN": {
+      "name": "India",
+      "levels": {
+        "2": "Country",
+        "4": "State",
+        "5": "District",
+        "6": "Subdistrict (Tehsil / Mandal / Taluk)",
+        "7": "Metropolitan Area",
+        "8": "Municipal Corporation / Municipality / City Council",
+        "9": "Civic Zone",
+        "10": "Village/Civic Ward"
+      }
+    },
+    "ID": {
+      "name": "Indonesia",
+      "levels": {
+        "2": "Country",
+        "4": "Province (Provinsi / Daerah Istimewa / Daerah Khusus)",
+        "5": "City / Regency (Kota / Kota Administrasi / Kabupaten / Kabupaten Administrasi / Kotamadya)",
+        "6": "District (Kecamatan / Distrik / Kapanewon / Kemantren )",
+        "7": "Village (Kelurahan / Desa / Gampong / Kampung / Pekon / Nagari)",
+        "8": "Hamlet (Dusun)",
+        "9": "Community Group (Rukun Warga)",
+        "10": "Neighborhood Unit (Rukun Tetangga)"
+      }
+    },
+    "IR": {
+      "name": "Iran",
+      "levels": {
+        "2": "Country",
+        "4": "Province (استان / Ostan)",
+        "5": "County (شهرستان / Shahrestan)",
+        "6": "District (بخش /Bakhsh)",
+        "7": "• City (شهر / Shahr) • Municipality or rural agglomeration (دهستان / Dehestan)",
+        "8": "Village (روستا / Rousta)",
+        "9": "Urban District (منطقه شهری)",
+        "10": "Urban Area (ناحیه شهری)"
+      }
+    },
+    "IQ": {
+      "name": "Iraq",
+      "levels": {
+        "2": "Country",
+        "3": "Iraqi Kurdistan (Arbil, Duhok, Sulaymaniyah) region",
+        "4": "Governorates (muḥāfażah)",
+        "6": "Districts (qadha)",
+        "7": "Subdistricts (nahya)",
+        "8": "Boroughs (hay) in urban and Counties (mukataa) in rural areas",
+        "9": "Neighbourhoods (mahalla) in urban and Villages (qarya) in rural areas"
+      }
+    },
+    "IE": {
+      "name": "Ireland",
+      "levels": {
+        "2": "Country",
+        "4": "Reserved for compatibility with UK states (eg Northern Ireland)",
+        "5": "Province",
+        "6": "County",
+        "7": "Adminstrative County, County City",
+        "8": "Borough & Town council, Dublin Postal Districts",
+        "9": "Electoral Division",
+        "10": "Townland"
+      }
+    },
+    "IL": {
+      "name": "Israel",
+      "levels": {
+        "2": "Country",
+        "4": "מחוז (כולל הגדה המערבית ורצועת עזה) District (including West Bank and Gaza Strip)",
+        "5": "נפה תחומי A, B, C של הגדה המערבית Subdistrict Areas A, B, C of West Bank",
+        "6": "אזור טבעי (בשטח פלסטיני: נפה) Natural Region (In Palestinian Territory: Subdistrict)",
+        "7": "מטרופולין Metropolitan area",
+        "8": "עיר, מועצה מקומית, מועצה אזורית בשטחים הפלסטיניים: עירייה רמה א' או ב' City, Local council, Regional council In Palestinian Territory: Muncipality (grade 1, 2)",
+        "9": "תחת עיר ומועצה מקומית: רובע תחת מועצה אזורית: יישוב בשטחים הפלסטיניים: עירייה רמה ג' או ד' Under city and local council: Borough Under regional council: Village In Palestinian Territory: Muncipality (grade 3, 4)",
+        "10": "שכונה Neighborhood"
+      }
+    },
+    "IT": {
+      "name": "Italy",
+      "levels": {
+        "2": "Country",
+        "4": "Regions Regioni NUTS 2",
+        "6": "Provinces Provincia NUTS 3",
+        "7": "Mountain community per le comunità montane / union of municipalities le unioni di comuni",
+        "8": "Municipalities Comuni LAU",
+        "10": "Districts per le circoscrizioni (dove sono rimaste) o per le località"
+      }
+    },
+    "JM": {
+      "name": "Jamaica",
+      "levels": {
+        "2": "Country",
+        "5": "Counties",
+        "6": "Parishes",
+        "8": "Settlements (Cities, Towns, Villages ?)",
+        "9": "Settlements (Villages ?, Hamlets)"
+      }
+    },
+    "JP": {
+      "name": "Japan",
+      "levels": {
+        "2": "Country",
+        "3": "Reserved for state border - 道州制)",
+        "4": "Prefecture border",
+        "5": "Sub Prefecture border (振興局・支庁 in Hokkaido)",
+        "6": "County (郡)",
+        "7": "Municipal border (Cities, Towns, Villages, Special wards of Tokyo)",
+        "8": "Suburb",
+        "9": "Quarter; Major Neighbourhood - 大字 (大字の下に字がある地域の場合のみ使用、それ以外はneighbourhood)",
+        "10": "Neighbourhood"
+      }
+    },
+    "JE": {
+      "name": "Jersey",
+      "levels": {
+        "2": "Country",
+        "8": "Parishes",
+        "9": "Vingtaines (cueillettes in St. Ouen)",
+        "10": "Cantons (St. Helier)"
+      }
+    },
+    "JO": {
+      "name": "Jordan",
+      "levels": {
+        "2": "Country",
+        "4": "Governorate",
+        "6": "District",
+        "7": "Subdistrict"
+      }
+    },
+    "KZ": {
+      "name": "Kazakhstan",
+      "levels": {
+        "2": "Country",
+        "4": "Regions (облысы) / City of republican significance (Almaty, Astana, Shymkent)",
+        "6": "Districts (ауданы)",
+        "8": "Rural district (ауылдық округі)"
+      }
+    },
+    "KE": {
+      "name": "Kenya",
+      "levels": {
+        "2": "Country",
+        "3": "Provinces (old system and retained in new system for local region reference)",
+        "4": "Counties (new system)",
+        "5": "Districts (old system)",
+        "6": "Subcounties - also called constituencies. (new system)",
+        "7": "Local authorities & Divisions cities, municipalities, towns and counties (not to be confused with national counties admin_level=4)",
+        "8": "Wards (new system). Mostly identical to Locations",
+        "9": "Locations (old system). Mostly identical to Wards",
+        "10": "Villages (new system) & Sublocations (old system)"
+      }
+    },
+    "KI": {
+      "name": "Kiribati",
+      "levels": {
+        "2": "Country",
+        "8": "Island Councils (24) Example: Abemama, South Tabiteuea etc"
+      }
+    },
+    "XK": {
+      "name": "Kosovo",
+      "levels": {
+        "2": "Country",
+        "4": "Districts Rajonet e Kosovës NUTS 3",
+        "6": "Municipalities Komunat e Kosovës LAU",
+        "8": "Settlements / Cadastral zones Zonat kadastrale",
+        "10": "City districts and neighbourhoods Lagjjet"
+      }
+    },
+    "KW": {
+      "name": "Kuwait",
+      "levels": {
+        "2": "Country",
+        "4": "Governorates (Mouhafazah محافظة)",
+        "6": "Cities / Towns",
+        "7": "City blocks / Towns blocks"
+      }
+    },
+    "KG": {
+      "name": "Kyrgyzstan",
+      "levels": {
+        "2": "Country",
+        "4": "Regions (облусу) / Cities of state importance (Bishkek and Osh)",
+        "6": "Districts (району) / Cities of district importance (Batken, Kök-Janggak...)",
+        "8": "Cities / Towns (Balykchy...)",
+        "9": "Villages"
+      }
+    },
+    "LA": {
+      "name": "Laos",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces (Lao: ແຂວງ khoueng) or one prefecture (kampheng nakhon)",
+        "6": "Districts (Lao: ເມືອງ mɯ́ang)",
+        "8": "Sub-districts (Lao: ຕາແສງ tasseng)",
+        "10": "Villages (Lao: ບ້ານ ban)"
+      }
+    },
+    "LV": {
+      "name": "Latvia",
+      "levels": {
+        "2": "Country",
+        "5": "Municipalities Novadi / Cities Valstspilsētas LAU",
+        "7": "Towns Pilsētas",
+        "8": "Rural territories Pagasti",
+        "9": "Villages Ciemi",
+        "10": "Suburbs Priekšpilsētas"
+      }
+    },
+    "LB": {
+      "name": "Lebanon",
+      "levels": {
+        "2": "Country",
+        "4": "Governorate (Mouhafazah محافظة)",
+        "5": "Qadaa (also known as Caza قضاء ج. أقضية)",
+        "6": "Federation of municipalities (إتحاد بلديات)",
+        "7": "Municipality (بلدية)",
+        "8": "منطقة عقاريّة"
+      }
+    },
+    "LS": {
+      "name": "Lesotho",
+      "levels": {
+        "2": "Country",
+        "4": "Districts",
+        "6": "Constitutencies",
+        "8": "Community councils"
+      }
+    },
+    "LR": {
+      "name": "Liberia",
+      "levels": {
+        "2": "Country",
+        "4": "Counties (15)",
+        "6": "Districts (90)",
+        "8": "Clans (chiefdoms?)"
+      }
+    },
+    "LY": {
+      "name": "Libya",
+      "levels": {
+        "2": "Country",
+        "4": "District (Shabiya)"
+      }
+    },
+    "LI": {
+      "name": "Liechtenstein",
+      "levels": {
+        "2": "Country",
+        "6": "Electoral districts Wahlkreis",
+        "8": "Municipalities Gemeinde LAU"
+      }
+    },
+    "LT": {
+      "name": "Lithuania",
+      "levels": {
+        "2": "Country",
+        "4": "Counties Apskritys NUTS 3",
+        "5": "Municipalities Savivaldybės / Rajonai LAU",
+        "6": "Elderships Seniūnijos (ex LAU) 2",
+        "8": "Cities / towns / villages Miestai / miesteliai / Kaimai",
+        "10": "City/Town suburbs Miesto / miestelio dalys / miesto seniūnijos"
+      }
+    },
+    "LU": {
+      "name": "Luxembourg",
+      "levels": {
+        "2": "Country",
+        "6": "Cantons (region)",
+        "8": "Communes communes, Gemeinden, Gemengen LAU",
+        "9": "Sections / Villages / Neighbourhoods"
+      }
+    },
+    "MG": {
+      "name": "Madagascar",
+      "levels": {
+        "2": "Country",
+        "3": "Faritany mizakatena (provinces)",
+        "4": "Faritra (regions)",
+        "6": "Distrika (districts)",
+        "8": "Kaominina (communes)",
+        "9": "Firaisana (arrondissements)",
+        "10": "Fokontany (sections, communities of settlements / townships / villages)"
+      }
+    },
+    "MW": {
+      "name": "Malawi",
+      "levels": {
+        "2": "Country",
+        "3": "Regions",
+        "4": "Districts",
+        "6": "Traditional authorities (rural areas), Urban administrative wards (urban centers)",
+        "8": "SC - sub-chiefs governed under the authority of the local traditional authority.",
+        "9": "GVH",
+        "10": "Village"
+      }
+    },
+    "MY": {
+      "name": "Malaysia",
+      "levels": {
+        "2": "Country",
+        "3": "Territories (wilayah) (proposed)",
+        "4": "Negeri (states)",
+        "5": "Bahagian (divisions) Sabah & Sarawak only",
+        "6": "Daerah (districts)",
+        "7": "Daerah kecil (subdistricts)",
+        "8": "Mukim (townships)",
+        "10": "Kampung, taman, dll (municipalities, including townships, cities, villages, etc.)"
+      }
+    },
+    "MV": {
+      "name": "Maldives",
+      "levels": {
+        "2": "Country",
+        "4": "Atolls / Capital (Malé)",
+        "8": "Islands",
+        "9": "Districts"
+      }
+    },
+    "ML": {
+      "name": "Mali",
+      "levels": {
+        "2": "Country",
+        "4": "Régions",
+        "6": "Cercles",
+        "8": "Commune"
+      }
+    },
+    "MT": {
+      "name": "Malta",
+      "levels": {
+        "2": "Country",
+        "6": "Islands gżejjer NUTS 3",
+        "7": "Regions reġjuni (ex LAU 1)",
+        "8": "Local councils kunsilli lokali LAU"
+      }
+    },
+    "MH": {
+      "name": "Marshall Islands",
+      "levels": {
+        "2": "Country",
+        "4": "Chains (of islands)",
+        "8": "Atolls (municipalities"
+      }
+    },
+    "MR": {
+      "name": "Mauritania",
+      "levels": {
+        "2": "Country",
+        "4": "Régions (Wilayah)",
+        "6": "Départements (Moughataa)",
+        "8": "Arrondissement",
+        "9": "Communes"
+      }
+    },
+    "MU": {
+      "name": "Mauritius",
+      "levels": {
+        "2": "Country",
+        "3": "Outer territories (Rodriques, Agaléga, Saint Brandon)",
+        "4": "Districts",
+        "6": "Cities (Vacoas-Phoenix, Quatre Bornes, Beau Bassin-Rose Hill, Curepipe)",
+        "8": "Villages",
+        "10": "Hamlets"
+      }
+    },
+    "MX": {
+      "name": "Mexico",
+      "levels": {
+        "2": "Country",
+        "4": "State borders",
+        "6": "Municipal borders",
+        "8": "City / Town limits",
+        "9": "District limits / Delegaciones",
+        "10": "City sectors / Colonias"
+      }
+    },
+    "FM": {
+      "name": "Micronesia|Micronesia|Micronesia",
+      "levels": {
+        "2": "Country",
+        "4": "States",
+        "8": "Municipalities"
+      }
+    },
+    "MD": {
+      "name": "Moldova",
+      "levels": {
+        "2": "Country",
+        "3": "Disputed territory - unrecognized state (Transnistria )",
+        "4": "- Autonomous regions UTA Găgauzia and ATU from the left bank of the Dniester (UAT din stînga Nistrului) - Districts (Raioane) [ex: Florești, Briceni, etc.] - Second level Municipalities (Municipiile de nivelul II) Chișinău, Bălți and Bender",
+        "5": "- Găgăuzia Districts (Raioane) Comrat, Ceadîr-Lunga and Vulcănești Districts - Transnistria Districts (Raioane) Rîbnița, Dubăsari, Grigoriopol and Slobozia Districts - Transnistria Cities Tiraspol City Council and Bender City Council",
+        "6": "First level Municipalities (Municipiile de nivelul I) [ex.: Orhei, Ungheni, etc.]",
+        "7": "Chișinău Municipality's sectors (Sectoarele Municipiului Chișinău) [ex.: Rîșcani, Buiucani, etc.]",
+        "8": "- Towns (Orașe) [ex.: Briceni, Glodeni, Dubăsari, etc.] - Communes (Comune) [ex.: Larga, Crocmaz, etc.] - Villages that do not form a commune (Satele care nu formează o comună) [ex.: Talmaza, Copanca, Bocani, etc.]",
+        "9": "The intravilane limit of villages, towns and cities (Limita intravilana a satelor, orașelor și municipiilor) [ex.: Căinari, Cricova]",
+        "10": "Quarters (Cartiere)"
+      }
+    },
+    "MC": {
+      "name": "Monaco",
+      "levels": {
+        "2": "Country",
+        "8": "Commune",
+        "10": "Quartiers administratifs"
+      }
+    },
+    "MN": {
+      "name": "Mongolia",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces and capital city хот, аймаг / ᠬᠣᠲᠠ , ᠠᠶᠢᠮᠠᠭ",
+        "6": "Soums and districts сум, дүүрэг / ᠰᠤᠮᠤ , ᠳᠡᠭᠦᠷᠭᠡ",
+        "8": "Bags and khoroos баг, хороо / ᠪᠠᠭ , ᠬᠣᠷᠢᠶ᠎ᠠ"
+      }
+    },
+    "ME": {
+      "name": "Montenegro",
+      "levels": {
+        "2": "Country",
+        "6": "Municipalities opštine / општине (ex LAU 1)",
+        "8": "Settlements naselja / насеља LAU"
+      }
+    },
+    "MA": {
+      "name": "Morocco",
+      "levels": {
+        "2": "Country",
+        "3": "|",
+        "4": "Style=\"font-size:smaller",
+        "5": "|Regions (Wilayah) (ولاية) (جهات المغرب)",
+        "6": "|Prefectures (العمالات) Provinces (الأقاليم)",
+        "7": "Style=\"font-size:smaller",
+        "8": "Style=\"font-size:smaller",
+        "9": "Urban Communes (Municipalities) (البلديات) (الجماعات الحضرية)",
+        "10": "Préfectures d'Arrondissements (عمالات المقاطعات) (only in Casablanca)"
+      }
+    },
+    "MZ": {
+      "name": "Mozambique",
+      "levels": {
+        "2": "Country",
+        "3": "Regions // Regiões (Norte, Centro, Sul) Currently not in use",
+        "4": "Provinces OR Capital Maputo // Províncias OU Cidade de Maputo",
+        "5": "Districts OR Province Capital Cities // Distritos OU Cidades Capitais Provinciais",
+        "6": "Administrative Post // Posto Administrativo",
+        "8": "Neighbourhoods // Bairros",
+        "9": "Blocks // Quarteirões Currently not in use"
+      }
+    },
+    "MM": {
+      "name": "Myanmar",
+      "levels": {
+        "2": "Country",
+        "3": "De facto independent areas (e.g. Wa state)",
+        "4": "States, regions, union territory",
+        "5": "Cities (Yangon, Naypyitaw, Mandalay), self-administered divisions, special regions",
+        "6": "Districts, self-administered zones",
+        "7": "Townships",
+        "8": "Towns, Subtownships",
+        "9": "Wards, Village tracts",
+        "10": "Blocks, Villages"
+      }
+    },
+    "NA": {
+      "name": "Namibia",
+      "levels": {
+        "2": "Country",
+        "4": "Regions",
+        "6": "Constituencies",
+        "8": "Municipalities"
+      }
+    },
+    "NR": {
+      "name": "Nauru",
+      "levels": {
+        "2": "Country",
+        "4": "Electoral Constituencies",
+        "6": "Districts"
+      }
+    },
+    "NP": {
+      "name": "Nepal",
+      "levels": {
+        "2": "Country",
+        "3": "Development Regions Not in current use (in use before 2015)",
+        "4": "Provinces",
+        "5": "Zones Not in current use (in use before 2015)",
+        "6": "Districts",
+        "7": "Municipalities Rural municipalities, Municipalities, Sub metropolitans and Metropolitans (Nepali: गाउँपालिका,नगरपालिका, उप-महानगरपालिका, महानगरपालिका)",
+        "8": "Cities/Villages (This admin level in OSM is what the Nepal Gov.",
+        "9": "Wards",
+        "10": "Tole"
+      }
+    },
+    "NL": {
+      "name": "Netherlands|Kingdom of the Netherlands|Netherlands",
+      "levels": {
+        "2": "Country",
+        "3": "|",
+        "4": "|",
+        "8": "Municipalities gemeenten LAU",
+        "10": "| ) and thus not a subdivision in the strict sense"
+      }
+    },
+    "NZ": {
+      "name": "New Zealand",
+      "levels": {
+        "2": "Country",
+        "4": "Regions (Canterbury, Bay of Plenty, Auckland, Gisborne etc.) governed by a regional council or unitary authority, and the Chatham Islands Territory",
+        "6": "Districts and Cities governed by a territorial authority (Dunedin City, Kapiti Coast District etc.)",
+        "8": "Local boards (Auckland) and community boards (elsewhere)"
+      }
+    },
+    "NI": {
+      "name": "Nicaragua",
+      "levels": {
+        "2": "Country",
+        "4": "Departamentos, such as Chontales and RAACS",
+        "6": "Municipios, such as Boaco and Juigalpa",
+        "7": "Indigenous territories, such as Tawira and Mayagna Sauni Bu",
+        "8": "City boundaries, such as Granada and León",
+        "9": "Distritos, Comarcas, such as Distrito I and El Almacen",
+        "10": "Barrios / Residenciales / Colonias, such as Villa Sandino and Bosques de Altamira"
+      }
+    },
+    "NE": {
+      "name": "Niger",
+      "levels": {
+        "2": "Country",
+        "4": "Régions",
+        "6": "Départements",
+        "8": "Communes"
+      }
+    },
+    "NG": {
+      "name": "Nigeria",
+      "levels": {
+        "2": "Country",
+        "3": "Geopolitical zones (6)",
+        "4": "States (36) + the federal capital territory",
+        "6": "Local Government Areas (774)",
+        "8": "Wards (10 to 15 for each LGA - They are like councils)"
+      }
+    },
+    "KP": {
+      "name": "North Korea",
+      "levels": {
+        "2": "Country",
+        "4": "Province (도), Capital city (직할시), Special city (특별시)",
+        "6": "County (군), City (시)",
+        "7": "Ward (구역)",
+        "8": "Town (읍), Village (리), Neighbourhood (동), Workers' district (로동자구)"
+      }
+    },
+    "MK": {
+      "name": "North Macedonia",
+      "levels": {
+        "2": "Country",
+        "4": "Statistical regions Статистички Региони NUTS 3",
+        "6": "City of Skopje Град Скопје",
+        "7": "Municipalities Општини LAU",
+        "8": "City / town / village Град/Село",
+        "9": "Suburb Населби",
+        "10": "Neighbourhood / locality Маало / Локалитет"
+      }
+    },
+    "NO": {
+      "name": "Norway",
+      "levels": {
+        "2": "Country",
+        "4": "County Fylke (19) NUTS 3",
+        "7": "Muncipiality Kommue (430) LAU",
+        "9": "Bydel"
+      }
+    },
+    "OM": {
+      "name": "Oman",
+      "levels": {
+        "2": "Country",
+        "4": "Governorate محافظة",
+        "6": "Provinces ولاية",
+        "8": "Villages/Towns",
+        "10": "Blocks/Subdivisons of Villages and Towns"
+      }
+    },
+    "PK": {
+      "name": "Pakistan",
+      "levels": {
+        "2": "Country",
+        "4": "Province",
+        "5": "Division",
+        "6": "District",
+        "7": "Subdistrict",
+        "8": "Metropolitan Corporation",
+        "9": "Union Council"
+      }
+    },
+    "PW": {
+      "name": "Palau",
+      "levels": {
+        "2": "Country",
+        "4": "States"
+      }
+    },
+    "PA": {
+      "name": "Panama",
+      "levels": {
+        "2": "Country",
+        "4": "Provincias (puede ser comarca)",
+        "5": "Regiones Indígenas",
+        "6": "Distritos / Municipios",
+        "8": "Corregimientos",
+        "9": "Comunidad (rural) Localidad (urbana)",
+        "10": "Barrios Barriada"
+      }
+    },
+    "PG": {
+      "name": "Papua New Guinea",
+      "levels": {
+        "2": "Country",
+        "3": "Regions",
+        "4": "Provinces / Autonomous Region of Bougainville / National Capital District",
+        "5": "Districts",
+        "6": "Urban and Rural LLG (Local-level governments)",
+        "7": "In use, fixme",
+        "9": "In use, fixme"
+      }
+    },
+    "PY": {
+      "name": "Paraguay",
+      "levels": {
+        "2": "Country",
+        "3": "Natural regions regiones naturales",
+        "4": "States departamentos",
+        "8": "Municipal, city limits municipalidades / distritos",
+        "10": "Suburb and locality barrios y compañias rurales"
+      }
+    },
+    "PE": {
+      "name": "Peru",
+      "levels": {
+        "2": "Country",
+        "4": "States, Departments Departamentos",
+        "6": "Regions, Provinces Provincias",
+        "8": "Counties, Districts Distritos",
+        "10": "Suburb and locality Centros Poblados, Caserío, Anexo, Comunidad Nativa, etc"
+      }
+    },
+    "PH": {
+      "name": "the Philippines|Philippines|Philippines",
+      "levels": {
+        "2": "Country",
+        "3": "Regions (Rehiyon)",
+        "4": "Provinces (Lalawigan)",
+        "5": "Provincial legislative districts",
+        "6": "Cities/municipalities (Lungsod/bayan)",
+        "7": "City/municipal legislative districts",
+        "8": "Administrative districts of Manila, Iloilo City and Davao City, former barangays that remain in use for addressing purposes (e.g.",
+        "9": "Barangay zones",
+        "10": "Barangay"
+      }
+    },
+    "PL": {
+      "name": "Poland",
+      "levels": {
+        "2": "Country",
+        "4": "Voivodships, provinces, regions województwa NUTS 2",
+        "6": "Counties powiaty",
+        "7": "Municipalities gminy LAU",
+        "8": "Cities, towns and villages. miasta, miasteczka i wsie",
+        "9": "City districts dzielnice",
+        "10": "Przysiółki"
+      }
+    },
+    "PT": {
+      "name": "Portugal",
+      "levels": {
+        "2": "Country",
+        "4": "Autonomous Regions Regiões autónomas NUTS 2",
+        "6": "Districts Distritos",
+        "7": "Municipalities Municípios LAU",
+        "8": "Civil parishes Freguesias (ex LAU 2)"
+      }
+    },
+    "QA": {
+      "name": "Qatar",
+      "levels": {
+        "2": "Country",
+        "4": "Municipalities (baladiyah مدينة)",
+        "10": "Districts"
+      }
+    },
+    "RO": {
+      "name": "Romania",
+      "levels": {
+        "2": "Country",
+        "5": "Regions Regiuni NUTS 2 same as above",
+        "6": "Counties Judeţe / Municipality of Bucharest NUTS 3",
+        "7": "Metropolitan zones (or other type of inter-municipal association)",
+        "8": "Municipalities Comune, Orașe, Municipii LAU / Bucharest's sectors",
+        "9": "Villages, administrative parts of cities / municipalities",
+        "10": "Neighbourhoods"
+      }
+    },
+    "RU": {
+      "name": "Russia",
+      "levels": {
+        "2": "Country",
+        "3": "|",
+        "4": "Federal districts",
+        "5": "Federal subjects",
+        "6": "Groups of municipal districts / urban okrugs, administrative okrugs / districts of federal cities",
+        "7": "Municipal districts and okrugs of federal subjects (except federal cities), urban okrugs, including ZATO and urban okrugs with intracity division",
+        "9": "Urban and rural municipalities, municipal intra-city territories of federal cities, districts of urban okrugs with intracity division",
+        "10": "Districts and other administrative-territorial units of urban and municipal okrugs"
+      }
+    },
+    "RW": {
+      "name": "Rwanda",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces / Kigali City",
+        "6": "Districts",
+        "7": "Chefferies",
+        "8": "In use: Municipalities",
+        "9": "In use: Villages ? Hamlets"
+      }
+    },
+    "KN": {
+      "name": "Saint Kitts and Nevis",
+      "levels": {
+        "2": "Country",
+        "4": "St Kitts / Nevis",
+        "6": "Parishes"
+      }
+    },
+    "LC": {
+      "name": "Saint Lucia",
+      "levels": {
+        "2": "Country",
+        "4": "Districts"
+      }
+    },
+    "VC": {
+      "name": "Saint Vincent and the Grenadines|Saint Vincent",
+      "levels": {
+        "2": "Country",
+        "6": "Parishes"
+      }
+    },
+    "WS": {
+      "name": "Samoa",
+      "levels": {
+        "2": "Country",
+        "4": "Borders of 11 Traditional Political Districts",
+        "6": "Borders of 51 Electoral Constituencies",
+        "8": "Boundaries of 343+ Villages"
+      }
+    },
+    "SM": {
+      "name": "San Marino",
+      "levels": {
+        "2": "Country",
+        "8": "Municipalities castelli]]"
+      }
+    },
+    "ST": {
+      "name": "Sao Tome and Principe",
+      "levels": {
+        "2": "Country",
+        "4": "Autonomous Region of Príncipe",
+        "6": "Districts",
+        "7": "Municipalities"
+      }
+    },
+    "SA": {
+      "name": "Saudi Arabia",
+      "levels": {
+        "2": "Country",
+        "4": "Regions (منطقة)",
+        "6": "Governorate (محافظة)",
+        "9": "Municipalities (بلدية)",
+        "10": "Districts (حي)"
+      }
+    },
+    "SN": {
+      "name": "Senegal",
+      "levels": {
+        "2": "Country",
+        "4": "Boundary of the \"Regions\" like Saint-Louis, Matam",
+        "5": "Boundaries of the \"Départements\" see a list here",
+        "7": "Boundary of \"arrondissements\" : subdivision of departements; see a list here",
+        "8": "Boundary of communes like Dakar, Tambacounda, Ziguinchor...see a list here or rural communities",
+        "9": "Boundary of \"Arrondissement municipal\"",
+        "10": "Used for the local democracy : quartiers"
+      }
+    },
+    "RS": {
+      "name": "Serbia",
+      "levels": {
+        "2": "Country",
+        "4": "Autonomous provinces аутономне покрајине (also Serbia - North and Serbia - South NUTS 1 regions)",
+        "5": "Regions региони NUTS 2",
+        "6": "Administrative districts управни окрузи (areas области) NUTS 3",
+        "7": "Cities градови",
+        "8": "Municipalities and urban municipalities општине и градске општине LAU",
+        "9": "Settlements насеља (ex LAU 2)",
+        "10": "Local communities месне заједнице"
+      }
+    },
+    "SC": {
+      "name": "Seychelles",
+      "levels": {
+        "2": "Country",
+        "4": "Groups of Districts (Greater Victoria, Rural Mahé, Praslin, La Digue, Outer Islands)",
+        "6": "Districts (eg Bel Air)"
+      }
+    },
+    "SL": {
+      "name": "Sierra Leone",
+      "levels": {
+        "2": "Country",
+        "4": "Borders of 3 Provinces (Eastern, Northern, and Southern) + Western Area (as described in ISO 3166-2)",
+        "5": "Borders of 12 administrative districts, 6 municipalities (including Freetown) and Western Area Rural",
+        "6": "Borders of Paramount Chiefdoms, 8 Wards in Freetown and 4 Districts in Western Area",
+        "7": "Borders of Section Chiefdoms (Paramount Chiefdoms only)"
+      }
+    },
+    "SG": {
+      "name": "Singapore",
+      "levels": {
+        "2": "Country",
+        "5": "Region",
+        "6": "Planning Areas",
+        "7": "Subzones"
+      }
+    },
+    "SK": {
+      "name": "Slovakia",
+      "levels": {
+        "2": "Country",
+        "4": "Regions samosprávne kraje NUTS 3/RŠÚJ 3",
+        "5": "Bratislava and Košice Bratislava, Košice",
+        "6": "Districts okresy (ex LAU 1)/RŠÚJ 4",
+        "8": "Municipalities obce LAU/RŠÚJ 5",
+        "9": "Municipal boroughs of Bratislava and Košice mestské časti Bratislavy a Košíc",
+        "10": "Committees of town parts výbory v mestských častiach"
+      }
+    },
+    "SI": {
+      "name": "Slovenia",
+      "levels": {
+        "2": "Country",
+        "4": "Reserved for regional borders - if they are ever finalized pokrajine",
+        "7": "Administrative units upravne enote (exLAU 1)",
+        "8": "Municipalities občine LAU",
+        "10": "Suburbs, hamlets meje naselij"
+      }
+    },
+    "SB": {
+      "name": "Solomon Islands",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces (9) / Capital",
+        "5": "Wards",
+        "9": "Suburbs"
+      }
+    },
+    "SO": {
+      "name": "Somalia",
+      "levels": {
+        "2": "Country",
+        "3": "Somaliland (disputed territory)",
+        "4": "States (6)",
+        "5": "Regions (19)",
+        "6": "Districts (106 on wikipedia, currently 88 in osm)",
+        "9": "Quarters"
+      }
+    },
+    "ZA": {
+      "name": "South Africa",
+      "levels": {
+        "2": "Country",
+        "4": "Provincial borders",
+        "6": "District borders (borders of district municipalities and metropolitan municipalities)",
+        "7": "N/A Proposed change to municipal borders (borders of local municipalities within districts) (proposed by Ian Coetzee on 4 December 2021)",
+        "8": "Municipal borders (borders of local municipalities within districts) Proposed change to city/town borders (proposed by Ian Coetzee on 4 December 2021)",
+        "9": "N/A Proposed change to ward borders (proposed by Ian Coetzee on 26 November 2021)",
+        "10": "Ward borders Proposed change to suburb borders (proposed by Ian Coetzee on 26 November 2021)"
+      }
+    },
+    "KR": {
+      "name": "South Korea",
+      "levels": {
+        "2": "Country",
+        "4": "Regional(State) Border (Metropolitan Self-Governing Entity(MSGE) or 광역자치단체, as per 대한민국의 행정 구역 - 특별시(서울), 광역시, 도, 특별자치도(제주), 특별자치시(세종))",
+        "6": "County Border (Basic Self-Governing Entity(BSGE) or 기초자치단체 - MSGE's Gu/Gun & Do's Si 특별시의 자치구, 광역시의 자치구/군, 도의 자치시/군)",
+        "7": "City; Within a BSGE (기초자치단체(자치시)의): -gu 구 ; Within a Special Self-governing province (특별자치도의) :-si 시",
+        "8": "Town; Within a -si (시의): -dong 동, -ga 가; Within a -do (도의): -eup 읍 : -myeon 면",
+        "10": "Village (-ri, 리), -tong 통"
+      }
+    },
+    "SS": {
+      "name": "South Sudan",
+      "levels": {
+        "2": "Country",
+        "3": "Historical region (3)",
+        "4": "State (28)",
+        "5": "(Before 2015) State (10)",
+        "6": "County (86)",
+        "7": "Payam (580)",
+        "8": "Boma (2092)",
+        "9": "Village",
+        "10": "Village subdivision (rural) / Block (urban)"
+      }
+    },
+    "ES": {
+      "name": "Spain",
+      "levels": {
+        "2": "Country",
+        "3": "(Unused) Groups of Spanish autonomous communities Agrupación de comunidades autónomas NUTS 1",
+        "4": "Autonomous communities Comunidades y ciudades autónomas NUTS 2",
+        "6": "Provinces Provincias See for insular councils NUTS 3",
+        "7": "Judicial districts, comarcas (counties) and cuadrillas",
+        "8": "Municipalities Municipios LAU",
+        "9": "Districts (parishes)",
+        "10": "Wards"
+      }
+    },
+    "LK": {
+      "name": "Sri Lanka",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces (மாகாணம்)",
+        "5": "Districts (மாவட்டம்)",
+        "6": "Divisions (பிரிவுகள்)",
+        "7": "Subdivisions (கிராம சேவையாளர் பிரிவு)",
+        "8": "Municipalities",
+        "9": "Suburbs, Quarters, Neighbourhoods"
+      }
+    },
+    "SD": {
+      "name": "Sudan",
+      "levels": {
+        "2": "Country",
+        "4": "States (Wilayah ولاية)",
+        "5": "Big Cities / Regions",
+        "6": "Districts (fixme, see level 8)",
+        "7": "In use, fixme",
+        "8": "Districts (fixme, see level 6)",
+        "9": "Municipalities",
+        "10": "In use, fixme"
+      }
+    },
+    "SR": {
+      "name": "Suriname",
+      "levels": {
+        "2": "Country",
+        "4": "Districten (districts equivalent to counties or provinces)",
+        "8": "Ressorten (resorts approximately equivalent to municipalities)"
+      }
+    },
+    "SE": {
+      "name": "Sweden",
+      "levels": {
+        "2": "Country",
+        "4": "County Län NUTS 3 (21)",
+        "6": "Sámi village Sameby",
+        "7": "Muncipiality Kommun (290) LAU",
+        "8": "District / parish Distrikt",
+        "9": "Stadsdelsområde / Stadsdelsnämdsområde (Stockholm / Göteborg)",
+        "10": "Stadsdel / Primärområde"
+      }
+    },
+    "CH": {
+      "name": "Switzerland",
+      "levels": {
+        "2": "Country",
+        "4": "Cantons Kantone NUTS 3",
+        "5": "Administrative region or other which isn't a district Verwaltungs&shy",
+        "6": "Districts Bezirke/Ämter / districts",
+        "7": "Circles or something other between districts and municipalities",
+        "8": "Municipalities Gemeinden/Städte / communes/villes LAU",
+        "9": "Suburbs Stadtkreise/Stadtteile / secteurs",
+        "10": "Quarters Quartiere / quartiers"
+      }
+    },
+    "SY": {
+      "name": "Syria",
+      "levels": {
+        "2": "Country",
+        "4": "Governorates محافظة muhafazah",
+        "5": "Districts منطقة mintaqah",
+        "6": "Subdistricts ناحية‎‎ nahiya",
+        "8": "Cities, towns and villages of Subdistrict Damascus Municipalities بلدية baladiyah",
+        "10": "Damascus neighborhoods الحي hayy"
+      }
+    },
+    "TW": {
+      "name": "Taiwan",
+      "levels": {
+        "2": "Country",
+        "4": "Municipality 直轄市; Provintial municipality 省轄市; County 縣",
+        "7": "District 直轄市、省轄市的區",
+        "8": "County-administered city 縣轄市; Township 鄉/鎮",
+        "9": "Village 村/里",
+        "10": "Neighbourhood 鄰"
+      }
+    },
+    "TJ": {
+      "name": "Tajikistan",
+      "levels": {
+        "2": "Country",
+        "4": "Borders of 3 Provinces (Sughd, Khatlon, Districts of Republican Subordination), 1 Region (Gorno-Badakhshan Autonomous Region) and Capital city (Dushanbe)",
+        "6": "District (e.g. Varzob, Khovaling, Murghob)",
+        "8": "Jamoat (e.g. Sarichashma)",
+        "10": "Deha (village) / micro rayons"
+      }
+    },
+    "TZ": {
+      "name": "Tanzania",
+      "levels": {
+        "2": "Country",
+        "3": "Zone (e.g. Northern Zone)",
+        "4": "Region (e.g. Arusha)",
+        "5": "District (e.g. Arumeru)",
+        "6": "Division (e.g. Mbarika)",
+        "7": "Ward (e.g. Usa River)",
+        "9": "Village (in rural context) or Sub-ward/Mtaa (e.g. USA River; urban)",
+        "10": "Shina (area of responsibility of a Mjumbe or Tencell)"
+      }
+    },
+    "TH": {
+      "name": "Thailand",
+      "levels": {
+        "2": "Country",
+        "4": "→ Province / จังหวัด → Bangkok / กรุงเทพมหานคร",
+        "6": "→ District / อำเภอ → District / เขต (in Bangkok)",
+        "7": "→ Subdistrict Administrative Organization (SAO) / องค์การบริหารส่วนตำบล (อบต.) → City Municipality / เทศบาลนคร → Town Municipality / เทศบาลเมือง → Subdistrict Municipality / เทศบาลตำบล → Pattaya City / เมืองพัทยา",
+        "8": "→ Subdistrict / ตำบล → Subdistrict / แขวง (in Bangkok)",
+        "9": "Khwaeng / แขวง (in municipality)",
+        "10": "Village / หมู่บ้าน"
+      }
+    },
+    "TL": {
+      "name": "East Timor|East Timor|Timor-Leste",
+      "levels": {
+        "2": "Country",
+        "4": "Municipalities (pt:município, tet:munisípiu)",
+        "5": "Subdistricts (pt:postos administrativos, tet:postu administrativu)",
+        "6": "Villages (Sucos) (pt:aldeias (sucos), tet:sukus)"
+      }
+    },
+    "TG": {
+      "name": "Togo",
+      "levels": {
+        "2": "Country",
+        "4": "Région Commune de Lomé (statut particulier)",
+        "5": "Préfecture",
+        "6": "Sous-préfecture",
+        "7": "Commune",
+        "8": "Arrondissement municipal",
+        "9": "Quartier",
+        "10": "Village"
+      }
+    },
+    "TO": {
+      "name": "Tonga",
+      "levels": {
+        "2": "Country",
+        "4": "Administrative divisions (to:?)",
+        "5": "Districts (Vahe)",
+        "7": "In use, fixme"
+      }
+    },
+    "TT": {
+      "name": "Trinidad and Tobago",
+      "levels": {
+        "2": "Country",
+        "4": "Regional corporations / Municipalities / Ward",
+        "9": "In use, quarters"
+      }
+    },
+    "TN": {
+      "name": "Tunisia",
+      "levels": {
+        "2": "Country",
+        "4": "Borders of the 24 Governorates of Tunisia",
+        "5": "Delegations (Districts) Borders",
+        "6": "Imadats (Sectors) Borders"
+      }
+    },
+    "TR": {
+      "name": "Turkey",
+      "levels": {
+        "2": "Country",
+        "3": "Census defined geographical regions Coğrafi Bölgeler NUTS 1",
+        "4": "Provinces İller (81) NUTS 3",
+        "6": "Districts İlçeler LAU",
+        "7": "Incorporated villages Beldeler (ex LAU 2)",
+        "8": "Neighbourhoods / unincorporated villages Köyler ve Mahalleler",
+        "10": "Village subdivisions Köy altı yerleşimler: çiftlik, mezra, kom, divan, oba, yayla, küme evleri"
+      }
+    },
+    "TM": {
+      "name": "Turkmenistan",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces / Welayatlar / Области (e.g., Ahal)",
+        "5": "Provincial districts / Welayatyň etraplary / Районы областей (e.g., Ak Bugday etraby)",
+        "6": "Cities, Towns, Rural Councils / Şäherler, Şäherçeler, Geňeşler / Города, посёлки, сельсоветы (e.g., Balkanabat, Oguzhan, Bugdaýly geňeşligi)",
+        "7": "Municipal Boroughs with mayors / Şäheryň häkimli uly etraplary / Крупные городские районы с мэром (e.g., Awaza)",
+        "8": "Villages / Obalar / Сёла (e.g., Babaarap)",
+        "9": "Municipal Districts / Şäheryň kiçi etraplary (etrapçalary) / Микрорайоны (e.g., Parahat 7)",
+        "10": "Hamlets, Neighborhoods, Subdistricts / Oba ilatly punktlary, Ýaşaýyş toplumlary, Etrabyň etraplary / Хуторы, Субмикрорайоны (e.g., Üçgöz, Çoganly Ýaşaýyş Toplumy, Parahat 7/2)"
+      }
+    },
+    "TV": {
+      "name": "Tuvalu",
+      "levels": {
+        "2": "Country",
+        "8": "Administrative atolls/islands (9 Districts)"
+      }
+    },
+    "UG": {
+      "name": "Uganda",
+      "levels": {
+        "2": "Country",
+        "3": "Borders of the regions (which do not have any political or administrative importance)",
+        "4": "Borders of the 112 districts",
+        "6": "Borders of counties",
+        "8": "Borders of sub-counties",
+        "9": "Borders of Parishes",
+        "10": "Borders of Zones (in Kampala only)"
+      }
+    },
+    "UA": {
+      "name": "Ukraine",
+      "levels": {
+        "2": "Country",
+        "4": "Crimea, Oblasts, Kyiv and Sevastopol АР Крим, області, Київ і Севастополь АР Крым, области, Киев и Севастополь",
+        "6": "Crimea rayons, rayons in oblasts, cities of regional significance Райони в Криму, райони в областях, міста обласного значення Районы в Крыму, районы в областях, города областного значения",
+        "7": "Administrative rayons in cities and towns, united territorial communities Адміністративні райони у містах, об'єднані територіальні громади Административные районы в городах, объединённые территориальные громады",
+        "8": "Local radas in rayons in Crimea and oblasts Місцеві ради в районах Криму і областей (міські ради, селищні ради, сільські ради) Местные советы в районах Крыма и областей (городские советы, поселковые советы, сельские советы)",
+        "9": "Settlements per se Власне населені пункти Собственно населённые пункты"
+      }
+    },
+    "AE": {
+      "name": "United Arab Emirates",
+      "levels": {
+        "2": "Country",
+        "4": "Emirates (إمارة)",
+        "5": "Capital Abu Dhabi (أبو ظبي)",
+        "7": "In use, fixme",
+        "8": "Municipalities",
+        "10": "Suburbs / Quarters / Villages"
+      }
+    },
+    "GB": {
+      "name": "United Kingdom",
+      "levels": {
+        "2": "Country",
+        "4": "England",
+        "5": "Combined Authorities and Greater London",
+        "6": "Two-tier non-metropolitan counties, Metropolitan counties, Unitary authorities, City of London",
+        "8": "Metropolitan districts, non-metropolitan districts, London boroughs",
+        "10": "Civil parishes"
+      }
+    },
+    "US": {
+      "name": "United States",
+      "levels": {
+        "2": "Country",
+        "4": "The 50 states, 5 populated territories, and the District of Columbia",
+        "5": "New York City (an agglomerate of multiple county equivalents)",
+        "6": "State counties and \"county equivalents,\" Territorial municipalities",
+        "7": "Civil townships (in about one-third of states)",
+        "8": "State Municipalities: cities, towns and villages; infrequently, hamlets",
+        "9": "Wards (rare)",
+        "10": "Neighborhoods (infrequent), homeowner associations (infrequent)"
+      }
+    },
+    "UY": {
+      "name": "Uruguay",
+      "levels": {
+        "2": "Country",
+        "4": "Department borders",
+        "6": "Local board limits (municipios)",
+        "8": "City / town limits",
+        "10": "Barrios"
+      }
+    },
+    "UZ": {
+      "name": "Uzbekistan",
+      "levels": {
+        "2": "Country",
+        "4": "Borders of 12 Provinces (viloyat), 1 Autonomous Republic (Karakalpakstan Republic) and 1 Capital city (Tashkent city)",
+        "6": "District (tuman) and cities of provinces subordination (viloyatga bo'ysunuchi shaharlar) (e.g.",
+        "8": "Cities of districts subordination (tumanga bo'sunuvchi shaharlar), urban settlements (shaharcha) and rural community of citizens (qishloq fuqarolar yig'ini) (e.g.",
+        "10": "Neighborhood (Mahalla), village (qishloq), small districts (kichik tumanlar (mikro rayon))"
+      }
+    },
+    "VU": {
+      "name": "Vanuatu",
+      "levels": {
+        "2": "Country",
+        "4": "Province",
+        "6": "Area (sometimes referred to as Area Council.",
+        "8": "Ward (subdivision of Municipalities, and in some cases former Municipalities)",
+        "9": "Community (Nakamal council) (Not typically used by the central government, but in use to further subdivide some Areas)"
+      }
+    },
+    "VE": {
+      "name": "Venezuela",
+      "levels": {
+        "2": "Country",
+        "4": "→ State (Estado) → Capital District (Distrito Capital) → Federal Dependencies (Dependencia Federal)",
+        "5": "→ Distrito Metropolitano → Alcaldía Mayor",
+        "6": "→ Municipality (Municipio)",
+        "7": "→ Parish (Parroquia)",
+        "8": "→ city → town → village → hamlet",
+        "9": "→ suburb → quarter → neighbourhood",
+        "10": "→ suburb → quarter → neighbourhood"
+      }
+    },
+    "VN": {
+      "name": "Vietnam",
+      "levels": {
+        "2": "Country",
+        "4": "Province ( ), city ( )",
+        "6": "Commune ( ), ward ( ), special administrative region ( )"
+      }
+    },
+    "EH": {
+      "name": "Sahrawi Arab Democratic Republic|Western Sahara",
+      "levels": {
+        "2": "Country",
+        "7": "Caidats (القيادة)",
+        "8": "Municipalities (الجماعات الحضرية)"
+      }
+    },
+    "YE": {
+      "name": "Yemen",
+      "levels": {
+        "2": "Country",
+        "4": "Governorates (محافظة)",
+        "5": "Aden (مدينة عدن)",
+        "6": "Districts (مديرية)",
+        "7": "Villages"
+      }
+    },
+    "ZM": {
+      "name": "Zambia",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces",
+        "5": "Districts"
+      }
+    },
+    "ZW": {
+      "name": "Zimbabwe",
+      "levels": {
+        "2": "Country",
+        "4": "Provinces",
+        "6": "Districts",
+        "8": "Municipalities",
+        "10": "Suburbs / Wards"
+      }
+    }
+  }
+}

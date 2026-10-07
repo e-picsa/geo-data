@@ -12,6 +12,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,cjs,js,json,md,css,scss}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,cjs,js,json,md,css,scss}\"",
+    "update:osm-levels": "bun scripts/update-osm-admin-levels.ts",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -30,26 +31,22 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/e-picsa/geo-data/issues"
   },
   "homepage": "https://github.com/e-picsa/geo-data#readme",
+  "devDependencies": {
+    "@eslint/js": "^9.3.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^9.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^7.9.0"
+  },
   "workspaces": [
     "api",
     "web"
-  ],
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "concurrently": "^9.2.1",
-    "eslint": "^10.0.3",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.3.3",
-    "prettier": "^3.8.1",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.57.0"
-  }
+  ]
 }
