@@ -45,6 +45,25 @@ function App() {
     return topojsonClient.feature(parsedTopojson, parsedTopojson.objects[objectKey]) as any;
   }, [parsedTopojson]);
 
+  const availableLevels = useMemo(() => {
+    if (!fullGeoJson?.features) return [];
+    const levels = new Set<number>();
+    for (const f of fullGeoJson.features) {
+      const lvl = Number(f.properties?.admin_level);
+      if (!Number.isNaN(lvl)) {
+        levels.add(lvl);
+      }
+    }
+    return Array.from(levels).sort((a: number, b: number) => a - b);
+  }, [fullGeoJson]);
+
+  // Adjust selected admin level if not present in the current dataset
+  useEffect(() => {
+    if (availableLevels.length > 0 && !availableLevels.includes(adminLevel)) {
+      setAdminLevel(availableLevels.includes(2) ? 2 : availableLevels[0]);
+    }
+  }, [availableLevels, adminLevel]);
+
   const geoJsonData = useMemo(() => {
     if (!fullGeoJson) return null;
     return {
@@ -127,7 +146,11 @@ function App() {
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">Admin Level</label>
-            <AdminLevelSelect value={adminLevel} onChange={setAdminLevel} />
+            <AdminLevelSelect
+              value={adminLevel}
+              onChange={setAdminLevel}
+              availableLevels={availableLevels}
+            />
           </div>
         </div>
 
