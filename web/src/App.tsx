@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as topojsonClient from 'topojson-client';
@@ -21,14 +21,14 @@ interface BoundaryResponse {
 
 function App() {
   const [countryCode, setCountryCode] = useState('MW');
-  const [adminLevel, setAdminLevel] = useState<number>(2);
-  const [loading, setLoading] = useState(false);
+  const [selectedAdminLevel, setSelectedAdminLevel] = useState<number>(2);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
 
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
-  // Update GeoJSON whenever data or adminLevel changes
+  // Update GeoJSON whenever data changes
   const parsedTopojson = useMemo(() => {
     if (!data?.topojson) return null;
     try {
@@ -37,7 +37,7 @@ function App() {
       console.error('Failed to parse topojson', e);
       return null;
     }
-  }, [data?.topojson]);
+  }, [data]);
 
   const fullGeoJson = useMemo(() => {
     if (!parsedTopojson?.objects) return null;
@@ -58,17 +58,18 @@ function App() {
     return Array.from(levels).sort((a: number, b: number) => a - b);
   }, [fullGeoJson]);
 
-  // Adjust selected admin level if not applicable for country or not present in available dataset
-  useEffect(() => {
+  // Derive active admin level during render to avoid cascading renders
+  const adminLevel = useMemo(() => {
     const osmInfo = getCountryOsmLevels(countryCode);
-    const isSupportedByCountry = !osmInfo?.levels || Boolean(osmInfo.levels[String(adminLevel)]);
-    const isAvailableInData = !availableLevels.length || availableLevels.includes(adminLevel);
+    const isSupportedByCountry =
+      !osmInfo?.levels || Boolean(osmInfo.levels[String(selectedAdminLevel)]);
+    const isAvailableInData =
+      !availableLevels.length || availableLevels.includes(selectedAdminLevel);
 
     if (isSupportedByCountry && isAvailableInData) {
-      return;
+      return selectedAdminLevel;
     }
 
-    // Prefer candidates supported by both the country and present in loaded data
     const candidates = [2, 3, 4, 5, 6, 7, 8].filter(
       (level) =>
         (!osmInfo?.levels || Boolean(osmInfo.levels[String(level)])) &&
@@ -76,12 +77,13 @@ function App() {
     );
 
     if (candidates.length > 0) {
-      setAdminLevel(candidates.includes(2) ? 2 : candidates[0]);
-    } else if (availableLevels.length > 0) {
-      // Fallback if no candidate overlaps: select first available level in dataset
-      setAdminLevel(availableLevels[0]);
+      return candidates.includes(2) ? 2 : candidates[0];
     }
-  }, [countryCode, availableLevels, adminLevel]);
+    if (availableLevels.length > 0) {
+      return availableLevels[0];
+    }
+    return selectedAdminLevel;
+  }, [countryCode, availableLevels, selectedAdminLevel]);
 
   const geoJsonData = useMemo(() => {
     if (!fullGeoJson) return null;
@@ -93,42 +95,80 @@ function App() {
     };
   }, [fullGeoJson, adminLevel]);
 
-  const fetchBoundaries = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setData(null);
+  const handleCountryChange = useCallback(
+    async (newCode: string) => {
+      setCountryCode(newCode);
+      setLoading(true);
+      setError(null);
+      setData(null);
 
-    try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country_code: countryCode }),
-      });
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ country_code: newCode }),
+        });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to fetch boundaries');
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Failed to fetch boundaries');
+        }
+
+        const payload: BoundaryResponse = await res.json();
+        setData(payload);
+      } catch (err: any) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('An unexpected error occurred while fetching boundaries.');
+        }
+      } finally {
+        setLoading(false);
       }
+    },
+    [API_URL],
+  );
 
-      const payload: BoundaryResponse = await res.json();
-      setData(payload);
-    } catch (err: any) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('An unexpected error occurred while fetching boundaries.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [countryCode, API_URL]);
-
-  // Automatically fetch boundaries when country changes
   useEffect(() => {
-    if (countryCode) {
-      fetchBoundaries();
+    let ignore = false;
+
+    async function loadInitial() {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ country_code: 'MW' }),
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Failed to fetch boundaries');
+        }
+
+        const payload: BoundaryResponse = await res.json();
+        if (!ignore) {
+          setData(payload);
+        }
+      } catch (err: any) {
+        if (!ignore) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'An unexpected error occurred while fetching boundaries.',
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
     }
-  }, [countryCode, fetchBoundaries]);
+
+    loadInitial();
+    return () => {
+      ignore = true;
+    };
+  }, [API_URL]);
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
@@ -160,7 +200,7 @@ function App() {
         <div className="flex flex-col gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">Country</label>
-            <CountrySelect value={countryCode} onChange={setCountryCode} />
+            <CountrySelect value={countryCode} onChange={handleCountryChange} />
           </div>
 
           <div className="space-y-1.5">
@@ -179,7 +219,7 @@ function App() {
             </div>
             <AdminLevelSelect
               value={adminLevel}
-              onChange={setAdminLevel}
+              onChange={setSelectedAdminLevel}
               countryCode={countryCode}
               availableLevels={availableLevels}
             />

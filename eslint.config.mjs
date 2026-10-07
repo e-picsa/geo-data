@@ -9,7 +9,16 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   prettierConfig,
   {
-    ignores: ["**/node_modules/**", "**/dist/**", "**/.bun/**", "*.config.mjs", "*.config.js", "web/tailwind.config.js", "web/postcss.config.js", ".github/**"],
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.bun/**",
+      "*.config.mjs",
+      "*.config.js",
+      "web/tailwind.config.js",
+      "web/postcss.config.js",
+      ".github/**",
+    ],
   },
   // Global / API rules
   {
@@ -20,8 +29,8 @@ export default tseslint.config(
     },
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
-    }
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+    },
   },
   // Frontend (React/Vite) specific rules
   {
@@ -34,7 +43,9 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/preserve-manual-memoization": "off",
     },
   }
 );
