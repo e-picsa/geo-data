@@ -3,8 +3,9 @@ import { BoundaryCache } from './boundary-cache.ts';
 import { PbfBoundaryExtractor } from './pbf-extractor.ts';
 import { ensureRawPbf } from './raw-pbf.ts';
 import { convertToGeoJSON } from './geojson-converter.ts';
+import { getCountryAdminLevels } from './url-mapping.ts';
 
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 
 export interface OsmData {
   elements: OsmEntity[];
@@ -29,8 +30,10 @@ export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions) {
 
   const pbfPath = await ensureRawPbf(countryCode, CACHE_VERSION, signal);
 
+  const adminLevels = getCountryAdminLevels(countryCode);
   const extractor = new PbfBoundaryExtractor(pbfPath, signal, {
     countryCode,
+    adminLevels,
   });
   const extracted = await extractor.extract();
 

@@ -1,9 +1,12 @@
 export interface CountryConfig {
   geofabrikPath: string | null;
   pbfSizeMb: number;
+  adminLevels?: number[];
 }
 
 const PBF_SIZE_THRESHOLD_MB = 100;
+
+export const DEFAULT_ADMIN_LEVELS = [2, 3, 4, 5, 6];
 
 export const GEOFABRIK_COUNTRIES: Record<string, CountryConfig> = {
   AO: { geofabrikPath: 'africa/angola', pbfSizeMb: 75 },
@@ -55,7 +58,7 @@ export const GEOFABRIK_COUNTRIES: Record<string, CountryConfig> = {
   TG: { geofabrikPath: 'africa/togo', pbfSizeMb: 36 },
   UG: { geofabrikPath: 'africa/uganda', pbfSizeMb: 86 },
   ZM: { geofabrikPath: 'africa/zambia', pbfSizeMb: 96 },
-  ZW: { geofabrikPath: 'africa/zimbabwe', pbfSizeMb: 83 },
+  ZW: { geofabrikPath: 'africa/zimbabwe', pbfSizeMb: 83, adminLevels: [2, 4, 6] },
 
   DE: { geofabrikPath: 'europe/germany', pbfSizeMb: 2100 },
   FR: { geofabrikPath: 'europe/france', pbfSizeMb: 1600 },
@@ -134,6 +137,11 @@ export const GEOFABRIK_COUNTRIES: Record<string, CountryConfig> = {
 
 export function getCountryConfig(countryCode: string): CountryConfig | null {
   return GEOFABRIK_COUNTRIES[countryCode.toUpperCase()] || null;
+}
+
+export function getCountryAdminLevels(countryCode: string): number[] {
+  const config = getCountryConfig(countryCode);
+  return config?.adminLevels ?? DEFAULT_ADMIN_LEVELS;
 }
 
 export function shouldUseGeofabrik(countryCode: string): boolean {

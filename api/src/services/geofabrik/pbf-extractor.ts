@@ -6,6 +6,7 @@ import type { ExtractedOsmData } from './boundary-cache.ts';
 
 export interface ExtractorOptions {
   countryCode: string;
+  adminLevels?: number[] | Set<number>;
 }
 
 // Strictly allow only tags necessary for admin identification and rendering.
@@ -21,17 +22,21 @@ const RELATION_TAG_ALLOWLIST = new Set([
 
 const PROGRESS_EVERY_BLOCKS = 1000;
 
-const ADMIN_LEVELS = new Set([2, 3, 4, 5]);
+const DEFAULT_ADMIN_LEVELS = new Set([2, 3, 4, 5, 6]);
 
 // Valid roles for boundary geometries. Explicitly excludes 'subarea' and 'label'.
 const VALID_BOUNDARY_ROLES = new Set(['outer', 'inner', '']);
 
 export class PbfBoundaryExtractor {
+  private readonly adminLevels: Set<number>;
+
   constructor(
     private readonly pbfPath: string,
     private readonly signal: AbortSignal,
     public options: ExtractorOptions,
-  ) {}
+  ) {
+    this.adminLevels = options.adminLevels ? new Set(options.adminLevels) : DEFAULT_ADMIN_LEVELS;
+  }
 
   async extract(): Promise<ExtractedOsmData> {
     const { nodes, ways, relations } = await this.extractData();
@@ -51,7 +56,7 @@ export class PbfBoundaryExtractor {
   }
 
   private async extractData() {
-    console.log(`Scanning for admin_levels=[${Array.from(ADMIN_LEVELS).join(',')}]...`);
+    console.log(`Scanning for admin_levels=[${Array.from(this.adminLevels).join(',')}]...`);
     const { countryCode } = this.options;
 
     const requiredWays = new Set<number>();
@@ -61,7 +66,7 @@ export class PbfBoundaryExtractor {
     const relationsRaw = await this.filterBlocks<OsmRelation>('relation', (entity) => {
       const tags = entity.tags;
       if (!tags || tags.boundary !== 'administrative' || !tags.admin_level) return false;
-      if (!ADMIN_LEVELS.has(Number(tags.admin_level))) return false;
+      if (!this.adminLevels.has(Number(tags.admin_level))) return false;
 
       // Filter to includ target country (where tagged)
       const iso1Code = tags['ISO3166-1'];

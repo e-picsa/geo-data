@@ -2,32 +2,44 @@ import React from 'react';
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
 import { CheckIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
 
-const adminLevelOptions = [
+export interface AdminLevelOption {
+  value: number;
+  label: string;
+}
+
+const allAdminLevelOptions: AdminLevelOption[] = [
   { value: 2, label: 'Level 2 (Country)' },
   { value: 3, label: 'Level 3 (Region)' },
   { value: 4, label: 'Level 4 (State/Province)' },
   { value: 5, label: 'Level 5 (District/Council)' },
+  { value: 6, label: 'Level 6 (District/County)' },
 ];
 
 export interface AdminLevelSelectProps {
   value: number;
   onChange: (value: number) => void;
+  availableLevels?: number[];
 }
 
-export function AdminLevelSelect({ value, onChange }: AdminLevelSelectProps) {
+export function AdminLevelSelect({ value, onChange, availableLevels }: AdminLevelSelectProps) {
+  const options =
+    availableLevels && availableLevels.length > 0
+      ? allAdminLevelOptions.filter((o) => availableLevels.includes(o.value))
+      : allAdminLevelOptions;
+
   return (
     <Listbox value={value} onChange={onChange}>
       <div className="relative mt-1">
         <ListboxButton className="relative w-full cursor-default rounded-md bg-white py-2 pl-3 pr-10 text-left border border-slate-300 shadow-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm">
           <span className="block truncate">
-            {adminLevelOptions.find((o) => o.value === value)?.label || `Level ${value}`}
+            {options.find((o) => o.value === value)?.label || `Level ${value}`}
           </span>
           <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
             <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
           </span>
         </ListboxButton>
         <ListboxOptions className="absolute z-[100] mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm">
-          {adminLevelOptions.map((option) => (
+          {options.map((option) => (
             <ListboxOption
               key={option.value}
               className={({ focus }) =>

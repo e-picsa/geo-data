@@ -12,7 +12,7 @@ import { stringifyTopojsonReadable, summarizeTopojson } from '../utils/topojson.
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 
 type Source = 'cache' | 'generated';
 
