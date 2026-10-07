@@ -58,20 +58,30 @@ function App() {
     return Array.from(levels).sort((a: number, b: number) => a - b);
   }, [fullGeoJson]);
 
-  // When country changes, ensure selected admin level is applicable for that country
+  // Adjust selected admin level if not applicable for country or not present in available dataset
   useEffect(() => {
     const osmInfo = getCountryOsmLevels(countryCode);
-    if (osmInfo?.levels && !osmInfo.levels[String(adminLevel)]) {
-      setAdminLevel(2);
-    }
-  }, [countryCode, adminLevel]);
+    const isSupportedByCountry = !osmInfo?.levels || Boolean(osmInfo.levels[String(adminLevel)]);
+    const isAvailableInData = !availableLevels.length || availableLevels.includes(adminLevel);
 
-  // Adjust selected admin level if not present in the current dataset once loaded
-  useEffect(() => {
-    if (availableLevels.length > 0 && !availableLevels.includes(adminLevel)) {
-      setAdminLevel(availableLevels.includes(2) ? 2 : availableLevels[0]);
+    if (isSupportedByCountry && isAvailableInData) {
+      return;
     }
-  }, [availableLevels, adminLevel]);
+
+    // Prefer candidates supported by both the country and present in loaded data
+    const candidates = [2, 3, 4, 5, 6, 7, 8].filter(
+      (level) =>
+        (!osmInfo?.levels || Boolean(osmInfo.levels[String(level)])) &&
+        (!availableLevels.length || availableLevels.includes(level)),
+    );
+
+    if (candidates.length > 0) {
+      setAdminLevel(candidates.includes(2) ? 2 : candidates[0]);
+    } else if (availableLevels.length > 0) {
+      // Fallback if no candidate overlaps: select first available level in dataset
+      setAdminLevel(availableLevels[0]);
+    }
+  }, [countryCode, availableLevels, adminLevel]);
 
   const geoJsonData = useMemo(() => {
     if (!fullGeoJson) return null;

@@ -1,10 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-// Load country-list from web workspace or root
-const { getData } = require('../web/node_modules/country-list');
+import { getData } from 'country-list';
 
 const manualMap: Record<string, string> = {
   turkey: 'TR',
