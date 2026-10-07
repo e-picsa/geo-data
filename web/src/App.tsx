@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as topojsonClient from 'topojson-client';
@@ -6,7 +6,8 @@ import { CountrySelect } from './components/CountrySelect';
 import { AdminLevelSelect } from './components/AdminLevelSelect';
 import { BoundsFitter } from './components/BoundsFitter';
 import { ExportTilesButton } from './components/ExportTilesButton';
-import { TrashIcon } from '@heroicons/react/20/solid';
+import { TrashIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
+import { getCountryOsmLevels } from './data/osm-admin-levels';
 
 interface BoundaryResponse {
   country_code: string;
@@ -20,14 +21,14 @@ interface BoundaryResponse {
 
 function App() {
   const [countryCode, setCountryCode] = useState('MW');
-  const [adminLevel, setAdminLevel] = useState<number>(2);
-  const [loading, setLoading] = useState(false);
+  const [selectedAdminLevel, setSelectedAdminLevel] = useState<number>(2);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
 
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
-  // Update GeoJSON whenever data or adminLevel changes
+  // Update GeoJSON whenever data changes
   const parsedTopojson = useMemo(() => {
     if (!data?.topojson) return null;
     try {
@@ -36,7 +37,7 @@ function App() {
       console.error('Failed to parse topojson', e);
       return null;
     }
-  }, [data?.topojson]);
+  }, [data]);
 
   const fullGeoJson = useMemo(() => {
     if (!parsedTopojson?.objects) return null;
@@ -57,12 +58,32 @@ function App() {
     return Array.from(levels).sort((a: number, b: number) => a - b);
   }, [fullGeoJson]);
 
-  // Adjust selected admin level if not present in the current dataset
-  useEffect(() => {
-    if (availableLevels.length > 0 && !availableLevels.includes(adminLevel)) {
-      setAdminLevel(availableLevels.includes(2) ? 2 : availableLevels[0]);
+  // Derive active admin level during render to avoid cascading renders
+  const adminLevel = useMemo(() => {
+    const osmInfo = getCountryOsmLevels(countryCode);
+    const isSupportedByCountry =
+      !osmInfo?.levels || Boolean(osmInfo.levels[String(selectedAdminLevel)]);
+    const isAvailableInData =
+      !availableLevels.length || availableLevels.includes(selectedAdminLevel);
+
+    if (isSupportedByCountry && isAvailableInData) {
+      return selectedAdminLevel;
     }
-  }, [availableLevels, adminLevel]);
+
+    const candidates = [2, 3, 4, 5, 6, 7, 8].filter(
+      (level) =>
+        (!osmInfo?.levels || Boolean(osmInfo.levels[String(level)])) &&
+        (!availableLevels.length || availableLevels.includes(level)),
+    );
+
+    if (candidates.length > 0) {
+      return candidates.includes(2) ? 2 : candidates[0];
+    }
+    if (availableLevels.length > 0) {
+      return availableLevels[0];
+    }
+    return selectedAdminLevel;
+  }, [countryCode, availableLevels, selectedAdminLevel]);
 
   const geoJsonData = useMemo(() => {
     if (!fullGeoJson) return null;
@@ -74,42 +95,80 @@ function App() {
     };
   }, [fullGeoJson, adminLevel]);
 
-  const fetchBoundaries = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setData(null);
+  const handleCountryChange = useCallback(
+    async (newCode: string) => {
+      setCountryCode(newCode);
+      setLoading(true);
+      setError(null);
+      setData(null);
 
-    try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country_code: countryCode }),
-      });
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ country_code: newCode }),
+        });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to fetch boundaries');
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Failed to fetch boundaries');
+        }
+
+        const payload: BoundaryResponse = await res.json();
+        setData(payload);
+      } catch (err: any) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('An unexpected error occurred while fetching boundaries.');
+        }
+      } finally {
+        setLoading(false);
       }
+    },
+    [API_URL],
+  );
 
-      const payload: BoundaryResponse = await res.json();
-      setData(payload);
-    } catch (err: any) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('An unexpected error occurred while fetching boundaries.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [countryCode, API_URL]);
-
-  // Automatically fetch boundaries when country changes
   useEffect(() => {
-    if (countryCode) {
-      fetchBoundaries();
+    let ignore = false;
+
+    async function loadInitial() {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ country_code: 'MW' }),
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Failed to fetch boundaries');
+        }
+
+        const payload: BoundaryResponse = await res.json();
+        if (!ignore) {
+          setData(payload);
+        }
+      } catch (err: any) {
+        if (!ignore) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'An unexpected error occurred while fetching boundaries.',
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
     }
-  }, [countryCode, fetchBoundaries]);
+
+    loadInitial();
+    return () => {
+      ignore = true;
+    };
+  }, [API_URL]);
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
@@ -141,14 +200,27 @@ function App() {
         <div className="flex flex-col gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">Country</label>
-            <CountrySelect value={countryCode} onChange={setCountryCode} />
+            <CountrySelect value={countryCode} onChange={handleCountryChange} />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Admin Level</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-700">Admin Level</label>
+              <a
+                href="https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
+                title="View OSM admin levels definition for specific countries"
+              >
+                <span>OSM Guide</span>
+                <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden="true" />
+              </a>
+            </div>
             <AdminLevelSelect
               value={adminLevel}
-              onChange={setAdminLevel}
+              onChange={setSelectedAdminLevel}
+              countryCode={countryCode}
               availableLevels={availableLevels}
             />
           </div>
@@ -198,7 +270,9 @@ function App() {
                 if (!confirm('Are you sure you want to clear the server cache?')) return;
                 try {
                   const baseUrl = API_URL.replace(/\/$/, '');
-                  const res = await fetch(`${baseUrl}/admin/clear-cache`, { method: 'POST' });
+                  const res = await fetch(`${baseUrl}/admin/clear-cache`, {
+                    method: 'POST',
+                  });
                   if (!res.ok) throw new Error('Failed to clear cache');
                   alert('Cache cleared successfully!');
                 } catch (e: any) {
