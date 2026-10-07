@@ -9,7 +9,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   prettierConfig,
   {
-    ignores: ["**/node_modules/**", "**/dist/**", "**/.bun/**", "*.config.mjs", "*.config.js", "web/tailwind.config.js", "web/postcss.config.js"],
+    ignores: ["**/node_modules/**", "**/dist/**", "**/.bun/**", "*.config.mjs", "*.config.js", "web/tailwind.config.js", "web/postcss.config.js", ".github/**"],
   },
   // Global / API rules
   {
