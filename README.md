@@ -63,7 +63,7 @@ To speed up requests, raw Geofabrik PBF extracts and derived TopoJSON are cached
 - Converts GeoJSON natively into TopoJSON.
 - Uses Mapshaper (`-clean`, `-simplify`, `-filter-islands`) to aggressively reduce file size and complexity.
 - Validates requests via Zod.
-- Interactive React frontend with Leaflet map visualization and TopoJSON download.
+- Interactive React frontend with live MapLibre Liberty vector preview, boundary overlay, and TopoJSON download.
 
 ## Administrative Levels (OSM)
 
@@ -168,14 +168,16 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 ### 3. Clear Cache
 
 > [!NOTE]
-> This endpoint is only available when `NODE_ENV=development`.
+> This endpoint is disabled when `NODE_ENV=production` — set that variable on deployed services.
 
 **Endpoint:** `POST /admin/clear-cache`
+
+Clears the boundary-data cache **and** all rendered tile caches (per-country exports + preview tiles).
 
 **Response:** HTTP 200 OK
 
 ```json
-{ "status": "success", "message": "Cache cleared" }
+{ "status": "success", "message": "Cache cleared", "cleared": ["boundary-cache", "tile-renders"] }
 ```
 
 ### 4. Export Map Tiles Archive
@@ -198,10 +200,37 @@ Returns a binary blob stream `Content-Type: application/gzip` representing a `.t
 
 Tiles are rendered server-side in the **OpenFreeMap Liberty** style (the same style `picsa-apps` uses for online vector maps, so there is no cartographic discontinuity at the offline/online handoff). Rendering uses MapLibre Native against OpenFreeMap's public vector tiles — no tile-server infrastructure or per-country `.mbtiles` builds required.
 
-The archive contains `{z}/{x}/{y}.webp` tiles plus a `manifest.json` at the root (`style`, `styleUrl`, planet `dataDate`, `tileCount`, per-tile `sha256`) so app and tiles cannot silently drift out of sync.
+The web UI offers a max-zoom dropdown (z6–z12, default z8) with a rough tile/size/time estimate before download. Large jobs shard rendering across up to 4 worker sidecars (~200MB each — set `RENDER_WORKERS=1` on memory-constrained instances).
+
+The archive contains `{z}/{x}/{y}.webp` tiles plus a `manifest.json` at the root (`style`, `styleUrl`, planet `dataDate`, `tileCount`, `rendered` — tiles freshly rendered by this export, 0 when fully served from cache — plus per-tile `sha256`) so app and tiles cannot silently drift out of sync.
 
 > [!IMPORTANT]
-> The `maxZoom` parameter is restricted to a maximum value of 8 to keep app bundles small (~1–2 MB per country).
+> The `maxZoom` parameter is restricted to a maximum value of 12. Tile counts quadruple per zoom (Malawi: 44 tiles at z0–8, ~4,800 at z0–12) — large exports take minutes and are best run against a local dev API rather than Cloud Run.
 
 > [!NOTE]
 > Tile rendering shells out to Node.js (`api/src/services/render-liberty-tiles.mjs`) because `@maplibre/maplibre-gl-native` cannot load under the Bun runtime. Local dev therefore requires Node.js 20+ on `PATH` (plus `xvfb` on Linux — macOS needs no wrapper). The production Docker image already includes both.
+
+### 5. Preview Tiles (Liberty raster)
+
+**Endpoint:** `GET /tiles/liberty/{z}/{x}/{y}.webp` (zooms 0–12)
+
+Renders a single Liberty tile on demand (disk-cached, so repeat views are instant, with ETag revalidation). Useful for QA-ing `/export-tiles` output tile-by-tile. The web debug UI itself renders the live Liberty vector style via MapLibre GL (same style the packs bake), with a boundary overlay and live zoom readout.
+
+### 6. Prewarm Tiles (optimistic cache fill)
+
+**Endpoint:** `POST /prewarm-tiles` (zooms 0–8, capped by design)
+
+```json
+{
+  "country_code": "MW",
+  "bbox": [32.668, -17.129, 35.92, -9.364]
+}
+```
+
+Renders tiles into the same per-country cache dir the export reads, without building an archive. The web UI fires this automatically when a country is selected, so a later export only renders the delta:
+
+```json
+{ "status": "ok", "country_code": "MW", "tileCount": 44, "rendered": 12, "cached": 32, "failed": 0 }
+```
+
+To answer the obvious question: yes, packs are incremental — a z12 export never re-renders from scratch unless the cache was cleared or the renderer version bumped.

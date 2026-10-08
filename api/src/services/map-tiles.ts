@@ -8,11 +8,22 @@ export const LIBERTY_STYLE_ID = 'liberty';
 export const LIBERTY_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 const PLANET_TILEJSON_URL = 'https://tiles.openfreemap.org/planet';
 
-/** Disk cache is namespaced per style (replaces the legacy OSM-carto cache). */
-const TILES_DIR = path.join(process.cwd(), '.cache', 'tiles', LIBERTY_STYLE_ID);
+/** Bump when renderer output changes so stale (mis-rendered) tiles are never served. */
+export const RENDER_VERSION = 2;
 
-/** Hard limit — never generate tiles above this zoom level (bundle size). */
-const MAX_ZOOM = 8;
+/** Disk cache is namespaced per style + renderer version. */
+export const LIBERTY_TILES_DIR = path.join(
+  process.cwd(),
+  '.cache',
+  'tiles',
+  `${LIBERTY_STYLE_ID}-v${RENDER_VERSION}`,
+);
+
+/** Preview tiles share the style cache but live outside per-country export dirs. */
+export const PREVIEW_DIR_NAME = '__preview__';
+
+/** Hard limit — exports above this zoom level are rejected (bundle size). */
+export const MAX_ZOOM = 12;
 
 const RENDERER_SCRIPT = path.join(import.meta.dir, 'render-liberty-tiles.mjs');
 
@@ -33,6 +44,8 @@ export interface TileManifest {
   minZoom: number;
   maxZoom: number;
   tileCount: number;
+  /** Tiles rendered during this export — 0 means fully served from cache. */
+  rendered: number;
   tiles: string[];
   /** sha256 over sorted `path:filehash` lines — app and tiles cannot silently drift */
   sha256: string;
@@ -58,7 +71,7 @@ export async function getPlanetDataDate(): Promise<string> {
 /** Build a manifest for the rendered country dir (pure — safe to unit test). */
 export async function buildManifest(
   countryDir: string,
-  meta: Pick<TileManifest, 'country_code' | 'minZoom' | 'maxZoom' | 'dataDate'>,
+  meta: Pick<TileManifest, 'country_code' | 'minZoom' | 'maxZoom' | 'dataDate' | 'rendered'>,
 ): Promise<TileManifest> {
   const entries: string[] = [];
   const walk = async (dir: string, prefix: string) => {
@@ -93,6 +106,7 @@ export async function buildManifest(
     minZoom: meta.minZoom,
     maxZoom: meta.maxZoom,
     tileCount: tiles.length,
+    rendered: meta.rendered,
     tiles,
     sha256,
   };
@@ -102,72 +116,132 @@ export async function buildManifest(
  * Render missing tiles via the Node sidecar (see render-liberty-tiles.mjs).
  * The sidecar reuses a single MapLibre Native instance, so rendering is
  * sequential; missing-file skips keep repeat exports fast.
+ * Returns counts for logging/telemetry.
+ *
+ * Calls are serialized through a process-wide queue: each sidecar holds a full
+ * MapLibre instance, so concurrent exports + preview tiles would otherwise
+ * multiply memory (a real risk on small Cloud Run instances).
  */
-async function renderMissingTiles(
-  countryDir: string,
+let renderQueue: Promise<unknown> = Promise.resolve();
+export async function renderLibertyTiles(
+  outDir: string,
   tiles: { x: number; y: number; z: number }[],
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<{ rendered: number; failed: { x: number; y: number; z: number }[] }> {
+  const run = renderQueue.then(() => renderLibertyTilesInner(outDir, tiles, signal));
+  // Keep the queue alive across failures; callers still see their own error.
+  renderQueue = run.catch(() => {});
+  return run;
+}
+
+async function renderLibertyTilesInner(
+  outDir: string,
+  tiles: { x: number; y: number; z: number }[],
+  signal?: AbortSignal,
+): Promise<{ rendered: number; failed: { x: number; y: number; z: number }[] }> {
   const missing: { x: number; y: number; z: number }[] = [];
   for (const t of tiles) {
     try {
-      await fs.access(path.join(countryDir, String(t.z), String(t.x), `${t.y}.webp`));
+      await fs.access(path.join(outDir, String(t.z), String(t.x), `${t.y}.webp`));
     } catch {
       missing.push(t);
     }
   }
   if (missing.length === 0) {
-    console.log('All tiles already cached, skipping render.');
-    return;
+    return { rendered: 0, failed: [] };
   }
-  console.log(`Rendering ${missing.length} Liberty tiles...`);
 
-  const jobFile = path.join(countryDir, '.render-job.json');
-  await fs.mkdir(countryDir, { recursive: true });
-  await fs.writeFile(jobFile, JSON.stringify({ styleUrl: LIBERTY_STYLE_URL, tiles: missing }));
+  // Shard across worker sidecars: one MapLibre instance runs ~200MB, so tier
+  // workers by job size (override with RENDER_WORKERS for small instances).
+  const workers = workerCount(missing.length);
+  const shards = splitIntoChunks(missing, workers);
+  console.log(`Rendering ${missing.length} Liberty tiles with ${shards.length} worker(s)...`);
+  await fs.mkdir(outDir, { recursive: true });
+
+  const procs: ReturnType<typeof Bun.spawn>[] = [];
+  const abortListener = () => {
+    for (const p of procs) {
+      try {
+        p.kill();
+      } catch {
+        /* already exited */
+      }
+    }
+  };
+  signal?.addEventListener('abort', abortListener);
+  try {
+    const results = await Promise.all(
+      shards.map((shard, i) => renderShard(outDir, shard, i, procs)),
+    );
+    const rendered = results.reduce((sum, r) => sum + r.rendered, 0);
+    const failed = results.flatMap((r) => r.failed);
+    console.log(`Rendered ${rendered} tiles (${failed.length} failed).`);
+    return { rendered, failed };
+  } finally {
+    signal?.removeEventListener('abort', abortListener);
+    await Promise.all(
+      shards.map((_, i) => fs.rm(path.join(outDir, `.render-job-${i}.json`), { force: true })),
+    );
+  }
+}
+
+/** Tier sidecar workers by job size; RENDER_WORKERS env overrides (e.g. '1' on 512MB instances). */
+export function workerCount(tileCount: number): number {
+  const override = parseInt(process.env.RENDER_WORKERS ?? '', 10);
+  if (Number.isInteger(override) && override > 0) return Math.min(override, 8);
+  if (tileCount < 150) return 1;
+  if (tileCount < 1000) return 2;
+  return 4;
+}
+
+/** Split tiles into at most n non-empty round-robin shards (pure — unit tested). */
+export function splitIntoChunks<T>(tiles: T[], n: number): T[][] {
+  const shards: T[][] = Array.from({ length: Math.max(1, Math.min(n, tiles.length)) }, () => []);
+  tiles.forEach((t, i) => shards[i % shards.length].push(t));
+  return shards;
+}
+
+async function renderShard(
+  outDir: string,
+  shard: { x: number; y: number; z: number }[],
+  index: number,
+  procs: ReturnType<typeof Bun.spawn>[],
+): Promise<{ rendered: number; failed: { x: number; y: number; z: number }[] }> {
+  const jobFile = path.join(outDir, `.render-job-${index}.json`);
+  await fs.writeFile(jobFile, JSON.stringify({ styleUrl: LIBERTY_STYLE_URL, tiles: shard }));
 
   // MapLibre Native needs an X display on Linux even for offscreen rendering —
   // the production image provides it via xvfb (macOS needs no wrapper).
   const command =
     process.platform === 'linux'
-      ? ['xvfb-run', '-a', 'node', RENDERER_SCRIPT, '--tiles', jobFile, '--out-dir', countryDir]
-      : ['node', RENDERER_SCRIPT, '--tiles', jobFile, '--out-dir', countryDir];
+      ? ['xvfb-run', '-a', 'node', RENDERER_SCRIPT, '--tiles', jobFile, '--out-dir', outDir]
+      : ['node', RENDERER_SCRIPT, '--tiles', jobFile, '--out-dir', outDir];
   const proc = Bun.spawn(command, {
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const abortListener = () => {
-    try {
-      proc.kill();
-    } catch {
-      /* already exited */
-    }
-  };
-  signal?.addEventListener('abort', abortListener);
+  procs.push(proc);
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
-  signal?.removeEventListener('abort', abortListener);
-  await fs.rm(jobFile, { force: true });
 
-  if (stderr.trim()) console.error(`[renderer] ${stderr.trim()}`);
+  if (stderr.trim()) console.error(`[renderer:${index}] ${stderr.trim()}`);
   if (exitCode !== 0) {
     throw new Error(
-      `Tile renderer exited with code ${exitCode}: ${stderr.trim() || stdout.trim()}`,
+      `Tile renderer ${index} exited with code ${exitCode}: ${stderr.trim() || stdout.trim()}`,
     );
   }
   try {
     const summary = JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as {
       rendered?: number;
-      failed?: unknown[];
+      failed?: { x: number; y: number; z: number }[];
     };
-    console.log(
-      `Rendered ${summary.rendered ?? '?'} tiles (${summary.failed?.length ?? '?'} failed).`,
-    );
+    return { rendered: summary.rendered ?? 0, failed: summary.failed ?? [] };
   } catch {
-    console.log(`Renderer output: ${stdout.trim()}`);
+    console.log(`Renderer ${index} output: ${stdout.trim()}`);
+    return { rendered: shard.length, failed: [] };
   }
 }
 
@@ -192,10 +266,13 @@ export async function exportTiles(
     `Need to render ${requiredTiles.length} Liberty tiles for ${country_code} (z${minZoom}–${maxZoom})...`,
   );
 
-  await fs.mkdir(TILES_DIR, { recursive: true });
-  const countryDir = path.join(TILES_DIR, country_code);
+  await fs.mkdir(LIBERTY_TILES_DIR, { recursive: true });
+  const countryDir = path.join(LIBERTY_TILES_DIR, country_code);
 
-  await renderMissingTiles(countryDir, requiredTiles, signal);
+  const { rendered, failed } = await renderLibertyTiles(countryDir, requiredTiles, signal);
+  if (requiredTiles.length > 0 && rendered === 0 && failed.length === 0) {
+    console.log('All tiles already cached, skipping render.');
+  }
 
   // Manifest keeps app and tiles from silently drifting out of sync
   const manifest = await buildManifest(countryDir, {
@@ -203,6 +280,7 @@ export async function exportTiles(
     minZoom,
     maxZoom,
     dataDate: await getPlanetDataDate(),
+    rendered,
   });
   await fs.writeFile(path.join(countryDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   console.log(`Manifest: ${manifest.tileCount} tiles, data date ${manifest.dataDate}`);

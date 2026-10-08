@@ -23,6 +23,10 @@ const mbgl = require('@maplibre/maplibre-gl-native');
 const sharp = require('sharp');
 
 const TILE_SIZE = 256;
+// MapLibre works with 512px tiles internally: at integer zoom z one vector
+// tile spans 512px, so a 256px viewport would render a 2x-zoomed quarter tile
+// (seam gaps + wrong scale). Render at 512 and downscale to the 256px slippy tile.
+const RENDER_SIZE = 512;
 
 // Mercator-correct tile centers (half-tile offset in tile space).
 // Mirrors tileCenterLon/tileCenterLat in ../utils/tiles.ts — kept duplicated
@@ -67,28 +71,39 @@ async function main() {
   const failed = [];
   for (const { x, y, z } of tiles) {
     const tilePath = path.join(outDir, String(z), String(x), `${y}.webp`);
-    try {
-      const buffer = await new Promise((resolve, reject) => {
-        map.render(
-          {
-            zoom: z,
-            center: [tileCenterLon(x, z), tileCenterLat(y, z)],
-            width: TILE_SIZE,
-            height: TILE_SIZE,
-          },
-          (err, buf) => (err ? reject(err) : resolve(buf)),
-        );
-      });
-      mkdirSync(path.dirname(tilePath), { recursive: true });
-      await sharp(Buffer.from(buffer), {
-        raw: { width: TILE_SIZE, height: TILE_SIZE, channels: 4 },
-      })
-        .webp({ quality: webpQuality })
-        .toFile(tilePath);
-      rendered.push({ x, y, z });
-    } catch (err) {
-      console.error(`[renderer] failed tile ${z}/${x}/${y}: ${err?.message ?? err}`);
-      failed.push({ x, y, z });
+    // One immediate retry: remote vector/glyph fetches flake transiently and a
+    // 4,000-tile export will statistically hit a few.
+    let done = false;
+    for (let attempt = 1; attempt <= 2 && !done; attempt++) {
+      try {
+        const buffer = await new Promise((resolve, reject) => {
+          map.render(
+            {
+              zoom: z,
+              center: [tileCenterLon(x, z), tileCenterLat(y, z)],
+              width: RENDER_SIZE,
+              height: RENDER_SIZE,
+            },
+            (err, buf) => (err ? reject(err) : resolve(buf)),
+          );
+        });
+        mkdirSync(path.dirname(tilePath), { recursive: true });
+        await sharp(Buffer.from(buffer), {
+          raw: { width: RENDER_SIZE, height: RENDER_SIZE, channels: 4 },
+        })
+          .resize(TILE_SIZE, TILE_SIZE)
+          .webp({ quality: webpQuality })
+          .toFile(tilePath);
+        rendered.push({ x, y, z });
+        done = true;
+      } catch (err) {
+        if (attempt === 2) {
+          console.error(`[renderer] failed tile ${z}/${x}/${y}: ${err?.message ?? err}`);
+          failed.push({ x, y, z });
+        } else {
+          console.warn(`[renderer] retrying tile ${z}/${x}/${y}: ${err?.message ?? err}`);
+        }
+      }
     }
   }
   map.release();
