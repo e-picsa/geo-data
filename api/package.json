@@ -14,6 +14,7 @@
     "@types/through2": "^2.0.41"
   },
   "dependencies": {
+    "@maplibre/maplibre-gl-native": "^6.4.1",
     "@osmix/geojson": "^0.0.13",
     "@osmix/json": "^0.0.14",
     "@osmix/pbf": "^0.0.9",

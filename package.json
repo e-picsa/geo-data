@@ -52,5 +52,8 @@
   "workspaces": [
     "api",
     "web"
+  ],
+  "trustedDependencies": [
+    "@maplibre/maplibre-gl-native"
   ]
 }

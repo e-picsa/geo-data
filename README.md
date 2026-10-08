@@ -194,7 +194,14 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 ```
 
 **Response:** HTTP 200 OK
-Returns a binary blob stream `Content-Type: application/gzip` representing a `.tar.gz` archive of downloaded and converted WebP tiles.
+Returns a binary blob stream `Content-Type: application/gzip` representing a `.tar.gz` archive of WebP tiles.
+
+Tiles are rendered server-side in the **OpenFreeMap Liberty** style (the same style `picsa-apps` uses for online vector maps, so there is no cartographic discontinuity at the offline/online handoff). Rendering uses MapLibre Native against OpenFreeMap's public vector tiles — no tile-server infrastructure or per-country `.mbtiles` builds required.
+
+The archive contains `{z}/{x}/{y}.webp` tiles plus a `manifest.json` at the root (`style`, `styleUrl`, planet `dataDate`, `tileCount`, per-tile `sha256`) so app and tiles cannot silently drift out of sync.
 
 > [!IMPORTANT]
-> The `maxZoom` parameter is restricted to a maximum value of 8 to prevent abuse and respect OSM tile usage policies.
+> The `maxZoom` parameter is restricted to a maximum value of 8 to keep app bundles small (~1–2 MB per country).
+
+> [!NOTE]
+> Tile rendering shells out to Node.js (`api/src/services/render-liberty-tiles.mjs`) because `@maplibre/maplibre-gl-native` cannot load under the Bun runtime. Local dev therefore requires Node.js 20+ on `PATH` (plus `xvfb` on Linux — macOS needs no wrapper). The production Docker image already includes both.

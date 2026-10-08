@@ -1,8 +1,8 @@
-import js from "@eslint/js";
-import tseslint from "typescript-eslint";
-import prettierConfig from "eslint-config-prettier";
-import reactHooks from "eslint-plugin-react-hooks";
-import reactRefresh from "eslint-plugin-react-refresh";
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import prettierConfig from 'eslint-config-prettier';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default tseslint.config(
   js.configs.recommended,
@@ -10,42 +10,56 @@ export default tseslint.config(
   prettierConfig,
   {
     ignores: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/.bun/**",
-      "*.config.mjs",
-      "*.config.js",
-      "web/tailwind.config.js",
-      "web/postcss.config.js",
-      ".github/**",
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.bun/**',
+      '*.config.mjs',
+      '*.config.js',
+      'web/tailwind.config.js',
+      'web/postcss.config.js',
+      '.github/**',
     ],
   },
   // Global / API rules
   {
-    files: ["api/**/*.ts"],
+    files: ['api/**/*.ts'],
     languageOptions: {
       ecmaVersion: 2022,
-      sourceType: "module",
+      sourceType: 'module',
     },
     rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    },
+  },
+  // Node sidecar scripts (plain JS run under Node.js, not Bun)
+  {
+    files: ['api/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        fetch: 'readonly',
+      },
     },
   },
   // Frontend (React/Vite) specific rules
   {
-    files: ["web/**/*.{ts,tsx}"],
+    files: ['web/**/*.{ts,tsx}'],
     plugins: {
-      "react-hooks": reactHooks,
-      "react-refresh": reactRefresh,
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
-      "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
-      "react-hooks/set-state-in-effect": "off",
-      "react-hooks/preserve-manual-memoization": "off",
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
     },
-  }
+  },
 );
