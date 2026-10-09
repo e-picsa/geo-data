@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test';
-import { lon2tile, lat2tile, tile2lon, tile2lat, getTilesForBbox } from './tiles';
+import {
+  lon2tile,
+  lat2tile,
+  tile2lon,
+  tile2lat,
+  tileCenterLon,
+  tileCenterLat,
+  getTilesForBbox,
+} from './tiles';
 
 test('lon2tile calculates correct X tile', () => {
   // Test prime meridian at zoom 0
@@ -41,4 +49,23 @@ test('getTilesForBbox generates array of relevant tiles', () => {
   for (const tile of tiles) {
     expect(tile.z).toBe(zoom);
   }
+});
+
+test('tileCenterLon/Lat return the mercator center of a tile', () => {
+  // z0 world tile is centered on 0,0 (mercator)
+  expect(tileCenterLon(0, 0)).toBeCloseTo(0, 10);
+  expect(tileCenterLat(0, 0)).toBeCloseTo(0, 10);
+
+  // Center lies within the tile bounds
+  const [x, y, z] = [152, 137, 8];
+  const lon = tileCenterLon(x, z);
+  const lat = tileCenterLat(y, z);
+  expect(lon).toBeGreaterThan(tile2lon(x, z));
+  expect(lon).toBeLessThan(tile2lon(x + 1, z));
+  // latitude decreases as y increases
+  expect(lat).toBeLessThan(tile2lat(y, z));
+  expect(lat).toBeGreaterThan(tile2lat(y + 1, z));
+
+  // Known value: z8 tile x152 center
+  expect(lon).toBeCloseTo(34.453125, 10);
 });

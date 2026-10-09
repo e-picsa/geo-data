@@ -1,11 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 import * as topojsonClient from 'topojson-client';
 import { CountrySelect } from './components/CountrySelect';
 import { AdminLevelSelect } from './components/AdminLevelSelect';
-import { BoundsFitter } from './components/BoundsFitter';
 import { ExportTilesButton } from './components/ExportTilesButton';
+import { LibertyMap } from './components/LibertyMap';
+import { ZoomBadge } from './components/ZoomBadge';
 import { TrashIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
 import { getCountryOsmLevels } from './data/osm-admin-levels';
 
@@ -22,11 +21,34 @@ interface BoundaryResponse {
 function App() {
   const [countryCode, setCountryCode] = useState('MW');
   const [selectedAdminLevel, setSelectedAdminLevel] = useState<number>(2);
+  const [tileMaxZoom, setTileMaxZoom] = useState(8);
+  const [mapZoom, setMapZoom] = useState(2);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
 
   const API_URL = import.meta.env.VITE_API_URL || '/api';
+
+  // Fire-and-forget: warm the server tile cache (z0–8) as soon as we know a
+  // country is needed, so a later export mostly serves cached tiles.
+  // Render calls serialize server-side; failures are only logged.
+  const prewarmTiles = useCallback(
+    (country_code: string, bbox: number[]) => {
+      if (!bbox || bbox.length < 4) return;
+      fetch(`${API_URL}/prewarm-tiles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country_code, bbox }),
+      })
+        .then(async (res) => {
+          if (!res.ok) return;
+          const summary = await res.json().catch(() => null);
+          console.log(`Tile prewarm for ${country_code}:`, summary);
+        })
+        .catch((err) => console.debug(`Tile prewarm skipped for ${country_code}:`, err));
+    },
+    [API_URL],
+  );
 
   // Update GeoJSON whenever data changes
   const parsedTopojson = useMemo(() => {
@@ -116,6 +138,7 @@ function App() {
 
         const payload: BoundaryResponse = await res.json();
         setData(payload);
+        prewarmTiles(payload.country_code, payload.bbox);
       } catch (err: any) {
         if (err instanceof Error) {
           setError(err.message);
@@ -126,7 +149,7 @@ function App() {
         setLoading(false);
       }
     },
-    [API_URL],
+    [API_URL, prewarmTiles],
   );
 
   useEffect(() => {
@@ -148,6 +171,7 @@ function App() {
         const payload: BoundaryResponse = await res.json();
         if (!ignore) {
           setData(payload);
+          prewarmTiles(payload.country_code, payload.bbox);
         }
       } catch (err: any) {
         if (!ignore) {
@@ -168,7 +192,7 @@ function App() {
     return () => {
       ignore = true;
     };
-  }, [API_URL]);
+  }, [API_URL, prewarmTiles]);
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
@@ -258,6 +282,8 @@ function App() {
               countryCode={data.country_code}
               bbox={data.bbox as [number, number, number, number]}
               apiUrl={API_URL}
+              maxZoom={tileMaxZoom}
+              onMaxZoomChange={setTileMaxZoom}
             />
           </div>
         )}
@@ -290,29 +316,14 @@ function App() {
 
       {/* Map Area */}
       <div className="flex-1 relative z-0">
-        <MapContainer center={[0, 0]} zoom={2} scrollWheelZoom={true} className="h-full w-full">
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          {geoJsonData && (
-            <>
-              {/* Force GeoJSON re-render by using a different key when data changes */}
-              <GeoJSON
-                key={JSON.stringify(geoJsonData).slice(0, 100)}
-                data={geoJsonData}
-                style={{
-                  color: '#4f46e5',
-                  weight: 2,
-                  opacity: 0.8,
-                  fillColor: '#818cf8',
-                  fillOpacity: 0.2,
-                }}
-              />
-              <BoundsFitter geoJsonData={geoJsonData} />
-            </>
-          )}
-        </MapContainer>
+        {/* Live Liberty vector style (same style the raster packs render), so the
+            preview always matches export output at any zoom — no tile cap here. */}
+        <LibertyMap
+          bbox={(data?.bbox as [number, number, number, number] | undefined) ?? null}
+          geoJsonData={geoJsonData as GeoJSON.FeatureCollection | null}
+          onZoomChange={setMapZoom}
+        />
+        <ZoomBadge zoom={mapZoom} />
 
         {/* Loading overlay for Map */}
         {loading && (

@@ -44,3 +44,16 @@ export function getTilesForBbox(
   }
   return tiles;
 }
+
+/**
+ * Mercator-correct center of a slippy tile (half-tile offset in tile space,
+ * not a naive average of corner latitudes which drifts off-center).
+ */
+export function tileCenterLon(x: number, z: number): number {
+  return ((x + 0.5) / Math.pow(2, z)) * 360 - 180;
+}
+
+export function tileCenterLat(y: number, z: number): number {
+  const n = Math.PI - (2 * Math.PI * (y + 0.5)) / Math.pow(2, z);
+  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
