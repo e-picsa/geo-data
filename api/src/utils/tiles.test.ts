@@ -6,6 +6,7 @@ import {
   tile2lat,
   tileCenterLon,
   tileCenterLat,
+  getBufferedBboxForZoom,
   getTilesForBbox,
 } from './tiles';
 
@@ -49,6 +50,39 @@ test('getTilesForBbox generates array of relevant tiles', () => {
   for (const tile of tiles) {
     expect(tile.z).toBe(zoom);
   }
+});
+
+test('tile buffer expands the tile cover per zoom', () => {
+  const base = getTilesForBbox(10, 50, 11, 51, 5);
+  const buffered = getTilesForBbox(10, 50, 11, 51, 5, 1);
+  expect(buffered.length).toBeGreaterThan(base.length);
+  expect(getTilesForBbox(10, 50, 11, 51, 5, 0)).toEqual(base);
+  // Buffer clamps at the grid edge instead of overflowing
+  const z0 = getTilesForBbox(-180, -85, 180, 85, 0, 2);
+  expect(z0).toHaveLength(1);
+});
+
+test('getBufferedBboxForZoom matches the buffered tile cover exactly', () => {
+  const bbox: [number, number, number, number] = [10, 50, 11, 51];
+  const z = 5;
+  const snapped = getBufferedBboxForZoom(bbox, 1, z);
+  // Snapped box contains the input bbox…
+  expect(snapped[0]).toBeLessThanOrEqual(10);
+  expect(snapped[1]).toBeLessThanOrEqual(50);
+  expect(snapped[2]).toBeGreaterThanOrEqual(11);
+  expect(snapped[3]).toBeGreaterThanOrEqual(51);
+  // …and aligns with tile edges covering it
+  const tiles = getTilesForBbox(bbox[0], bbox[1], bbox[2], bbox[3], z, 1);
+  const xs = tiles.map((t) => t.x);
+  const ys = tiles.map((t) => t.y);
+  expect(snapped[0]).toBeCloseTo(tile2lon(Math.min(...xs), z), 10);
+  expect(snapped[2]).toBeCloseTo(tile2lon(Math.max(...xs) + 1, z), 10);
+  expect(snapped[3]).toBeCloseTo(tile2lat(Math.min(...ys), z), 10);
+  expect(snapped[1]).toBeCloseTo(tile2lat(Math.max(...ys) + 1, z), 10);
+  // No buffer → still snaps outward to tile edges
+  const plain = getBufferedBboxForZoom(bbox, 0, z);
+  expect(plain[0]).toBeLessThanOrEqual(10);
+  expect(plain[2]).toBeGreaterThanOrEqual(11);
 });
 
 test('tileCenterLon/Lat return the mercator center of a tile', () => {

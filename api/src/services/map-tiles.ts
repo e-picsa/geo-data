@@ -30,6 +30,8 @@ const RENDERER_SCRIPT = path.join(import.meta.dir, 'render-liberty-tiles.mjs');
 interface ExportTilesParams {
   country_code: string;
   bbox: [number, number, number, number];
+  /** Extra tiles in every direction at each zoom (discrete tile buffer). */
+  buffer?: number;
   minZoom: number;
   maxZoom: number;
 }
@@ -41,6 +43,10 @@ export interface TileManifest {
   dataDate: string;
   generatedAt: string;
   country_code: string;
+  /** Requested export bbox [minLon, minLat, maxLon, maxLat] (unbuffered). */
+  bbox: [number, number, number, number];
+  /** Extra tiles exported in every direction at each zoom. */
+  buffer: number;
   minZoom: number;
   maxZoom: number;
   tileCount: number;
@@ -71,7 +77,8 @@ export async function getPlanetDataDate(): Promise<string> {
 /** Build a manifest for the rendered country dir (pure — safe to unit test). */
 export async function buildManifest(
   countryDir: string,
-  meta: Pick<TileManifest, 'country_code' | 'minZoom' | 'maxZoom' | 'dataDate' | 'rendered'>,
+  meta: Pick<TileManifest, 'country_code' | 'minZoom' | 'maxZoom' | 'dataDate' | 'rendered'> &
+    Partial<Pick<TileManifest, 'bbox' | 'buffer'>>,
 ): Promise<TileManifest> {
   const entries: string[] = [];
   const walk = async (dir: string, prefix: string) => {
@@ -103,6 +110,8 @@ export async function buildManifest(
     dataDate: meta.dataDate,
     generatedAt: new Date().toISOString(),
     country_code: meta.country_code,
+    bbox: meta.bbox ?? ([0, 0, 0, 0] as [number, number, number, number]),
+    buffer: meta.buffer ?? 0,
     minZoom: meta.minZoom,
     maxZoom: meta.maxZoom,
     tileCount: tiles.length,
@@ -249,17 +258,20 @@ export async function exportTiles(
   params: ExportTilesParams,
   signal?: AbortSignal,
 ): Promise<ReadableStream> {
-  const { country_code, bbox, minZoom } = params;
+  const { country_code, minZoom } = params;
+  const buffer = Math.max(0, Math.floor(params.buffer ?? 0));
 
   const maxZoom = Math.min(params.maxZoom, MAX_ZOOM);
 
-  const [minLon, minLat, maxLon, maxLat] = bbox;
-  console.log(`Bounding box for ${country_code}: [${minLon}, ${minLat}, ${maxLon}, ${maxLat}]`);
+  const [minLon, minLat, maxLon, maxLat] = params.bbox;
+  console.log(
+    `Bounding box for ${country_code}: [${minLon}, ${minLat}, ${maxLon}, ${maxLat}] (buffer ${buffer} tiles)`,
+  );
 
-  // Generate all required tiles
+  // Generate all required tiles (buffer expands the tile cover per zoom)
   const requiredTiles = [];
   for (let z = minZoom; z <= maxZoom; z++) {
-    requiredTiles.push(...getTilesForBbox(minLon, minLat, maxLon, maxLat, z));
+    requiredTiles.push(...getTilesForBbox(minLon, minLat, maxLon, maxLat, z, buffer));
   }
 
   console.log(
@@ -277,6 +289,8 @@ export async function exportTiles(
   // Manifest keeps app and tiles from silently drifting out of sync
   const manifest = await buildManifest(countryDir, {
     country_code,
+    bbox: params.bbox,
+    buffer,
     minZoom,
     maxZoom,
     dataDate: await getPlanetDataDate(),

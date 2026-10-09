@@ -12,17 +12,46 @@ const LIBERTY_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 const BOUNDARY_SOURCE_ID = 'admin-boundaries';
 const BOUNDARY_FILL_LAYER_ID = 'admin-boundaries-fill';
 const BOUNDARY_LINE_LAYER_ID = 'admin-boundaries-line';
+const EXPORT_BBOX_SOURCE_ID = 'export-bbox';
+const EXPORT_BBOX_LAYER_ID = 'export-bbox-line';
+
+function bboxToPolygon(bbox: [number, number, number, number]): GeoJSON.FeatureCollection {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [minLon, minLat],
+              [maxLon, minLat],
+              [maxLon, maxLat],
+              [minLon, maxLat],
+              [minLon, minLat],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+}
 
 interface LibertyMapProps {
   /** Country bbox [minLon, minLat, maxLon, maxLat] — map fits to it on change. */
   bbox: [number, number, number, number] | null;
   /** Boundary features for the selected admin level (rendered as an overlay). */
   geoJsonData: GeoJSON.FeatureCollection | null;
+  /** Tile-snapped export bbox at max zoom — drawn as a subtle grey outline. */
+  exportBbox?: [number, number, number, number] | null;
   onZoomChange: (zoom: number) => void;
 }
 
 /** Pure MapLibre GL map: live Liberty vector style + boundary overlay. */
-export function LibertyMap({ bbox, geoJsonData, onZoomChange }: LibertyMapProps) {
+export function LibertyMap({ bbox, geoJsonData, exportBbox, onZoomChange }: LibertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onZoomChangeRef = useRef(onZoomChange);
@@ -128,6 +157,41 @@ export function LibertyMap({ bbox, geoJsonData, onZoomChange }: LibertyMapProps)
     if (map.isStyleLoaded()) apply();
     else map.once('load', apply);
   }, [geoJsonData]);
+
+  // Export bbox overlay: subtle grey outline of the buffered tile cover at
+  // max zoom for the selected admin level (low zooms cover a larger area).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!exportBbox) {
+      if (map.getSource(EXPORT_BBOX_SOURCE_ID)) {
+        if (map.getLayer(EXPORT_BBOX_LAYER_ID)) map.removeLayer(EXPORT_BBOX_LAYER_ID);
+        map.removeSource(EXPORT_BBOX_SOURCE_ID);
+      }
+      return;
+    }
+    const data = bboxToPolygon(exportBbox);
+    const apply = () => {
+      if (map.getSource(EXPORT_BBOX_SOURCE_ID)) {
+        (map.getSource(EXPORT_BBOX_SOURCE_ID) as maplibregl.GeoJSONSource).setData(data);
+        return;
+      }
+      map.addSource(EXPORT_BBOX_SOURCE_ID, { type: 'geojson', data });
+      map.addLayer({
+        id: EXPORT_BBOX_LAYER_ID,
+        type: 'line',
+        source: EXPORT_BBOX_SOURCE_ID,
+        paint: {
+          'line-color': '#9ca3af',
+          'line-width': 1.5,
+          'line-opacity': 0.9,
+          'line-dasharray': [5, 3],
+        },
+      });
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once('load', apply);
+  }, [exportBbox]);
 
   // Fit to country bounds when the country changes.
   useEffect(() => {

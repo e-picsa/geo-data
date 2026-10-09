@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import * as topojsonClient from 'topojson-client';
 import { CountrySelect } from './components/CountrySelect';
 import { AdminLevelSelect } from './components/AdminLevelSelect';
@@ -7,6 +7,8 @@ import { LibertyMap } from './components/LibertyMap';
 import { ZoomBadge } from './components/ZoomBadge';
 import { TrashIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
 import { getCountryOsmLevels } from './data/osm-admin-levels';
+import { countries } from './data/countries';
+import { bboxForFeatures, getBufferedBboxForZoom } from './utils/tiles';
 
 interface BoundaryResponse {
   country_code: string;
@@ -18,14 +20,43 @@ interface BoundaryResponse {
   topojson: string;
 }
 
+/** Path prefix the app is served from (supports Vite base-path deploys). */
+function appBasePath(): string {
+  const base = import.meta.env.BASE_URL || '/';
+  return base.endsWith('/') ? base : `${base}/`;
+}
+
+/** Country code from the URL path (`/MW`), or null on the root `/`. */
+function getCountryCodeFromUrl(): string | null {
+  let path = window.location.pathname;
+  const base = appBasePath();
+  if (base !== '/' && path.toLowerCase().startsWith(base.toLowerCase().replace(/\/$/, ''))) {
+    path = path.slice(base.replace(/\/$/, '').length) || '/';
+  }
+  const seg = path.split('/').filter(Boolean)[0];
+  if (seg && /^[A-Za-z]{2}$/.test(seg)) return seg.toUpperCase();
+  return null;
+}
+
+function countryUrl(code: string): string {
+  return `${appBasePath()}${code.toUpperCase()}`;
+}
+
 function App() {
-  const [countryCode, setCountryCode] = useState('MW');
+  const [countryCode, setCountryCode] = useState<string | null>(() => getCountryCodeFromUrl());
   const [selectedAdminLevel, setSelectedAdminLevel] = useState<number>(2);
   const [tileMaxZoom, setTileMaxZoom] = useState(8);
+  const [tileBuffer, setTileBuffer] = useState(1);
   const [mapZoom, setMapZoom] = useState(2);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => getCountryCodeFromUrl() !== null);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
+
+  // Mirror of countryCode for the popstate handler (avoids a stale closure).
+  const countryCodeRef = useRef(countryCode);
+  useEffect(() => {
+    countryCodeRef.current = countryCode;
+  }, [countryCode]);
 
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -33,12 +64,12 @@ function App() {
   // country is needed, so a later export mostly serves cached tiles.
   // Render calls serialize server-side; failures are only logged.
   const prewarmTiles = useCallback(
-    (country_code: string, bbox: number[]) => {
+    (country_code: string, bbox: number[], buffer: number) => {
       if (!bbox || bbox.length < 4) return;
       fetch(`${API_URL}/prewarm-tiles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country_code, bbox }),
+        body: JSON.stringify({ country_code, bbox, buffer }),
       })
         .then(async (res) => {
           if (!res.ok) return;
@@ -82,7 +113,7 @@ function App() {
 
   // Derive active admin level during render to avoid cascading renders
   const adminLevel = useMemo(() => {
-    const osmInfo = getCountryOsmLevels(countryCode);
+    const osmInfo = getCountryOsmLevels(countryCode ?? undefined);
     const isSupportedByCountry =
       !osmInfo?.levels || Boolean(osmInfo.levels[String(selectedAdminLevel)]);
     const isAvailableInData =
@@ -117,9 +148,28 @@ function App() {
     };
   }, [fullGeoJson, adminLevel]);
 
-  const handleCountryChange = useCallback(
-    async (newCode: string) => {
-      setCountryCode(newCode);
+  // Raw bounds for the currently selected admin level (falls back to the
+  // country bbox until features load), plus the tile-snapped box actually exported.
+  const baseBbox = useMemo<[number, number, number, number] | null>(() => {
+    const fromFeatures = bboxForFeatures(geoJsonData);
+    if (fromFeatures) return fromFeatures;
+    if (data?.bbox && data.bbox.length >= 4) {
+      return data.bbox.slice(0, 4) as [number, number, number, number];
+    }
+    return null;
+  }, [geoJsonData, data]);
+
+  // Honest preview of the discrete tile buffer: outer edges of the buffered
+  // tile cover at max zoom (low zooms cover a larger geographic area).
+  const exportBbox = useMemo<[number, number, number, number] | null>(() => {
+    if (!baseBbox) return null;
+    return getBufferedBboxForZoom(baseBbox, tileBuffer, tileMaxZoom);
+  }, [baseBbox, tileBuffer, tileMaxZoom]);
+
+  const loadCountry = useCallback(
+    async (code: string) => {
+      const upper = code.toUpperCase();
+      setCountryCode(upper);
       setLoading(true);
       setError(null);
       setData(null);
@@ -128,7 +178,7 @@ function App() {
         const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ country_code: newCode }),
+          body: JSON.stringify({ country_code: upper }),
         });
 
         if (!res.ok) {
@@ -138,7 +188,7 @@ function App() {
 
         const payload: BoundaryResponse = await res.json();
         setData(payload);
-        prewarmTiles(payload.country_code, payload.bbox);
+        prewarmTiles(payload.country_code, payload.bbox, tileBuffer);
       } catch (err: any) {
         if (err instanceof Error) {
           setError(err.message);
@@ -149,50 +199,59 @@ function App() {
         setLoading(false);
       }
     },
-    [API_URL, prewarmTiles],
+    [API_URL, prewarmTiles, tileBuffer],
   );
 
+  const handleCountryChange = useCallback(
+    (newCode: string) => {
+      const upper = newCode.toUpperCase();
+      if (upper === countryCodeRef.current) return;
+      window.history.pushState({ countryCode: upper }, '', countryUrl(upper));
+      void loadCountry(upper);
+    },
+    [loadCountry],
+  );
+
+  // Initial load: country comes from the URL; the root `/` loads nothing.
+  const didInitRef = useRef(false);
   useEffect(() => {
-    let ignore = false;
-
-    async function loadInitial() {
-      try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ country_code: 'MW' }),
-        });
-
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.error || 'Failed to fetch boundaries');
-        }
-
-        const payload: BoundaryResponse = await res.json();
-        if (!ignore) {
-          setData(payload);
-          prewarmTiles(payload.country_code, payload.bbox);
-        }
-      } catch (err: any) {
-        if (!ignore) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : 'An unexpected error occurred while fetching boundaries.',
-          );
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
-      }
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+    const initial = getCountryCodeFromUrl();
+    if (!initial) {
+      setLoading(false);
+      return;
     }
+    void loadCountry(initial);
+  }, [loadCountry]);
 
-    loadInitial();
-    return () => {
-      ignore = true;
+  // Back/forward buttons: URL is the source of truth.
+  useEffect(() => {
+    const onPopState = () => {
+      const code = getCountryCodeFromUrl();
+      if (code === countryCodeRef.current) return;
+      if (!code) {
+        setCountryCode(null);
+        setData(null);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      void loadCountry(code);
     };
-  }, [API_URL, prewarmTiles]);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [loadCountry]);
+
+  // Keep the tab title in sync with the selected country.
+  useEffect(() => {
+    if (!countryCode) {
+      document.title = 'Geo Boundaries';
+      return;
+    }
+    const label = countries.find((c) => c.code === countryCode)?.label ?? countryCode;
+    document.title = `${label} · Geo Boundaries`;
+  }, [countryCode]);
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
@@ -224,7 +283,7 @@ function App() {
         <div className="flex flex-col gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">Country</label>
-            <CountrySelect value={countryCode} onChange={handleCountryChange} />
+            <CountrySelect value={countryCode ?? ''} onChange={handleCountryChange} />
           </div>
 
           <div className="space-y-1.5">
@@ -244,7 +303,7 @@ function App() {
             <AdminLevelSelect
               value={adminLevel}
               onChange={setSelectedAdminLevel}
-              countryCode={countryCode}
+              countryCode={countryCode ?? undefined}
               availableLevels={availableLevels}
             />
           </div>
@@ -280,7 +339,9 @@ function App() {
 
             <ExportTilesButton
               countryCode={data.country_code}
-              bbox={data.bbox as [number, number, number, number]}
+              bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
+              buffer={tileBuffer}
+              onBufferChange={setTileBuffer}
               apiUrl={API_URL}
               maxZoom={tileMaxZoom}
               onMaxZoomChange={setTileMaxZoom}
@@ -321,9 +382,19 @@ function App() {
         <LibertyMap
           bbox={(data?.bbox as [number, number, number, number] | undefined) ?? null}
           geoJsonData={geoJsonData as GeoJSON.FeatureCollection | null}
+          exportBbox={exportBbox}
           onZoomChange={setMapZoom}
         />
         <ZoomBadge zoom={mapZoom} />
+
+        {/* Empty state on the root `/` (no country in the URL yet) */}
+        {!loading && !data && !countryCode && (
+          <div className="absolute inset-0 z-[400] flex items-center justify-center pointer-events-none">
+            <div className="bg-white px-6 py-4 rounded-xl shadow-lg border border-slate-200 text-slate-600 text-sm max-w-xs text-center">
+              Select a country to view its boundaries
+            </div>
+          </div>
+        )}
 
         {/* Loading overlay for Map */}
         {loading && (

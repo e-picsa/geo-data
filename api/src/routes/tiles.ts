@@ -13,16 +13,27 @@ import { getTilesForBbox } from '../utils/tiles.ts';
 
 import { z } from 'zod';
 
-export const ExportTilesSchema = z.object({
-  country_code: z.string().regex(/^[a-zA-Z0-9-_]+$/, 'Invalid country_code format'),
-  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
-  minZoom: z.number().optional().default(0),
-  maxZoom: z
-    .number()
-    .max(MAX_ZOOM, `Max zoom level restricted to ${MAX_ZOOM}`)
-    .optional()
-    .default(8),
-});
+/**
+ * Discrete tile buffer — N extra tiles in every direction at each zoom.
+ * A tile is much larger in degrees at low zooms, so the geographic padding
+ * this yields varies by zoom (see getBufferedBboxForZoom for the preview).
+ */
+const BufferTilesSchema = z.number().int().min(0).max(8).optional().default(0);
+
+const ZoomSchema = z.number().int().min(0).max(MAX_ZOOM);
+
+export const ExportTilesSchema = z
+  .object({
+    country_code: z.string().regex(/^[a-zA-Z0-9-_]+$/, 'Invalid country_code format'),
+    bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+    buffer: BufferTilesSchema,
+    minZoom: ZoomSchema.optional().default(0),
+    maxZoom: ZoomSchema.optional().default(8),
+  })
+  .refine((v) => v.minZoom <= v.maxZoom, {
+    message: 'minZoom must be <= maxZoom',
+    path: ['minZoom'],
+  });
 
 /**
  * Fire-and-forget cache warming, kept cheap by design: renders leak into the
@@ -34,8 +45,10 @@ export const PREWARM_MAX_ZOOM = 8;
 export const PrewarmTilesSchema = z.object({
   country_code: z.string().regex(/^[a-zA-Z0-9-_]+$/, 'Invalid country_code format'),
   bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+  buffer: BufferTilesSchema,
   maxZoom: z
     .number()
+    .int()
     .max(PREWARM_MAX_ZOOM, `Prewarm is capped at zoom ${PREWARM_MAX_ZOOM}`)
     .optional()
     .default(PREWARM_MAX_ZOOM),
@@ -139,11 +152,11 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
         );
       }
 
-      const { country_code, bbox, maxZoom } = parseResult.data;
+      const { country_code, bbox, buffer, maxZoom } = parseResult.data;
       const [minLon, minLat, maxLon, maxLat] = bbox;
       const requiredTiles = [];
       for (let z = 0; z <= maxZoom; z++) {
-        requiredTiles.push(...getTilesForBbox(minLon, minLat, maxLon, maxLat, z));
+        requiredTiles.push(...getTilesForBbox(minLon, minLat, maxLon, maxLat, z, buffer));
       }
 
       const countryDir = path.join(LIBERTY_TILES_DIR, country_code);
@@ -189,9 +202,12 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
         );
       }
 
-      const { country_code, bbox, minZoom, maxZoom } = parseResult.data;
+      const { country_code, bbox, buffer, minZoom, maxZoom } = parseResult.data;
 
-      const archiveStream = await exportTiles({ country_code, bbox, minZoom, maxZoom }, req.signal);
+      const archiveStream = await exportTiles(
+        { country_code, bbox, buffer, minZoom, maxZoom },
+        req.signal,
+      );
 
       return new Response(archiveStream, {
         status: 200,

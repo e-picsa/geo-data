@@ -44,6 +44,24 @@ test('export schema allows maxZoom up to 12', () => {
   expect(ExportTilesSchema.safeParse({ ...base, maxZoom: 13 }).success).toBe(false);
 });
 
+test('export/prewarm schemas accept a discrete tile buffer', () => {
+  const base = { country_code: 'MW', bbox: [32.6, -17.2, 36.0, -9.3] as const };
+  const parsed = ExportTilesSchema.safeParse({ ...base, buffer: 1 });
+  expect(parsed.success && parsed.data.buffer).toBe(1);
+  expect(ExportTilesSchema.safeParse({ ...base }).success).toBe(true);
+  expect(ExportTilesSchema.safeParse({ ...base, buffer: 0.5 }).success).toBe(false);
+  expect(ExportTilesSchema.safeParse({ ...base, buffer: -1 }).success).toBe(false);
+  expect(ExportTilesSchema.safeParse({ ...base, buffer: 9 }).success).toBe(false);
+  expect(PrewarmTilesSchema.safeParse({ ...base, buffer: 2 }).success).toBe(true);
+});
+
+test('export schema supports a zoom range for single-level buffer packs', () => {
+  const base = { country_code: 'MW', bbox: [32.6, -17.2, 36.0, -9.3] as const };
+  expect(ExportTilesSchema.safeParse({ ...base, minZoom: 6, maxZoom: 6 }).success).toBe(true);
+  expect(ExportTilesSchema.safeParse({ ...base, minZoom: 2, maxZoom: 6 }).success).toBe(true);
+  expect(ExportTilesSchema.safeParse({ ...base, minZoom: 7, maxZoom: 6 }).success).toBe(false);
+});
+
 test('prewarm schema defaults to z8 and rejects deeper zooms', () => {
   const base = { country_code: 'MW', bbox: [32.6, -17.2, 36.0, -9.3] as const };
   const parsed = PrewarmTilesSchema.safeParse(base);
