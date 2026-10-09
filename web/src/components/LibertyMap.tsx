@@ -46,9 +46,14 @@ export function LibertyMap({ bbox, geoJsonData, onZoomChange }: LibertyMapProps)
     // Leaflet parity: discrete wheel zoom. MapLibre scroll-zooms continuously
     // with no snap option, so drive integer steps ourselves: one level per
     // wheel tick, with a cooldown so trackpad event floods don't skip levels.
+    // `around` keeps the point under the cursor stationary, like Leaflet's
+    // scrollWheelZoom (MapLibre zoomIn()/zoomOut() would use the map center).
     // (The zoomend snap below stays as a safety net, e.g. for touch pinch.)
     map.scrollZoom.disable();
     let lastStep = 0;
+    // In-flight step target: successive ticks during an animation step from
+    // the target, not the mid-flight camera, so levels can't be skipped.
+    let targetZoom: number | null = null;
     const WHEEL_COOLDOWN_MS = 250;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -56,14 +61,22 @@ export function LibertyMap({ bbox, geoJsonData, onZoomChange }: LibertyMapProps)
       const now = Date.now();
       if (now - lastStep < WHEEL_COOLDOWN_MS) return;
       lastStep = now;
-      if (e.deltaY > 0) map.zoomOut();
-      else map.zoomIn();
+      const rect = container.getBoundingClientRect();
+      // easeTo `around` takes geographic coordinates, not screen pixels.
+      const around = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+      const base = targetZoom ?? Math.round(map.getZoom());
+      targetZoom = Math.min(
+        map.getMaxZoom(),
+        Math.max(map.getMinZoom(), base + (e.deltaY > 0 ? -1 : 1)),
+      );
+      map.easeTo({ zoom: targetZoom, around, duration: 250 });
     };
     const container = containerRef.current;
     container.addEventListener('wheel', onWheel, { passive: false });
     // Leaflet parity: keep the map on discrete zoom levels. easeTo re-fires
     // zoomend, but the snapped value is integral so this terminates.
     const snapZoom = () => {
+      targetZoom = null;
       const z = map.getZoom();
       const snapped = Math.round(z);
       if (Math.abs(snapped - z) > 1e-6) map.easeTo({ zoom: snapped, duration: 150 });
