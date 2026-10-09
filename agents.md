@@ -28,3 +28,9 @@ Welcome! This system is a monorepo consisting of:
 
 - Avoid introducing any heavy DOM libraries into the frontend. The entire application is designed to be lightweight.
 - For local dev, run `npm run dev` in the project root to spool up both instances concurrently.
+
+## Versioning
+
+- The release version lives in the root `package.json` (surfaced in the web UI via `VITE_APP_VERSION`).
+- Always bump it with every user-facing change: patch bump (e.g. `2.3.0` → `2.3.1`) for fixes, minor bump (e.g. `2.3.0` → `2.4.0`) for new features.
+- Never leave the version unchanged when shipping a release.
