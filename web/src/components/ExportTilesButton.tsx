@@ -4,19 +4,25 @@ import { estimateExport, formatBytes, formatDuration } from '../utils/tiles';
 
 interface ExportTilesButtonProps {
   countryCode: string;
+  /** Raw (unpadded) bbox for the selected admin level. Sent as-is; backend applies `buffer`. */
   bbox: number[];
+  /** Discrete tile buffer — N extra tiles in every direction at each zoom. */
+  buffer: number;
+  onBufferChange: (buffer: number) => void;
   apiUrl: string;
   maxZoom: number;
   onMaxZoomChange: (maxZoom: number) => void;
 }
 
-const MAX_ZOOM_OPTIONS = [6, 7, 8, 9, 10, 11, 12];
+const ZOOM_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 /** Above this many tiles the export gets slow — ask for confirmation. */
 const LARGE_EXPORT_TILES = 2500;
 
 export function ExportTilesButton({
   countryCode,
   bbox,
+  buffer,
+  onBufferChange,
   apiUrl,
   maxZoom,
   onMaxZoomChange,
@@ -26,9 +32,9 @@ export function ExportTilesButton({
 
   const tuple = bbox.length >= 4 ? (bbox.slice(0, 4) as [number, number, number, number]) : null;
   const estimate = useMemo(
-    () => (tuple ? estimateExport(tuple, 0, maxZoom) : null),
+    () => (tuple ? estimateExport(tuple, 0, maxZoom, buffer) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tuple?.[0], tuple?.[1], tuple?.[2], tuple?.[3], maxZoom],
+    [tuple?.[0], tuple?.[1], tuple?.[2], tuple?.[3], maxZoom, buffer],
   );
 
   const handleExport = async () => {
@@ -52,6 +58,7 @@ export function ExportTilesButton({
         body: JSON.stringify({
           country_code: countryCode,
           bbox,
+          buffer,
           minZoom: 0,
           maxZoom,
         }),
@@ -92,6 +99,25 @@ export function ExportTilesButton({
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
+        <span title="Extra tiles around the selected admin level bounds, in every direction at each zoom. The grey box shows the exact tile cover at max zoom (low zooms cover more).">
+          Tile buffer
+        </span>
+        <input
+          type="number"
+          value={buffer}
+          min={0}
+          max={8}
+          step={1}
+          onChange={(e) => {
+            const v = Math.floor(Number(e.target.value));
+            onBufferChange(Number.isFinite(v) ? Math.min(8, Math.max(0, v)) : 0);
+          }}
+          disabled={downloading}
+          className="ml-2 w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+          title="Extra tiles in every direction at each zoom (0 = exact cover)"
+        />
+      </label>
+      <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
         <span>Offline pack max zoom</span>
         <select
           value={maxZoom}
@@ -100,7 +126,7 @@ export function ExportTilesButton({
           className="ml-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
           title="Highest zoom included in the offline pack"
         >
-          {MAX_ZOOM_OPTIONS.map((z) => (
+          {ZOOM_OPTIONS.map((z) => (
             <option key={z} value={z}>
               z{z}
               {z === 8 ? ' (default)' : ''}

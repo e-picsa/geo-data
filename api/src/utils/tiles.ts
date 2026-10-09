@@ -20,29 +20,92 @@ export function tile2lat(y: number, z: number): number {
   return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
 }
 
+export interface TileRange {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+/** Tile index range covering a bbox at a zoom (unbuffered, clamped). Pure. */
+export function getTileRangeForBbox(
+  minLon: number,
+  minLat: number,
+  maxLon: number,
+  maxLat: number,
+  zoom: number,
+): TileRange {
+  const limit = Math.pow(2, zoom) - 1;
+  return {
+    minX: Math.max(0, lon2tile(minLon, zoom)),
+    maxX: Math.min(limit, lon2tile(maxLon, zoom)),
+    // Latitude is inverted in slippy tiles (higher y is further north, meaning smaller y is larger latitude)
+    // Max latitude -> smallest Y tile
+    // Min latitude -> largest Y tile
+    minY: Math.max(0, lat2tile(maxLat, zoom)),
+    maxY: Math.min(limit, lat2tile(minLat, zoom)),
+  };
+}
+
+/** Expand a tile range by `bufferTiles` in every direction, clamped to the grid. Pure. */
+export function expandTileRange(range: TileRange, zoom: number, bufferTiles: number): TileRange {
+  if (!Number.isFinite(bufferTiles) || bufferTiles <= 0) return range;
+  const b = Math.floor(bufferTiles);
+  const limit = Math.pow(2, zoom) - 1;
+  return {
+    minX: Math.max(0, range.minX - b),
+    maxX: Math.min(limit, range.maxX + b),
+    minY: Math.max(0, range.minY - b),
+    maxY: Math.min(limit, range.maxY + b),
+  };
+}
+
 export function getTilesForBbox(
   minLon: number,
   minLat: number,
   maxLon: number,
   maxLat: number,
   zoom: number,
+  bufferTiles = 0,
 ): { x: number; y: number; z: number }[] {
-  const minX = Math.max(0, lon2tile(minLon, zoom));
-  const maxX = Math.min(Math.pow(2, zoom) - 1, lon2tile(maxLon, zoom));
-
-  // Latitude is inverted in slippy tiles (higher y is further north, meaning smaller y is larger latitude)
-  // Max latitude -> smallest Y tile
-  // Min latitude -> largest Y tile
-  const minY = Math.max(0, lat2tile(maxLat, zoom));
-  const maxY = Math.min(Math.pow(2, zoom) - 1, lat2tile(minLat, zoom));
+  const range = expandTileRange(
+    getTileRangeForBbox(minLon, minLat, maxLon, maxLat, zoom),
+    zoom,
+    bufferTiles,
+  );
 
   const tiles = [];
-  for (let x = minX; x <= maxX; x++) {
-    for (let y = minY; y <= maxY; y++) {
+  for (let x = range.minX; x <= range.maxX; x++) {
+    for (let y = range.minY; y <= range.maxY; y++) {
       tiles.push({ x, y, z: zoom });
     }
   }
   return tiles;
+}
+
+/**
+ * Geographic bbox of the outer edges of the buffered tile cover at `zoom`.
+ * This is exactly what the export contains at that zoom, so it is the honest
+ * preview of a discrete tile buffer (which in degrees varies by zoom).
+ * Returns [minLon, minLat, maxLon, maxLat]. Pure — safe to unit test.
+ */
+export function getBufferedBboxForZoom(
+  bbox: [number, number, number, number],
+  bufferTiles: number,
+  zoom: number,
+): [number, number, number, number] {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const range = expandTileRange(
+    getTileRangeForBbox(minLon, minLat, maxLon, maxLat, zoom),
+    zoom,
+    bufferTiles,
+  );
+  return [
+    tile2lon(range.minX, zoom),
+    tile2lat(range.maxY + 1, zoom),
+    tile2lon(range.maxX + 1, zoom),
+    tile2lat(range.minY, zoom),
+  ];
 }
 
 /**
