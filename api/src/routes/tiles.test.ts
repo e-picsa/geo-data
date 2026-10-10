@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { parsePreviewTilePath, ExportTilesSchema, PrewarmTilesSchema } from './tiles.ts';
+import {
+  parsePreviewTilePath,
+  ExportTilesSchema,
+  ExportPmtilesSchema,
+  PrewarmTilesSchema,
+} from './tiles.ts';
 import { handleAdminRoutes } from './admin.ts';
 
 test('parsePreviewTilePath accepts valid liberty tile paths', () => {
@@ -42,6 +47,37 @@ test('export schema allows maxZoom up to 12', () => {
   expect(ExportTilesSchema.safeParse({ ...base, maxZoom: 8 }).success).toBe(true);
   expect(ExportTilesSchema.safeParse({ ...base, maxZoom: 12 }).success).toBe(true);
   expect(ExportTilesSchema.safeParse({ ...base, maxZoom: 13 }).success).toBe(false);
+});
+
+test('pmtiles schema defaults to GLOBAL z4 full with no buffer', () => {
+  const parsed = ExportPmtilesSchema.safeParse({});
+  expect(parsed.success).toBe(true);
+  if (parsed.success) {
+    expect(parsed.data.country_code).toBe('GLOBAL');
+    expect(parsed.data.layers).toBe('full');
+    expect(parsed.data.maxZoom).toBeUndefined();
+    expect('buffer' in parsed.data).toBe(false);
+  }
+});
+
+test('pmtiles schema caps global at z6', () => {
+  expect(ExportPmtilesSchema.safeParse({ maxZoom: 6 }).success).toBe(true);
+  expect(ExportPmtilesSchema.safeParse({ maxZoom: 7 }).success).toBe(false);
+});
+
+test('pmtiles schema requires bbox for countries and zooms 7–12', () => {
+  const bbox = [32.6, -17.2, 36.0, -9.3] as const;
+  expect(ExportPmtilesSchema.safeParse({ country_code: 'MW' }).success).toBe(false);
+  expect(ExportPmtilesSchema.safeParse({ country_code: 'mw', bbox }).success).toBe(true);
+  expect(ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 6 }).success).toBe(
+    false,
+  );
+  expect(ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 12 }).success).toBe(
+    true,
+  );
+  expect(ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 13 }).success).toBe(
+    false,
+  );
 });
 
 test('export/prewarm schemas accept a discrete tile buffer', () => {

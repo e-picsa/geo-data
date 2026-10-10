@@ -39,6 +39,15 @@ COPY package.json ./
 COPY api/package.json ./api/
 COPY api/src ./api/src
 
+# go-pmtiles CLI (static binary): converts the MBTiles staged by
+# POST /export-pmtiles into a single-file .pmtiles archive.
+ARG PMTILES_VERSION=1.31.2
+RUN curl -fsSL -o /tmp/go-pmtiles.tar.gz \
+  https://github.com/protomaps/go-pmtiles/releases/download/v${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION}_Linux_x86_64.tar.gz \
+  && tar -xzf /tmp/go-pmtiles.tar.gz -C /tmp && mv /tmp/pmtiles /usr/local/bin/pmtiles \
+  && chmod +x /usr/local/bin/pmtiles && rm /tmp/go-pmtiles.tar.gz
+ENV PMTILES_BIN=/usr/local/bin/pmtiles
+
 EXPOSE 8080
 
 WORKDIR /app/api

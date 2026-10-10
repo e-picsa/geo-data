@@ -132,12 +132,40 @@ export async function buildManifest(
  * multiply memory (a real risk on small Cloud Run instances).
  */
 let renderQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Thrown when the HTTP client disconnects mid-render. Interactive map
+ * clients (MapLibre) cancel stale tile requests on every pan/zoom, so this
+ * is routine — not a renderer failure.
+ */
+export class RenderAbortedError extends Error {
+  constructor() {
+    super('Aborted');
+    this.name = 'RenderAbortedError';
+  }
+}
+
+export function isAbortError(err: unknown): boolean {
+  return (
+    err instanceof RenderAbortedError ||
+    (err instanceof Error && (err.name === 'AbortError' || err.message === 'Aborted'))
+  );
+}
+
 export async function renderLibertyTiles(
   outDir: string,
   tiles: { x: number; y: number; z: number }[],
   signal?: AbortSignal,
 ): Promise<{ rendered: number; failed: { x: number; y: number; z: number }[] }> {
-  const run = renderQueue.then(() => renderLibertyTilesInner(outDir, tiles, signal));
+  const run = renderQueue.then(() => {
+    // A request aborted while queued must not burn a sidecar: skip it here
+    // (an already-fired signal never re-fires the inner abort listener).
+    if (signal?.aborted) {
+      console.debug('Skipping Liberty render: request already aborted');
+      throw new RenderAbortedError();
+    }
+    return renderLibertyTilesInner(outDir, tiles, signal);
+  });
   // Keep the queue alive across failures; callers still see their own error.
   renderQueue = run.catch(() => {});
   return run;
@@ -186,6 +214,13 @@ async function renderLibertyTilesInner(
     const failed = results.flatMap((r) => r.failed);
     console.log(`Rendered ${rendered} tiles (${failed.length} failed).`);
     return { rendered, failed };
+  } catch (err) {
+    // Abort-kills (exit 143) are client disconnects, not renderer failures.
+    if (signal?.aborted || isAbortError(err)) {
+      console.debug(`Liberty render aborted (${missing.length} tiles outstanding)`);
+      throw new RenderAbortedError();
+    }
+    throw err;
   } finally {
     signal?.removeEventListener('abort', abortListener);
     await Promise.all(
@@ -253,6 +288,111 @@ async function renderShard(
     return { rendered: shard.length, failed: [] };
   }
 }
+
+export interface LibertyTile {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface LibertyRenderResult {
+  rendered: number;
+  failed: LibertyTile[];
+}
+
+const PREVIEW_BATCH_WINDOW_MS = 250;
+/** A screenful of 256px tiles — flush immediately instead of waiting out the window. */
+const PREVIEW_BATCH_MAX_TILES = 16;
+
+/**
+ * Coalesce concurrent single-tile preview requests into one sidecar run.
+ * Interactive panning fires a screenful of tiles near-simultaneously, and one
+ * MapLibre instance rendering N tiles is far cheaper than N sequential
+ * startups (style parse + remote fetches amortized once).
+ *
+ * Batch renders are intentionally unabortable (short-lived): per-request
+ * disconnects settle when the batch completes, and already-aborted jobs never
+ * trigger a run. Exports/prewarm keep calling renderLibertyTiles directly
+ * with their abort signals intact.
+ */
+export function createPreviewBatcher(
+  runBatch: (outDir: string, tiles: LibertyTile[]) => Promise<LibertyRenderResult>,
+  opts?: { windowMs?: number; maxTiles?: number },
+) {
+  interface Pending {
+    outDir: string;
+    tile: LibertyTile;
+    signal?: AbortSignal;
+    resolve: (r: LibertyRenderResult) => void;
+    reject: (e: unknown) => void;
+  }
+  const windowMs = opts?.windowMs ?? PREVIEW_BATCH_WINDOW_MS;
+  const maxTiles = opts?.maxTiles ?? PREVIEW_BATCH_MAX_TILES;
+  let pending: Pending[] = [];
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    timer = null;
+    if (pending.length === 0) return;
+    const jobs = pending;
+    pending = [];
+    const byDir = new Map<string, Pending[]>();
+    for (const j of jobs) {
+      const group = byDir.get(j.outDir) ?? [];
+      group.push(j);
+      byDir.set(j.outDir, group);
+    }
+    for (const [outDir, group] of byDir) {
+      const live = group.filter((j) => !j.signal?.aborted);
+      for (const j of group) {
+        if (j.signal?.aborted) j.resolve({ rendered: 0, failed: [j.tile] });
+      }
+      if (live.length === 0) continue;
+      runBatch(
+        outDir,
+        live.map((j) => j.tile),
+      ).then(
+        (res) => {
+          const failedSet = new Set(res.failed.map((t) => `${t.z}/${t.x}/${t.y}`));
+          for (const j of live) {
+            const key = `${j.tile.z}/${j.tile.x}/${j.tile.y}`;
+            // Per-job render counts are meaningless for a shared batch; the
+            // preview caller only needs to know its tile is on disk or not.
+            j.resolve(
+              failedSet.has(key) ? { rendered: 0, failed: [j.tile] } : { rendered: 0, failed: [] },
+            );
+          }
+        },
+        (err) => {
+          for (const j of live) j.reject(err);
+        },
+      );
+    }
+  };
+
+  return {
+    render(outDir: string, tile: LibertyTile, signal?: AbortSignal): Promise<LibertyRenderResult> {
+      return new Promise<LibertyRenderResult>((resolve, reject) => {
+        pending.push({ outDir, tile, signal, resolve, reject });
+        if (pending.length >= maxTiles) {
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          flush();
+        } else if (!timer) {
+          timer = setTimeout(flush, windowMs);
+        }
+      });
+    },
+    /** Drain pending jobs immediately (used in tests). */
+    flush,
+  };
+}
+
+export const previewBatcher = createPreviewBatcher((outDir, tiles) =>
+  renderLibertyTiles(outDir, tiles),
+);
 
 export async function exportTiles(
   params: ExportTilesParams,

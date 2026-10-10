@@ -3,7 +3,8 @@ import * as topojsonClient from 'topojson-client';
 import { CountrySelect } from './components/CountrySelect';
 import { AdminLevelSelect } from './components/AdminLevelSelect';
 import { ExportTilesButton } from './components/ExportTilesButton';
-import { LibertyMap } from './components/LibertyMap';
+import { ExportPmtilesButton } from './components/ExportPmtilesButton';
+import { LibertyMap, type BaseMode } from './components/LibertyMap';
 import { ZoomBadge } from './components/ZoomBadge';
 import { TrashIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
 import { getCountryOsmLevels } from './data/osm-admin-levels';
@@ -39,16 +40,24 @@ function getCountryCodeFromUrl(): string | null {
 }
 
 function countryUrl(code: string): string {
+  if (code.toUpperCase() === 'GLOBAL') return appBasePath();
   return `${appBasePath()}${code.toUpperCase()}`;
 }
 
+/** World cover for the global vector base layer (no buffer concept). */
+const WORLD_BBOX: [number, number, number, number] = [-180, -85.0511, 180, 85.0511];
+
 function App() {
-  const [countryCode, setCountryCode] = useState<string | null>(() => getCountryCodeFromUrl());
+  // Global is the default country (root `/` with no code in the URL).
+  const [countryCode, setCountryCode] = useState<string>(() => getCountryCodeFromUrl() ?? 'GLOBAL');
   const [selectedAdminLevel, setSelectedAdminLevel] = useState<number>(2);
   const [tileMaxZoom, setTileMaxZoom] = useState(8);
   const [tileBuffer, setTileBuffer] = useState(1);
   const [mapZoom, setMapZoom] = useState(2);
-  const [loading, setLoading] = useState<boolean>(() => getCountryCodeFromUrl() !== null);
+  // Base-layer preview mode — the sidebar shows matching export options only
+  // (vector pack in vector mode, raster pack in raster mode).
+  const [baseMode, setBaseMode] = useState<BaseMode>('vector');
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
 
@@ -150,14 +159,16 @@ function App() {
 
   // Raw bounds for the currently selected admin level (falls back to the
   // country bbox until features load), plus the tile-snapped box actually exported.
+  // GLOBAL has no boundary data — its cover is the whole world.
   const baseBbox = useMemo<[number, number, number, number] | null>(() => {
+    if (countryCode?.toUpperCase() === 'GLOBAL') return WORLD_BBOX;
     const fromFeatures = bboxForFeatures(geoJsonData);
     if (fromFeatures) return fromFeatures;
     if (data?.bbox && data.bbox.length >= 4) {
       return data.bbox.slice(0, 4) as [number, number, number, number];
     }
     return null;
-  }, [geoJsonData, data]);
+  }, [geoJsonData, data, countryCode]);
 
   // Honest preview of the discrete tile buffer: outer edges of the buffered
   // tile cover at max zoom (low zooms cover a larger geographic area).
@@ -173,6 +184,13 @@ function App() {
       setLoading(true);
       setError(null);
       setData(null);
+
+      // GLOBAL needs no boundary fetch — world cover only (and never prewarms
+      // the raster cache: warming the whole world would be ~87k tiles).
+      if (upper === 'GLOBAL') {
+        setLoading(false);
+        return;
+      }
 
       try {
         const res = await fetch(API_URL, {
@@ -212,31 +230,19 @@ function App() {
     [loadCountry],
   );
 
-  // Initial load: country comes from the URL; the root `/` loads nothing.
+  // Initial load: country comes from the URL; the root `/` loads GLOBAL.
   const didInitRef = useRef(false);
   useEffect(() => {
     if (didInitRef.current) return;
     didInitRef.current = true;
-    const initial = getCountryCodeFromUrl();
-    if (!initial) {
-      setLoading(false);
-      return;
-    }
-    void loadCountry(initial);
+    void loadCountry(getCountryCodeFromUrl() ?? 'GLOBAL');
   }, [loadCountry]);
 
   // Back/forward buttons: URL is the source of truth.
   useEffect(() => {
     const onPopState = () => {
-      const code = getCountryCodeFromUrl();
+      const code = getCountryCodeFromUrl() ?? 'GLOBAL';
       if (code === countryCodeRef.current) return;
-      if (!code) {
-        setCountryCode(null);
-        setData(null);
-        setError(null);
-        setLoading(false);
-        return;
-      }
       void loadCountry(code);
     };
     window.addEventListener('popstate', onPopState);
@@ -252,6 +258,8 @@ function App() {
     const label = countries.find((c) => c.code === countryCode)?.label ?? countryCode;
     document.title = `${label} · Geo Boundaries`;
   }, [countryCode]);
+
+  const isGlobal = countryCode.toUpperCase() === 'GLOBAL';
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
@@ -283,30 +291,32 @@ function App() {
         <div className="flex flex-col gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">Country</label>
-            <CountrySelect value={countryCode ?? ''} onChange={handleCountryChange} />
+            <CountrySelect value={countryCode} onChange={handleCountryChange} />
           </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-700">Admin Level</label>
-              <a
-                href="https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
-                title="View OSM admin levels definition for specific countries"
-              >
-                <span>OSM Guide</span>
-                <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden="true" />
-              </a>
+          {!isGlobal && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-slate-700">Admin Level</label>
+                <a
+                  href="https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
+                  title="View OSM admin levels definition for specific countries"
+                >
+                  <span>OSM Guide</span>
+                  <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden="true" />
+                </a>
+              </div>
+              <AdminLevelSelect
+                value={adminLevel}
+                onChange={setSelectedAdminLevel}
+                countryCode={countryCode}
+                availableLevels={availableLevels}
+              />
             </div>
-            <AdminLevelSelect
-              value={adminLevel}
-              onChange={setSelectedAdminLevel}
-              countryCode={countryCode ?? undefined}
-              availableLevels={availableLevels}
-            />
-          </div>
+          )}
         </div>
 
         {error && (
@@ -337,15 +347,46 @@ function App() {
               Download TopoJSON
             </button>
 
-            <ExportTilesButton
-              countryCode={data.country_code}
-              bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
-              buffer={tileBuffer}
-              onBufferChange={setTileBuffer}
-              apiUrl={API_URL}
-              maxZoom={tileMaxZoom}
-              onMaxZoomChange={setTileMaxZoom}
-            />
+            {/* Tile-pack export follows the map base mode: what you preview is
+                what you export. Boundary summary + TopoJSON stay in both modes. */}
+            {baseMode === 'raster' ? (
+              <ExportTilesButton
+                countryCode={data.country_code}
+                bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
+                buffer={tileBuffer}
+                onBufferChange={setTileBuffer}
+                apiUrl={API_URL}
+                maxZoom={tileMaxZoom}
+                onMaxZoomChange={setTileMaxZoom}
+              />
+            ) : (
+              <ExportPmtilesButton
+                countryCode={data.country_code}
+                bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
+                apiUrl={API_URL}
+              />
+            )}
+          </div>
+        )}
+
+        {isGlobal && !loading && (
+          <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-slate-200">
+            <h3 className="font-semibold text-slate-900 text-sm">Global Base Layer</h3>
+            {baseMode === 'vector' ? (
+              <>
+                <p className="text-xs text-slate-500">
+                  Worldwide vector base (zooms 0–6, no tile buffer). Country packs start at z7 and
+                  layer over this base.
+                </p>
+
+                <ExportPmtilesButton countryCode="GLOBAL" bbox={WORLD_BBOX} apiUrl={API_URL} />
+              </>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Raster packs are per-country — select a country to export WebP tiles (the map
+                preview above still shows the server-rendered raster for comparison).
+              </p>
+            )}
           </div>
         )}
 
@@ -377,24 +418,23 @@ function App() {
 
       {/* Map Area */}
       <div className="flex-1 relative z-0">
-        {/* Live Liberty vector style (same style the raster packs render), so the
-            preview always matches export output at any zoom — no tile cap here. */}
+        {/* Base-mode preview: vector style vs server-rendered WebP. The dashed
+            buffer outline only applies to raster packs, so it shows in raster
+            mode for countries. */}
         <LibertyMap
-          bbox={(data?.bbox as [number, number, number, number] | undefined) ?? null}
+          bbox={
+            ((isGlobal ? WORLD_BBOX : data?.bbox) as
+              | [number, number, number, number]
+              | undefined) ?? null
+          }
           geoJsonData={geoJsonData as GeoJSON.FeatureCollection | null}
-          exportBbox={exportBbox}
+          exportBbox={isGlobal || baseMode !== 'raster' ? null : exportBbox}
           onZoomChange={setMapZoom}
+          apiUrl={API_URL}
+          baseMode={baseMode}
+          onBaseModeChange={setBaseMode}
         />
         <ZoomBadge zoom={mapZoom} />
-
-        {/* Empty state on the root `/` (no country in the URL yet) */}
-        {!loading && !data && !countryCode && (
-          <div className="absolute inset-0 z-[400] flex items-center justify-center pointer-events-none">
-            <div className="bg-white px-6 py-4 rounded-xl shadow-lg border border-slate-200 text-slate-600 text-sm max-w-xs text-center">
-              Select a country to view its boundaries
-            </div>
-          </div>
-        )}
 
         {/* Loading overlay for Map */}
         {loading && (
