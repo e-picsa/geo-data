@@ -229,7 +229,7 @@ Instead of rendering rasters, the server repackages the upstream OpenFreeMap pla
 Two-tier design (separate layer per file, small border-tile duplication accepted — no multi-country packs, no tile buffer):
 
 - **Global base** (`country_code: "GLOBAL"`, the default): whole-world cover from z0, `maxZoom` capped at 6 (default 4). Used as the bundled `world-base` source (z0–6) in the app.
-- **Country detail** (`country_code: "MW"` + `bbox`): cover from the posted bbox starting at z7, `maxZoom` 7–12 (default 10). Downloaded on demand as the `country-detail` source (z7+).
+- **Country detail** (`country_code: "MW"` + `bbox`): cover from the posted bbox starting at z7, `maxZoom` 7–12 (default 8, matching the raster pack default). Downloaded on demand as the `country-detail` source (z7+).
 
 `layers: "full"` (default) passes tiles through untouched; `"minimal"` strips `building`/`housenumber`/`poi`/`aeroway`/`aerodrome_label` — per the upstream TileJSON these only exist at z8+, so `minimal` is identical to `full` for global packs and only shrinks country z10–12 tiles.
 

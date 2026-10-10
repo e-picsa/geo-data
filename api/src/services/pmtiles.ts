@@ -28,7 +28,7 @@ export const PMTILES_GLOBAL_MAX_ZOOM = 6;
 export const PMTILES_GLOBAL_DEFAULT_ZOOM = 4;
 export const PMTILES_COUNTRY_MIN_ZOOM = 7;
 export const PMTILES_COUNTRY_MAX_ZOOM = 12;
-export const PMTILES_COUNTRY_DEFAULT_ZOOM = 10;
+export const PMTILES_COUNTRY_DEFAULT_ZOOM = 8;
 
 export const PMTILES_DIR = path.join(process.cwd(), '.cache', 'pmtiles');
 /** Raw upstream PBFs, cached by planet vintage so exports survive data updates. */

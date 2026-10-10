@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CloudArrowDownIcon } from '@heroicons/react/20/solid';
+import { CloudArrowDownIcon, InformationCircleIcon } from '@heroicons/react/20/solid';
 import { countTilesForBbox, formatBytes } from '../utils/tiles';
 
 interface ExportPmtilesButtonProps {
@@ -14,7 +14,7 @@ const PMTILES_GLOBAL_ZOOMS = [0, 1, 2, 3, 4, 5, 6];
 const PMTILES_GLOBAL_DEFAULT_ZOOM = 4;
 const PMTILES_COUNTRY_MIN_ZOOM = 7;
 const PMTILES_COUNTRY_ZOOMS = [7, 8, 9, 10, 11, 12];
-const PMTILES_COUNTRY_DEFAULT_ZOOM = 10;
+const PMTILES_COUNTRY_DEFAULT_ZOOM = 8;
 
 /** Above this many tiles the export gets slow — ask for confirmation. */
 const LARGE_EXPORT_TILES = 2500;
@@ -42,6 +42,7 @@ export function ExportPmtilesButton({ countryCode, bbox, apiUrl }: ExportPmtiles
     isGlobal ? PMTILES_GLOBAL_DEFAULT_ZOOM : PMTILES_COUNTRY_DEFAULT_ZOOM,
   );
   const [layers, setLayers] = useState<'full' | 'minimal'>('full');
+  const [showLayersInfo, setShowLayersInfo] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -146,21 +147,48 @@ export function ExportPmtilesButton({ countryCode, bbox, apiUrl }: ExportPmtiles
           ))}
         </select>
       </label>
-      <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
-        <span title="Full replicates the WebP map exactly. Minimal drops buildings/POIs/aeroways (only present at z10+) to shrink country packs.">
-          Vector layers
-        </span>
-        <select
-          value={layers}
-          onChange={(e) => setLayers(e.target.value as 'full' | 'minimal')}
-          disabled={downloading}
-          className="ml-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-          title="Full = byte-identical upstream tiles; minimal = strip z10+ bulk layers"
-        >
-          <option value="full">full (exact map)</option>
-          <option value="minimal">minimal (smaller)</option>
-        </select>
-      </label>
+      <div className="relative">
+        <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
+          <span className="inline-flex items-center gap-1">
+            Vector layers
+            <button
+              type="button"
+              onClick={() => setShowLayersInfo((v) => !v)}
+              aria-label="About Full vs Reduced layers"
+              aria-expanded={showLayersInfo}
+              className="text-slate-400 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-full"
+            >
+              <InformationCircleIcon className="h-4 w-4" />
+            </button>
+          </span>
+          <select
+            value={layers}
+            onChange={(e) => setLayers(e.target.value as 'full' | 'minimal')}
+            disabled={downloading}
+            className="ml-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+          >
+            <option value="full">Full</option>
+            <option value="minimal">Reduced</option>
+          </select>
+        </label>
+        {showLayersInfo && (
+          <div className="absolute z-50 mt-1 w-full rounded-md border border-slate-200 bg-white p-3 shadow-lg text-xs text-slate-600 space-y-1.5">
+            <p>
+              <span className="font-semibold text-slate-800">Full</span> keeps every upstream layer
+              — byte-identical to the tiles the WebP raster map is rendered from.
+            </p>
+            <p>
+              <span className="font-semibold text-slate-800">Reduced</span> strips buildings, house
+              numbers, POIs, aeroways and aerodrome labels. Upstream only includes those layers from
+              zoom 8 upwards (mostly 10+), so low-zoom packs are identical either way and rural
+              areas look the same — cities at high zoom lose minor detail.
+            </p>
+            <p>
+              Savings vary by country: near-zero for rural Malawi, larger for dense urban areas.
+            </p>
+          </div>
+        )}
+      </div>
       {estimate && (
         <p className="text-xs text-slate-500">
           ~{estimate.tileCount.toLocaleString()} vector tiles · ~{formatBytes(estimate.bytes)}
