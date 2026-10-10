@@ -183,7 +183,6 @@ Clears the boundary-data cache **and** all rendered tile caches (per-country exp
 ### 4. Export Map Tiles Archive
 
 **Endpoint:** `POST /export-tiles`
-
 **Request Body:**
 
 ```json
@@ -210,13 +209,40 @@ The archive contains `{z}/{x}/{y}.webp` tiles plus a `manifest.json` at the root
 > [!NOTE]
 > Tile rendering shells out to Node.js (`api/src/services/render-liberty-tiles.mjs`) because `@maplibre/maplibre-gl-native` cannot load under the Bun runtime. Local dev therefore requires Node.js 20+ on `PATH` (plus `xvfb` on Linux — macOS needs no wrapper). The production Docker image already includes both.
 
-### 5. Preview Tiles (Liberty raster)
+### 5. Export Vector Tiles (PMTiles)
+
+**Endpoint:** `POST /export-pmtiles`
+
+```json
+{
+  "country_code": "GLOBAL",
+  "maxZoom": 4,
+  "layers": "full"
+}
+```
+
+**Response:** HTTP 200 OK
+Returns a binary blob stream `Content-Type: application/octet-stream` representing a single-file `.pmtiles` archive of Mapbox Vector Tiles (plus `X-PMTiles-Sha256` / `X-PMTiles-Bytes` headers).
+
+Instead of rendering rasters, the server repackages the upstream OpenFreeMap planet PBFs (the exact tiles the WebP renderer consumes) — geometry is byte-identical to the raster map, styled client-side for crisp rendering. Upstream tiles are disk-cached by planet `dataDate`, staged into MBTiles via `bun:sqlite`, then converted with the `go-pmtiles` CLI into a clustered archive (which dedups identical tiles, common for ocean/low-zoom).
+
+Two-tier design (separate layer per file, small border-tile duplication accepted — no multi-country packs, no tile buffer):
+
+- **Global base** (`country_code: "GLOBAL"`, the default): whole-world cover from z0, `maxZoom` capped at 6 (default 4). Used as the bundled `world-base` source (z0–6) in the app.
+- **Country detail** (`country_code: "MW"` + `bbox`): cover from the posted bbox starting at z7, `maxZoom` 7–12 (default 8, matching the raster pack default). Downloaded on demand as the `country-detail` source (z7+).
+
+`layers: "full"` (default) passes tiles through untouched; `"minimal"` strips `building`/`housenumber`/`poi`/`aeroway`/`aerodrome_label` — per the upstream TileJSON these only exist at z8+, so `minimal` is identical to `full` for global packs and only shrinks country z10–12 tiles.
+
+> [!NOTE]
+> Local dev needs the `go-pmtiles` binary: run `sh scripts/setup-pmtiles.sh` (or set `PMTILES_BIN`). The production Docker image downloads it at build time.
+
+### 6. Preview Tiles (Liberty raster)
 
 **Endpoint:** `GET /tiles/liberty/{z}/{x}/{y}.webp` (zooms 0–12)
 
-Renders a single Liberty tile on demand (disk-cached, so repeat views are instant, with ETag revalidation). Useful for QA-ing `/export-tiles` output tile-by-tile. The web debug UI itself renders the live Liberty vector style via MapLibre GL (same style the packs bake), with a boundary overlay and live zoom readout.
+Renders a single Liberty tile on demand (disk-cached, so repeat views are instant, with ETag revalidation). Useful for QA-ing `/export-tiles` output tile-by-tile. The web debug UI itself renders the live Liberty vector style via MapLibre GL (same style the packs bake), with a boundary overlay and live zoom readout. A Vector/Raster toggle on the map swaps the base between the live vector style and these server-rendered WebP tiles, so you can compare exactly what each export contains.
 
-### 6. Prewarm Tiles (optimistic cache fill)
+### 7. Prewarm Tiles (optimistic cache fill)
 
 **Endpoint:** `POST /prewarm-tiles` (zooms 0–8, capped by design)
 

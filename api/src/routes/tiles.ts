@@ -4,11 +4,24 @@ import { corsHeaders } from '../utils/cors.ts';
 import {
   exportTiles,
   renderLibertyTiles,
+  previewBatcher,
+  isAbortError,
   LIBERTY_TILES_DIR,
   PREVIEW_DIR_NAME,
   RENDER_VERSION,
   MAX_ZOOM,
 } from '../services/map-tiles.ts';
+import {
+  exportPmtiles,
+  isGlobalCode,
+  resolvePmtilesCover,
+  CoverTooLargeError,
+  PMTILES_GLOBAL_MAX_ZOOM,
+  PMTILES_GLOBAL_DEFAULT_ZOOM,
+  PMTILES_COUNTRY_MIN_ZOOM,
+  PMTILES_COUNTRY_MAX_ZOOM,
+  PMTILES_COUNTRY_DEFAULT_ZOOM,
+} from '../services/pmtiles.ts';
 import { getTilesForBbox } from '../utils/tiles.ts';
 
 import { z } from 'zod';
@@ -35,6 +48,73 @@ export const ExportTilesSchema = z
     path: ['minZoom'],
   });
 
+/**
+ * Vector export (PMTiles). Global packs cover the whole world starting at z0
+ * (capped at z6, default z4) with no bbox/buffer inputs; country packs cover
+ * the posted bbox starting at z7 (default max z10, cap z12). Deliberately no
+ * multi-country packs and no tile buffer — small border-tile duplication
+ * across files is accepted.
+ */
+export const ExportPmtilesSchema = z
+  .object({
+    country_code: z
+      .string()
+      .regex(/^(GLOBAL|[a-zA-Z]{2})$/, 'Must be GLOBAL or a 2-letter country code')
+      .transform((v: string) => v.toUpperCase())
+      .optional()
+      .default('GLOBAL'),
+    bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
+    maxZoom: z.number().int().min(0).max(PMTILES_COUNTRY_MAX_ZOOM).optional(),
+    layers: z.enum(['full', 'minimal']).optional().default('full'),
+  })
+  .superRefine((v, ctx) => {
+    if (isGlobalCode(v.country_code)) {
+      if (v.maxZoom !== undefined && v.maxZoom > PMTILES_GLOBAL_MAX_ZOOM) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['maxZoom'],
+          message: `Global exports are capped at zoom ${PMTILES_GLOBAL_MAX_ZOOM}`,
+        });
+      }
+    } else {
+      if (!v.bbox) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['bbox'],
+          message: 'bbox is required for country exports',
+        });
+      } else {
+        const [minLon, minLat, maxLon, maxLat] = v.bbox;
+        const sane =
+          [minLon, minLat, maxLon, maxLat].every((n) => Number.isFinite(n) && Math.abs(n) <= 180) &&
+          Math.abs(minLat) <= 90 &&
+          Math.abs(maxLat) <= 90;
+        if (!sane) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['bbox'],
+            message: 'bbox must be [minLon, minLat, maxLon, maxLat] within world bounds',
+          });
+        } else if (minLon >= maxLon || minLat >= maxLat) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['bbox'],
+            message: 'bbox min values must be less than max values',
+          });
+        }
+      }
+      if (
+        v.maxZoom !== undefined &&
+        (v.maxZoom < PMTILES_COUNTRY_MIN_ZOOM || v.maxZoom > PMTILES_COUNTRY_MAX_ZOOM)
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['maxZoom'],
+          message: `Country exports support zoom ${PMTILES_COUNTRY_MIN_ZOOM}–${PMTILES_COUNTRY_MAX_ZOOM}`,
+        });
+      }
+    }
+  });
 /**
  * Fire-and-forget cache warming, kept cheap by design: renders leak into the
  * same per-country dir the export reads, so a later export only renders the
@@ -99,7 +179,13 @@ async function handlePreviewTile(req: Request, pathname: string): Promise<Respon
   const { x, y, z } = parsed.tile;
   try {
     const previewDir = path.join(LIBERTY_TILES_DIR, PREVIEW_DIR_NAME);
-    const { failed } = await renderLibertyTiles(previewDir, [{ x, y, z }], req.signal);
+    // Screenfuls of tiles coalesce into one sidecar run (see previewBatcher).
+    const { failed } = await previewBatcher.render(previewDir, { x, y, z }, req.signal);
+    // MapLibre cancels stale tiles on every pan — a disconnect, not an error.
+    if (req.signal.aborted) {
+      console.debug(`Preview tile ${z}/${x}/${y}: client disconnected`);
+      return new Response(null, { status: 499, headers: corsHeaders });
+    }
     if (failed.length > 0) {
       return new Response(JSON.stringify({ error: `Failed to render tile ${z}/${x}/${y}` }), {
         status: 500,
@@ -120,6 +206,10 @@ async function handlePreviewTile(req: Request, pathname: string): Promise<Respon
       headers: { ...previewTileResponseHeaders, ETag: etag },
     });
   } catch (err: unknown) {
+    if (isAbortError(err) || req.signal.aborted) {
+      console.debug(`Preview tile request aborted: ${pathname}`);
+      return new Response(null, { status: 499, headers: corsHeaders });
+    }
     console.error('Error rendering preview tile:', err);
     const message = err instanceof Error ? err.message : 'An unknown error occurred';
     return new Response(JSON.stringify({ status: 'error', message }), {
@@ -174,6 +264,10 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     } catch (err: unknown) {
+      if (isAbortError(err) || req.signal.aborted) {
+        console.debug('Prewarm cancelled by client');
+        return new Response(null, { status: 499, headers: corsHeaders });
+      }
       console.error('Error prewarming tiles:', err);
       const message = err instanceof Error ? err.message : 'An unknown error occurred';
       return new Response(JSON.stringify({ status: 'error', message }), {
@@ -218,7 +312,82 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
         },
       });
     } catch (err: unknown) {
+      if (isAbortError(err) || req.signal.aborted) {
+        console.debug('Tiles export cancelled by client');
+        return new Response(null, { status: 499, headers: corsHeaders });
+      }
       console.error('Error generating tiles archive:', err);
+      const message = err instanceof Error ? err.message : 'An unknown error occurred';
+      return new Response(JSON.stringify({ status: 'error', message }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
+  if (req.method === 'POST' && pathname === '/export-pmtiles') {
+    try {
+      const body = await req.json();
+      const parseResult = ExportPmtilesSchema.safeParse(body);
+
+      if (!parseResult.success) {
+        return new Response(
+          JSON.stringify({
+            error:
+              parseResult.error.issues.map((issue) => issue.message).join(', ') ??
+              'Invalid request data',
+          }),
+          {
+            status: 400,
+            headers: corsHeaders,
+          },
+        );
+      }
+
+      const { country_code, bbox, layers } = parseResult.data;
+      const global = isGlobalCode(country_code);
+      const maxZoom =
+        parseResult.data.maxZoom ??
+        (global ? PMTILES_GLOBAL_DEFAULT_ZOOM : PMTILES_COUNTRY_DEFAULT_ZOOM);
+
+      // Reject planet-scale covers before any fetching/rendering starts
+      // (resolve throws instead of materializing tens of millions of tiles).
+      try {
+        resolvePmtilesCover({ country_code, bbox, maxZoom, layers });
+      } catch (err) {
+        if (err instanceof CoverTooLargeError) {
+          return new Response(
+            JSON.stringify({ error: `${err.message} — reduce maxZoom or narrow the bbox.` }),
+            {
+              status: 400,
+              headers: corsHeaders,
+            },
+          );
+        }
+        throw err;
+      }
+
+      const { filePath, manifest } = await exportPmtiles(
+        { country_code, bbox, maxZoom, layers },
+        req.signal,
+      );
+
+      return new Response(Bun.file(filePath), {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${manifest.file}"`,
+          'X-PMTiles-Sha256': manifest.sha256,
+          'X-PMTiles-Bytes': String(manifest.fileSizeBytes),
+        },
+      });
+    } catch (err: unknown) {
+      if (isAbortError(err) || req.signal.aborted) {
+        console.debug('PMTiles export cancelled by client');
+        return new Response(null, { status: 499, headers: corsHeaders });
+      }
+      console.error('Error generating pmtiles archive:', err);
       const message = err instanceof Error ? err.message : 'An unknown error occurred';
       return new Response(JSON.stringify({ status: 'error', message }), {
         status: 500,

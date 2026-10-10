@@ -2,7 +2,14 @@ import { expect, test } from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { buildManifest, LIBERTY_TILES_DIR, RENDER_VERSION } from './map-tiles.ts';
+import {
+  buildManifest,
+  LIBERTY_TILES_DIR,
+  RENDER_VERSION,
+  createPreviewBatcher,
+  isAbortError,
+  RenderAbortedError,
+} from './map-tiles.ts';
 import { splitIntoChunks, workerCount } from './map-tiles.ts';
 
 test('tile cache dir is versioned so renderer fixes invalidate stale tiles', () => {
@@ -86,4 +93,59 @@ test('buildManifest hash changes when tile content changes', async () => {
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+});
+
+test('preview batcher coalesces concurrent tiles into one run', async () => {
+  const calls: { x: number; y: number; z: number }[][] = [];
+  const batcher = createPreviewBatcher(
+    async (_dir, tiles) => {
+      calls.push(tiles);
+      return { rendered: tiles.length, failed: [] };
+    },
+    { windowMs: 10 },
+  );
+  const [a, b, c] = await Promise.all([
+    batcher.render('/preview', { x: 1, y: 2, z: 3 }),
+    batcher.render('/preview', { x: 4, y: 5, z: 6 }),
+    batcher.render('/preview', { x: 7, y: 8, z: 9 }),
+  ]);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toHaveLength(3);
+  for (const r of [a, b, c]) expect(r.failed).toHaveLength(0);
+});
+
+test('preview batcher maps per-tile failures to the right jobs', async () => {
+  const batcher = createPreviewBatcher(
+    async () => ({ rendered: 1, failed: [{ x: 4, y: 5, z: 6 }] }),
+    { windowMs: 10 },
+  );
+  const [a, b] = await Promise.all([
+    batcher.render('/preview', { x: 1, y: 2, z: 3 }),
+    batcher.render('/preview', { x: 4, y: 5, z: 6 }),
+  ]);
+  expect(a.failed).toHaveLength(0);
+  expect(b.failed).toEqual([{ x: 4, y: 5, z: 6 }]);
+});
+
+test('preview batcher skips already-aborted jobs without rendering', async () => {
+  let runs = 0;
+  const batcher = createPreviewBatcher(
+    async () => {
+      runs++;
+      return { rendered: 0, failed: [] };
+    },
+    { windowMs: 10 },
+  );
+  const ctl = new AbortController();
+  ctl.abort();
+  const r = await batcher.render('/preview', { x: 1, y: 2, z: 3 }, ctl.signal);
+  expect(r.failed).toEqual([{ x: 1, y: 2, z: 3 }]);
+  expect(runs).toBe(0);
+});
+
+test('abort errors classify correctly', () => {
+  expect(isAbortError(new RenderAbortedError())).toBe(true);
+  expect(isAbortError(new DOMException('Aborted', 'AbortError'))).toBe(true);
+  expect(isAbortError(new Error('Tile renderer 0 exited with code 1'))).toBe(false);
+  expect(isAbortError('nope')).toBe(false);
 });

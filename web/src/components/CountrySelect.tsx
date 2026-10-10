@@ -34,7 +34,7 @@ export function CountrySelect({ value, onChange }: CountrySelectProps) {
     >
       <div className="relative mt-1">
         <div className="relative w-full cursor-default overflow-hidden rounded-md bg-white text-left border border-slate-300 shadow-sm focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 sm:text-sm flex">
-          {selectedCountry && query === '' && (
+          {selectedCountry && selectedCountry.flagUrl && query === '' && (
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
               <img
                 src={selectedCountry.flagUrl}
@@ -45,7 +45,7 @@ export function CountrySelect({ value, onChange }: CountrySelectProps) {
             </div>
           )}
           <ComboboxInput
-            className={`w-full border-none py-2 bg-transparent ${selectedCountry && query === '' ? 'pl-11' : 'pl-3'} pr-10 text-sm leading-5 text-gray-900 focus:ring-0 outline-none`}
+            className={`w-full border-none py-2 bg-transparent ${selectedCountry && selectedCountry.flagUrl && query === '' ? 'pl-11' : 'pl-3'} pr-10 text-sm leading-5 text-gray-900 focus:ring-0 outline-none`}
             displayValue={(code: string) => countries.find((c) => c.code === code)?.label ?? ''}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Select a Country"
@@ -74,12 +74,14 @@ export function CountrySelect({ value, onChange }: CountrySelectProps) {
                 {({ selected }) => (
                   <>
                     <div className="flex items-center gap-2 truncate">
-                      <img
-                        src={country.flagUrl}
-                        alt={country.label}
-                        className="h-4 w-6 object-cover rounded-sm border border-slate-100"
-                        loading="lazy"
-                      />
+                      {country.flagUrl && (
+                        <img
+                          src={country.flagUrl}
+                          alt={country.label}
+                          className="h-4 w-6 object-cover rounded-sm border border-slate-100"
+                          loading="lazy"
+                        />
+                      )}
                       <span
                         className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}
                       >

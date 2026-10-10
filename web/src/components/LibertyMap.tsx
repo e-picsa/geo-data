@@ -14,6 +14,11 @@ const BOUNDARY_FILL_LAYER_ID = 'admin-boundaries-fill';
 const BOUNDARY_LINE_LAYER_ID = 'admin-boundaries-line';
 const EXPORT_BBOX_SOURCE_ID = 'export-bbox';
 const EXPORT_BBOX_LAYER_ID = 'export-bbox-line';
+const RASTER_SOURCE_ID = 'liberty-raster-preview';
+const RASTER_LAYER_ID = 'liberty-raster-preview-layer';
+
+/** Base layer mode, lifted to App so the sidebar shows matching export options. */
+export type BaseMode = 'vector' | 'raster';
 
 /**
  * Run `fn` as soon as sources/layers may be added: immediately when the
@@ -78,12 +83,35 @@ interface LibertyMapProps {
   /** Tile-snapped export bbox at max zoom — drawn as a subtle grey outline. */
   exportBbox?: [number, number, number, number] | null;
   onZoomChange: (zoom: number) => void;
+  /** Base for preview tile URLs (`/tiles/liberty/{z}/{x}/{y}.webp`). */
+  apiUrl: string;
+  /** Controlled base-mode toggle (drives matching sidebar export options). */
+  baseMode: BaseMode;
+  onBaseModeChange: (mode: BaseMode) => void;
 }
 
-/** Pure MapLibre GL map: live Liberty vector style + boundary overlay. */
-export function LibertyMap({ bbox, geoJsonData, exportBbox, onZoomChange }: LibertyMapProps) {
+/**
+ * MapLibre GL map with a vector/raster base toggle: live Liberty vector style
+ * vs the server-rendered WebP preview tiles (exactly what `/export-tiles`
+ * bakes). Boundary + export-bbox overlays stay on in both modes.
+ */
+export function LibertyMap({
+  bbox,
+  geoJsonData,
+  exportBbox,
+  onZoomChange,
+  apiUrl,
+  baseMode,
+  onBaseModeChange,
+}: LibertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  /** Ids of the Liberty style's own layers (captured on load, before overlays). */
+  const baseLayerIdsRef = useRef<string[]>([]);
+  const apiUrlRef = useRef(apiUrl);
+  useEffect(() => {
+    apiUrlRef.current = apiUrl;
+  }, [apiUrl]);
   const onZoomChangeRef = useRef(onZoomChange);
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
@@ -143,8 +171,14 @@ export function LibertyMap({ bbox, geoJsonData, exportBbox, onZoomChange }: Libe
     map.on('moveend', reportZoom);
     map.on('zoomend', snapZoom);
     map.on('load', reportZoom);
+    // Capture the Liberty style's own layer ids before any overlay is added
+    // (effects below register their readiness handlers after this one).
+    const cancelCapture = whenStyleReady(map, () => {
+      baseLayerIdsRef.current = (map.getStyle()?.layers ?? []).map((l) => l.id);
+    });
 
     return () => {
+      cancelCapture();
       container.removeEventListener('wheel', onWheel);
       map.off('moveend', reportZoom);
       map.off('zoomend', snapZoom);
@@ -152,6 +186,38 @@ export function LibertyMap({ bbox, geoJsonData, exportBbox, onZoomChange }: Libe
       mapRef.current = null;
     };
   }, []);
+
+  // Vector/raster base toggle: raster mode shows the server-rendered WebP
+  // preview tiles (exactly what `/export-tiles` bakes) and hides the Liberty
+  // style layers; overlays stay visible in both modes.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      if (!map.getSource(RASTER_SOURCE_ID)) {
+        const base = apiUrlRef.current.replace(/\/$/, '');
+        map.addSource(RASTER_SOURCE_ID, {
+          type: 'raster',
+          tiles: [`${base}/tiles/liberty/{z}/{x}/{y}.webp`],
+          tileSize: 256,
+          maxzoom: 12,
+        });
+        // Slip beneath overlays if they already exist (later overlays append above anyway).
+        const before = [BOUNDARY_FILL_LAYER_ID, EXPORT_BBOX_LAYER_ID].find((id) =>
+          map.getLayer(id),
+        );
+        map.addLayer({ id: RASTER_LAYER_ID, type: 'raster', source: RASTER_SOURCE_ID }, before);
+      }
+      const showRaster = baseMode === 'raster';
+      map.setLayoutProperty(RASTER_LAYER_ID, 'visibility', showRaster ? 'visible' : 'none');
+      for (const id of baseLayerIdsRef.current) {
+        if (map.getLayer(id)) {
+          map.setLayoutProperty(id, 'visibility', showRaster ? 'none' : 'visible');
+        }
+      }
+    };
+    return whenStyleReady(map, apply);
+  }, [baseMode]);
 
   // Boundary overlay: create source/layers once data first arrives, then update.
   useEffect(() => {
@@ -241,5 +307,32 @@ export function LibertyMap({ bbox, geoJsonData, exportBbox, onZoomChange }: Libe
     return whenStyleReady(map, fit);
   }, [bbox]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      <div
+        className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] flex rounded-full shadow-md border border-slate-200 bg-white/95 backdrop-blur overflow-hidden text-xs font-semibold"
+        role="group"
+        aria-label="Base layer"
+      >
+        {(['vector', 'raster'] as BaseMode[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => onBaseModeChange(m)}
+            aria-pressed={baseMode === m}
+            title={
+              m === 'vector'
+                ? 'Live Liberty vector style (crisp at any zoom)'
+                : 'Server-rendered WebP tiles — exactly what the offline pack contains (renders on demand, zooms 0–12)'
+            }
+            className={`px-3 py-1.5 capitalize transition-colors ${
+              baseMode === m ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
