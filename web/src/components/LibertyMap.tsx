@@ -20,6 +20,36 @@ const RASTER_LAYER_ID = 'liberty-raster-preview-layer';
 /** Base layer mode, lifted to App so the sidebar shows matching export options. */
 export type BaseMode = 'vector' | 'raster';
 
+/**
+ * Run `fn` as soon as sources/layers may be added: immediately when the
+ * style is ready, otherwise as soon as it is. `style.load` fires when the
+ * stylesheet is parsed (addSource/addLayer become legal) — far earlier than
+ * `load`, which additionally waits for tiles + idle. `idle` is a backstop
+ * for data arriving after `style.load` already fired while sprites/images
+ * are still pending. Returns a cleanup that cancels a pending registration.
+ */
+function whenStyleReady(map: maplibregl.Map, fn: () => void): () => void {
+  if (map.isStyleLoaded()) {
+    fn();
+    return () => {};
+  }
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    map.off('style.load', run);
+    map.off('idle', run);
+    fn();
+  };
+  map.once('style.load', run);
+  map.once('idle', run);
+  return () => {
+    done = true;
+    map.off('style.load', run);
+    map.off('idle', run);
+  };
+}
+
 function bboxToPolygon(bbox: [number, number, number, number]): GeoJSON.FeatureCollection {
   const [minLon, minLat, maxLon, maxLat] = bbox;
   return {
@@ -142,12 +172,13 @@ export function LibertyMap({
     map.on('zoomend', snapZoom);
     map.on('load', reportZoom);
     // Capture the Liberty style's own layer ids before any overlay is added
-    // (effects below register their `load` handlers after this one).
-    map.once('load', () => {
+    // (effects below register their readiness handlers after this one).
+    const cancelCapture = whenStyleReady(map, () => {
       baseLayerIdsRef.current = (map.getStyle()?.layers ?? []).map((l) => l.id);
     });
 
     return () => {
+      cancelCapture();
       container.removeEventListener('wheel', onWheel);
       map.off('moveend', reportZoom);
       map.off('zoomend', snapZoom);
@@ -185,8 +216,7 @@ export function LibertyMap({
         }
       }
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once('load', apply);
+    return whenStyleReady(map, apply);
   }, [baseMode]);
 
   // Boundary overlay: create source/layers once data first arrives, then update.
@@ -220,8 +250,7 @@ export function LibertyMap({
         paint: { 'line-color': '#4f46e5', 'line-width': 2, 'line-opacity': 0.8 },
       });
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once('load', apply);
+    return whenStyleReady(map, apply);
   }, [geoJsonData]);
 
   // Export bbox overlay: subtle grey outline of the buffered tile cover at
@@ -255,8 +284,7 @@ export function LibertyMap({
         },
       });
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once('load', apply);
+    return whenStyleReady(map, apply);
   }, [exportBbox]);
 
   // Fit to country bounds when the country changes.
@@ -276,8 +304,7 @@ export function LibertyMap({
         console.error('[LibertyMap] fitBounds failed:', err);
       }
     };
-    if (map.isStyleLoaded()) fit();
-    else map.once('load', fit);
+    return whenStyleReady(map, fit);
   }, [bbox]);
 
   return (
