@@ -1,10 +1,14 @@
 import { expect, test } from 'bun:test';
 import {
   resolvePmtilesCover,
+  countPmtilesTiles,
   mbtileRow,
   droppedLayersFor,
   filterTileLayers,
+  CoverTooLargeError,
   MINIMAL_DROPPED_LAYERS,
+  MAX_PMTILES_TILES,
+  PMTILES_COUNTRY_MIN_ZOOM,
 } from './pmtiles.ts';
 
 const MALAWI_BBOX: [number, number, number, number] = [32.6, -17.2, 36.0, -9.3];
@@ -59,4 +63,23 @@ test('minimal preset drops bulk layers but never core layers', () => {
 test('filterTileLayers passes bytes through when nothing is dropped', () => {
   const raw = new Uint8Array([1, 2, 3]);
   expect(filterTileLayers(raw, [])).toBe(raw);
+});
+
+test('real country covers fit the export cap; world-sized covers throw', () => {
+  const malawi = resolvePmtilesCover({
+    country_code: 'MW',
+    bbox: MALAWI_BBOX,
+    maxZoom: 12,
+    layers: 'full',
+  });
+  expect(malawi.tiles.length).toBeLessThan(MAX_PMTILES_TILES);
+  expect(countPmtilesTiles(MALAWI_BBOX, PMTILES_COUNTRY_MIN_ZOOM, 12)).toBe(malawi.tiles.length);
+  expect(() =>
+    resolvePmtilesCover({
+      country_code: 'MW',
+      bbox: [-180, -85.0511, 180, 85.0511],
+      maxZoom: 12,
+      layers: 'full',
+    }),
+  ).toThrow(CoverTooLargeError);
 });

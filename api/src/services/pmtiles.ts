@@ -6,7 +6,7 @@ import { Database } from 'bun:sqlite';
 import { PbfReader } from 'pbf';
 import { VectorTile } from '@mapbox/vector-tile';
 import vtPbf from 'vt-pbf';
-import { getTilesForBbox } from '../utils/tiles.ts';
+import { getTilesForBbox, getTileRangeForBbox } from '../utils/tiles.ts';
 import { getPlanetDataDate, LIBERTY_STYLE_URL } from './map-tiles.ts';
 
 /**
@@ -29,6 +29,13 @@ export const PMTILES_GLOBAL_DEFAULT_ZOOM = 4;
 export const PMTILES_COUNTRY_MIN_ZOOM = 7;
 export const PMTILES_COUNTRY_MAX_ZOOM = 12;
 export const PMTILES_COUNTRY_DEFAULT_ZOOM = 8;
+
+/**
+ * Hard cap on tiles per export. A world-sized bbox at z7–12 would otherwise
+ * resolve to ~22M tiles (enormous fetch/memory/SQLite work); real countries
+ * stay far below this (Malawi z7–12 ≈ 5k, DRC ≈ 60k).
+ */
+export const MAX_PMTILES_TILES = 100_000;
 
 export const PMTILES_DIR = path.join(process.cwd(), '.cache', 'pmtiles');
 /** Raw upstream PBFs, cached by planet vintage so exports survive data updates. */
@@ -97,6 +104,35 @@ export function isGlobalCode(country_code: string): boolean {
   return country_code.toUpperCase() === 'GLOBAL';
 }
 
+export class CoverTooLargeError extends Error {
+  readonly tileCount: number;
+  constructor(tileCount: number) {
+    super(
+      `Tile cover (~${tileCount.toLocaleString()} tiles) exceeds the limit of ${MAX_PMTILES_TILES.toLocaleString()}`,
+    );
+    this.name = 'CoverTooLargeError';
+    this.tileCount = tileCount;
+  }
+}
+
+/**
+ * Count cover tiles from ranges only — safe for planet-scale inputs that
+ * must never be materialized (pure — unit tested).
+ */
+export function countPmtilesTiles(
+  bbox: [number, number, number, number],
+  minZoom: number,
+  maxZoom: number,
+): number {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  let total = 0;
+  for (let z = minZoom; z <= maxZoom; z++) {
+    const r = getTileRangeForBbox(minLon, minLat, maxLon, maxLat, z);
+    total += (r.maxX - r.minX + 1) * (r.maxY - r.minY + 1);
+  }
+  return total;
+}
+
 /**
  * Resolve the zoom range + tile cover for an export (pure — unit tested).
  * Global always starts at z0; country packs start at z7 (the app layers them
@@ -111,6 +147,10 @@ export function resolvePmtilesCover(params: ExportPmtilesParams): {
   const minZoom = global ? 0 : PMTILES_COUNTRY_MIN_ZOOM;
   const maxZoom = params.maxZoom;
   const bbox = global ? WORLD_BBOX : params.bbox!;
+  // Count before materializing: a planet-scale cover must throw instead of
+  // exploding the call stack / heap via array spread.
+  const count = countPmtilesTiles(bbox, minZoom, maxZoom);
+  if (count > MAX_PMTILES_TILES) throw new CoverTooLargeError(count);
   const [minLon, minLat, maxLon, maxLat] = bbox;
   const tiles: TileCoord[] = [];
   for (let z = minZoom; z <= maxZoom; z++) {
@@ -179,8 +219,20 @@ function resolvePmtilesBin(): string {
   return path.join(import.meta.dir, '..', '..', 'bin', 'pmtiles');
 }
 
-function artifactBase(params: ExportPmtilesParams, minZoom: number, dataDate: string): string {
-  return `${params.country_code.toUpperCase()}_z${minZoom}-${params.maxZoom}_${params.layers}_v${PMTILES_VERSION}_${dataDate}`;
+function artifactBase(
+  params: ExportPmtilesParams,
+  minZoom: number,
+  dataDate: string,
+  bbox: [number, number, number, number],
+): string {
+  // Bbox hash: same country + zooms + preset but a different boundary extent
+  // must not serve a stale cached artifact.
+  const bboxHash = crypto
+    .createHash('sha256')
+    .update(bbox.map((n) => n.toFixed(4)).join(','))
+    .digest('hex')
+    .slice(0, 8);
+  return `${params.country_code.toUpperCase()}_z${minZoom}-${params.maxZoom}_${params.layers}_${bboxHash}_v${PMTILES_VERSION}_${dataDate}`;
 }
 
 async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<Response> {
@@ -306,7 +358,7 @@ export async function exportPmtiles(
   const dropped = droppedLayersFor(params.layers);
 
   await fs.mkdir(PMTILES_DIR, { recursive: true });
-  const base = artifactBase(params, minZoom, dataDate);
+  const base = artifactBase(params, minZoom, dataDate, bbox);
   const filePath = path.join(PMTILES_DIR, `${base}.pmtiles`);
   const manifestPath = path.join(PMTILES_DIR, `${base}.manifest.json`);
 

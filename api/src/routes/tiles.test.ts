@@ -80,6 +80,19 @@ test('pmtiles schema requires bbox for countries and zooms 7–12', () => {
   );
 });
 
+test('pmtiles schema rejects invalid country bboxes', () => {
+  const ok = [32.6, -17.2, 36.0, -9.3] as const;
+  expect(ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox: ok }).success).toBe(true);
+  // swapped min/max
+  expect(
+    ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox: [36.0, -17.2, 32.6, -9.3] }).success,
+  ).toBe(false);
+  // out of world bounds
+  expect(
+    ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox: [-200, -17.2, 36.0, -9.3] }).success,
+  ).toBe(false);
+});
+
 test('export/prewarm schemas accept a discrete tile buffer', () => {
   const base = { country_code: 'MW', bbox: [32.6, -17.2, 36.0, -9.3] as const };
   const parsed = ExportTilesSchema.safeParse({ ...base, buffer: 1 });

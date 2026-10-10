@@ -14,6 +14,8 @@ import {
 import {
   exportPmtiles,
   isGlobalCode,
+  resolvePmtilesCover,
+  CoverTooLargeError,
   PMTILES_GLOBAL_MAX_ZOOM,
   PMTILES_GLOBAL_DEFAULT_ZOOM,
   PMTILES_COUNTRY_MIN_ZOOM,
@@ -81,6 +83,25 @@ export const ExportPmtilesSchema = z
           path: ['bbox'],
           message: 'bbox is required for country exports',
         });
+      } else {
+        const [minLon, minLat, maxLon, maxLat] = v.bbox;
+        const sane =
+          [minLon, minLat, maxLon, maxLat].every((n) => Number.isFinite(n) && Math.abs(n) <= 180) &&
+          Math.abs(minLat) <= 90 &&
+          Math.abs(maxLat) <= 90;
+        if (!sane) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['bbox'],
+            message: 'bbox must be [minLon, minLat, maxLon, maxLat] within world bounds',
+          });
+        } else if (minLon >= maxLon || minLat >= maxLat) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['bbox'],
+            message: 'bbox min values must be less than max values',
+          });
+        }
       }
       if (
         v.maxZoom !== undefined &&
@@ -328,6 +349,23 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
       const maxZoom =
         parseResult.data.maxZoom ??
         (global ? PMTILES_GLOBAL_DEFAULT_ZOOM : PMTILES_COUNTRY_DEFAULT_ZOOM);
+
+      // Reject planet-scale covers before any fetching/rendering starts
+      // (resolve throws instead of materializing tens of millions of tiles).
+      try {
+        resolvePmtilesCover({ country_code, bbox, maxZoom, layers });
+      } catch (err) {
+        if (err instanceof CoverTooLargeError) {
+          return new Response(
+            JSON.stringify({ error: `${err.message} — reduce maxZoom or narrow the bbox.` }),
+            {
+              status: 400,
+              headers: corsHeaders,
+            },
+          );
+        }
+        throw err;
+      }
 
       const { filePath, manifest } = await exportPmtiles(
         { country_code, bbox, maxZoom, layers },
