@@ -10,7 +10,6 @@ import { TrashIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid'
 import { getCountryOsmLevels } from './data/osm-admin-levels';
 import { countries } from './data/countries';
 import { bboxForFeatures, getBufferedBboxForZoom } from './utils/tiles';
-import { stringifyTopojsonReadable } from './utils/topojson.utils';
 
 interface BoundaryResponse {
   country_code: string;
@@ -288,36 +287,15 @@ function App() {
   const isGlobal = countryCode.toUpperCase() === 'GLOBAL';
 
   const downloadTopojson = () => {
-    if (!data?.topojson) return;
-    let content = data.topojson;
-    if (!includeCenters) {
-      try {
-        const parsed = JSON.parse(data.topojson);
-        for (const objKey of Object.keys(parsed.objects || {})) {
-          const obj = parsed.objects[objKey];
-          if (obj?.geometries) {
-            for (const geom of obj.geometries) {
-              if (geom.properties) {
-                delete geom.properties.center;
-                delete geom.properties.center_source;
-              }
-            }
-          }
-        }
-        content = stringifyTopojsonReadable(parsed);
-      } catch (e) {
-        console.error('Failed to strip centers from TopoJSON', e);
-      }
-    }
-    const blob = new Blob([content], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    if (!data?.country_code) return;
+    const baseUrl = API_URL.replace(/\/$/, '');
+    const downloadUrl = `${baseUrl}/boundaries/${data.country_code}.topo.json?include_centers=${includeCenters}`;
     const a = document.createElement('a');
-    a.href = url;
+    a.href = downloadUrl;
     a.download = `${data.country_code}.topo.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   return (

@@ -6,7 +6,6 @@ import { getCache, type CacheProvider } from '../utils/cache/index.ts';
 import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
 import { fetchGeofabrikBoundaries } from './geofabrik';
-import { shouldUseGeofabrik } from './geofabrik/url-mapping.ts';
 import {
   stringifyTopojsonReadable,
   stripCentersFromTopojson,
@@ -88,10 +87,6 @@ export const adminBoundaries = async (
       );
     }
     const validatedCode = validated.data.country_code;
-
-    if (!shouldUseGeofabrik(validatedCode)) {
-      return ErrorResponse({ error: `Unsupported country: ${validatedCode}` }, 400);
-    }
 
     const { topojsonString, source } = await getBoundariesTopojson(validatedCode, req.signal);
 
