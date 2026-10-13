@@ -1,6 +1,6 @@
 import { appRouter } from './routes/index.ts';
 
-const port = parseInt(process.env.PORT ?? '8080');
+const port = parseInt(process.env.PORT ?? '5174');
 
 const VERSION = 20260306;
 
