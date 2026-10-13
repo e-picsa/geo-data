@@ -107,7 +107,7 @@ export function LibertyMap({
   apiUrl,
   baseMode,
   onBaseModeChange,
-  showCenters = true,
+  showCenters = false,
 }: LibertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);

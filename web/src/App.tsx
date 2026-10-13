@@ -57,7 +57,7 @@ function App() {
   // Base-layer preview mode — the sidebar shows matching export options only
   // (vector pack in vector mode, raster pack in raster mode).
   const [baseMode, setBaseMode] = useState<BaseMode>('vector');
-  const [includeCenters, setIncludeCenters] = useState<boolean>(true);
+  const [includeCenters, setIncludeCenters] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);

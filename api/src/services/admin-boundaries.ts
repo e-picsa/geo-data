@@ -8,6 +8,7 @@ import type { BoundaryRequestParams } from '../types/schema.ts';
 import { fetchGeofabrikBoundaries } from './geofabrik';
 import { stringifyTopojsonReadable, summarizeTopojson } from '../utils/topojson.utils.ts';
 import { isCentroidInsideGeometry } from '../utils/geometry.utils.ts';
+import { corsHeaders } from '../utils/cors.ts';
 export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
 
 /**
@@ -53,16 +54,54 @@ export async function getBoundariesTopojson(
   return { topojsonString: serializedTopojson, source: 'generated' };
 }
 
-export const adminBoundaries = async (req: Request) => {
+export const adminBoundaries = async (
+  req: Request,
+  overrideCountryCode?: string,
+  rawTopojson?: boolean,
+) => {
   try {
-    const params = await validateBody(req, BOUNDARY_REQUEST_SCHEMA);
-    const { country_code } = params;
+    let countryCode = overrideCountryCode;
+    if (!countryCode) {
+      if (req.method === 'GET') {
+        const url = new URL(req.url);
+        countryCode = url.searchParams.get('country_code') ?? undefined;
+      } else {
+        const params = await validateBody(req, BOUNDARY_REQUEST_SCHEMA);
+        countryCode = params.country_code;
+      }
+    }
 
-    const { topojsonString, source } = await getBoundariesTopojson(country_code, req.signal);
-    return buildSuccessResponse(params, source, topojsonString);
+    if (!countryCode) {
+      return ErrorResponse({ error: 'Missing country_code parameter' }, 400);
+    }
+
+    const validated = BOUNDARY_REQUEST_SCHEMA.safeParse({ country_code: countryCode });
+    if (!validated.success) {
+      return ErrorResponse(
+        { error: validated.error.errors[0]?.message || 'Invalid country_code' },
+        400,
+      );
+    }
+    const validatedCode = validated.data.country_code;
+
+    const { topojsonString, source } = await getBoundariesTopojson(validatedCode, req.signal);
+
+    if (rawTopojson) {
+      return new Response(topojsonString, {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=86400',
+        },
+      });
+    }
+
+    return buildSuccessResponse({ country_code: validatedCode }, source, topojsonString);
   } catch (error) {
     console.error(typeof error, error);
-    return ErrorResponse(error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return ErrorResponse({ error: errorMsg }, 400);
   }
 };
 
