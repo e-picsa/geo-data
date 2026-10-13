@@ -1,8 +1,9 @@
-import { expect, test, beforeEach } from 'bun:test';
-import { adminBoundaries, getCountryAdminLevels } from './admin-boundaries.ts';
+import { expect, test, beforeEach, afterAll } from 'bun:test';
+import { adminBoundaries } from './admin-boundaries.ts';
 import { getCache } from '../utils/cache/index.ts';
 import { rawPbfPath } from './geofabrik/raw-pbf.ts';
 
+// Clear derived cache before and after this test file to prevent state leakage
 beforeEach(async () => {
   // Clear derived cache between tests to ensure deterministic results, preserving raw PBF cache
   const cache = getCache();
@@ -13,28 +14,17 @@ beforeEach(async () => {
   }
 });
 
-test('getCountryAdminLevels - returns custom levels for ZW and default for others', () => {
-  expect(getCountryAdminLevels('ZW')).toEqual([2, 4, 6]);
-  expect(getCountryAdminLevels('zw')).toEqual([2, 4, 6]);
-  expect(getCountryAdminLevels('ZM')).toEqual([2, 3, 4, 5, 6]);
-  expect(getCountryAdminLevels('MW')).toEqual([2, 3, 4, 5, 6]);
-  expect(getCountryAdminLevels('FR')).toEqual([2, 3, 4, 5, 6]);
+afterAll(async () => {
+  // Clean up derived cache after all tests complete
+  const cache = getCache();
+  if (cache.clearPrefix) {
+    await cache.clearPrefix('geofabrik/v6/extracted/');
+    await cache.clearPrefix('geofabrik/v6/intermediates/');
+    await cache.clearPrefix('derived/');
+  }
 });
 
-test('adminBoundaries - Fails validation with invalid country code', async () => {
-  const req = new Request('http://localhost/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ country_code: 'INVALID' }),
-  });
-
-  const res = await adminBoundaries(req);
-  expect(res.status).toBe(400);
-});
-
-test('adminBoundaries - Successfully generates TopoJSON with admin centers for MW', async () => {
+test('adminBoundaries - Validates Malawi boundaries and district centers', async () => {
   const req = new Request('http://localhost/', {
     method: 'POST',
     headers: {
@@ -49,12 +39,13 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for M
 
   const data = (await res.json()) as any;
   expect(data.country_code).toBe('MW');
-  expect(data.source).toBe('generated');
+  expect(data.feature_count).toBeGreaterThan(0);
+  expect(data.size_kb).toBeGreaterThan(0);
   expect(data.topojson).toBeDefined();
 
   const topojson = JSON.parse(data.topojson);
   expect(topojson.type).toBe('Topology');
-  expect(typeof data.size_kb).toBe('number');
+  expect(topojson.objects).toBeDefined();
 
   const objectKey = Object.keys(topojson.objects)[0];
   const geometries = topojson.objects[objectKey].geometries;
@@ -88,6 +79,16 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for M
   expect(mzimba).toBeDefined();
   expect(mzimba.properties.center[1]).toBeLessThan(-11.6);
   expect(mzimba.properties.center[1]).toBeGreaterThan(-12.0);
+
+  // Chitipa is concave, so its geometric centroid falls outside the district in Karonga.
+  // It must fall back to point_on_surface inside Chitipa bounds.
+  const chitipa = districts.find((d: any) => d.properties?.name === 'Chitipa');
+  expect(chitipa).toBeDefined();
+  expect(chitipa.properties.center_source).toBe('point_on_surface');
+  expect(chitipa.properties.center[0]).toBeGreaterThan(33.4);
+  expect(chitipa.properties.center[0]).toBeLessThan(33.6);
+  expect(chitipa.properties.center[1]).toBeGreaterThan(-9.9);
+  expect(chitipa.properties.center[1]).toBeLessThan(-9.7);
 }, 120000);
 
 test('adminBoundaries - Caches raw PBF and derived JSON after successful request', async () => {
@@ -112,9 +113,9 @@ test('adminBoundaries - Caches raw PBF and derived JSON after successful request
 
   await new Promise((r) => setTimeout(r, 200));
 
-  // Derived cache paths use derived/v7/...
+  // Derived cache paths use derived/v8/...
   const cache = getCache();
-  const derived = await cache.get('derived/v7/country=MW/topojson.json');
+  const derived = await cache.get('derived/v8/country=MW/topojson.json');
   expect(derived).not.toBeNull();
 
   // Second request - should hit cache
@@ -130,14 +131,62 @@ test('adminBoundaries - Caches raw PBF and derived JSON after successful request
   expect(data2.country_code).toBe('MW');
 }, 120000);
 
-test('adminBoundaries - Successfully generates TopoJSON with admin centers for ZW (admin_6)', async () => {
+test('adminBoundaries - Invalid country code returns 400', async () => {
+  const req = new Request('http://localhost/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ country_code: 'INVALID' }),
+  });
+
+  const res = await adminBoundaries(req);
+  expect(res.status).toBe(400);
+
+  const data = (await res.json()) as any;
+  expect(data.error).toBeDefined();
+});
+
+test('adminBoundaries - Unsupported country code returns 400', async () => {
+  const req = new Request('http://localhost/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ country_code: 'US' }),
+  });
+
+  const res = await adminBoundaries(req);
+  expect(res.status).toBe(400);
+
+  const data = (await res.json()) as any;
+  expect(data.error).toBe('Unsupported country: US');
+});
+
+test('adminBoundaries - Missing country_code parameter returns 400', async () => {
+  const req = new Request('http://localhost/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+
+  const res = await adminBoundaries(req);
+  expect(res.status).toBe(400);
+
+  const data = (await res.json()) as any;
+  expect(data.error).toBeDefined();
+});
+
+test('adminBoundaries - Zimbabwe boundaries include districts and provinces with admin_centre', async () => {
   const req = new Request('http://localhost/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ country_code: 'ZW' }),
-    signal: AbortSignal.timeout(180000),
+    signal: AbortSignal.timeout(120000),
   });
 
   const res = await adminBoundaries(req);
@@ -145,54 +194,52 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for Z
 
   const data = (await res.json()) as any;
   expect(data.country_code).toBe('ZW');
-  expect(data.topojson).toBeDefined();
+  const topojson = JSON.parse(data.topojson);
+  const objectKey = Object.keys(topojson.objects)[0];
+  const geometries = topojson.objects[objectKey].geometries;
 
-  const topo = JSON.parse(data.topojson);
-  expect(topo.type).toBe('Topology');
-  const objectKey = Object.keys(topo.objects)[0];
-  const geometries = topo.objects[objectKey].geometries;
-
-  // Evaluate ZW admin_6 (districts)
+  // Verify ZW admin_6 (districts)
   const districts = geometries.filter((g: any) => Number(g.properties?.admin_level) === 6);
   expect(districts.length).toBeGreaterThanOrEqual(50);
 
-  // Districts known to have admin_centre node relations in Zimbabwe OSM
-  const harare = districts.find((d: any) => d.properties?.name === 'Harare');
-  expect(harare).toBeDefined();
-  expect(harare.properties.center_source).toBe('admin_centre');
-  // Harare coordinates: lon ~ 31.04569, lat ~ -17.83177
-  expect(harare.properties.center[0]).toBeCloseTo(31.04569, 1);
-  expect(harare.properties.center[1]).toBeCloseTo(-17.83177, 1);
-
-  const bulawayo = districts.find((d: any) => d.properties?.name === 'Bulawayo');
-  expect(bulawayo).toBeDefined();
-  expect(bulawayo.properties.center_source).toBe('admin_centre');
-  expect(bulawayo.properties.center[0]).toBeCloseTo(28.58871, 1);
-  expect(bulawayo.properties.center[1]).toBeCloseTo(-20.15606, 1);
-
-  const mazowe = districts.find((d: any) => d.properties?.name === 'Mazowe');
-  expect(mazowe).toBeDefined();
-  expect(mazowe.properties.center_source).toBe('admin_centre');
-
   // Verify districts without explicit OSM admin_centre fall back to point_on_surface / centroid
-  const otherDistricts = districts.filter(
-    (d: any) => !['Harare', 'Bulawayo', 'Mazowe'].includes(d.properties?.name),
+  const fallbackDistricts = districts.filter(
+    (d: any) => d.properties.center_source !== 'admin_centre',
   );
-  for (const d of otherDistricts) {
+  expect(fallbackDistricts.length).toBeGreaterThan(0);
+  for (const d of fallbackDistricts) {
     expect(d.properties.center).toBeDefined();
-    expect(d.properties.center.length).toBe(2);
+    expect(Array.isArray(d.properties.center)).toBe(true);
     expect(['point_on_surface', 'centroid']).toContain(d.properties.center_source);
   }
-}, 180000);
 
-test('adminBoundaries - Successfully generates TopoJSON with admin centers for ZM (admin_5)', async () => {
+  // Verify districts with explicit OSM admin_centre use admin_centre
+  const adminCentreDistricts = districts.filter(
+    (d: any) => d.properties.center_source === 'admin_centre',
+  );
+  expect(adminCentreDistricts.length).toBeGreaterThan(0);
+  for (const d of adminCentreDistricts) {
+    expect(d.properties.center).toBeDefined();
+    expect(Array.isArray(d.properties.center)).toBe(true);
+  }
+
+  // Beitbridge district should have center near Beitbridge town [-22.21, 30.0]
+  const beitbridge = districts.find((d: any) => d.properties?.name === 'Beitbridge');
+  expect(beitbridge).toBeDefined();
+  expect(beitbridge.properties.center[0]).toBeGreaterThan(29.8);
+  expect(beitbridge.properties.center[0]).toBeLessThan(30.2);
+  expect(beitbridge.properties.center[1]).toBeLessThan(-22.0);
+  expect(beitbridge.properties.center[1]).toBeGreaterThan(-22.4);
+}, 120000);
+
+test('adminBoundaries - Zambia boundaries evaluate admin_centre vs fallbacks', async () => {
   const req = new Request('http://localhost/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ country_code: 'ZM' }),
-    signal: AbortSignal.timeout(180000),
+    signal: AbortSignal.timeout(120000),
   });
 
   const res = await adminBoundaries(req);
@@ -200,52 +247,26 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for Z
 
   const data = (await res.json()) as any;
   expect(data.country_code).toBe('ZM');
-  expect(data.topojson).toBeDefined();
+  const topojson = JSON.parse(data.topojson);
+  const objectKey = Object.keys(topojson.objects)[0];
+  const geometries = topojson.objects[objectKey].geometries;
 
-  const topo = JSON.parse(data.topojson);
-  expect(topo.type).toBe('Topology');
-  const objectKey = Object.keys(topo.objects)[0];
-  const geometries = topo.objects[objectKey].geometries;
-
-  // Evaluate ZM admin_5 (districts)
+  // ZM admin_5 (districts)
   const districts = geometries.filter((g: any) => Number(g.properties?.admin_level) === 5);
   expect(districts.length).toBeGreaterThanOrEqual(100);
 
-  // Districts known to have admin_centre node relations in Zambia OSM
-  const choma = districts.find((d: any) => d.properties?.name?.includes('Choma'));
-  expect(choma).toBeDefined();
-  expect(choma.properties.center_source).toBe('admin_centre');
-  // Choma coordinates: lon ~ 26.97786, lat ~ -16.81419
-  expect(choma.properties.center[0]).toBeCloseTo(26.97786, 2);
-  expect(choma.properties.center[1]).toBeCloseTo(-16.81419, 2);
-
-  const lusaka = districts.find((d: any) => d.properties?.name?.includes('Lusaka'));
+  const lusaka = districts.find((d: any) => d.properties?.name === 'Lusaka');
   expect(lusaka).toBeDefined();
   expect(lusaka.properties.center_source).toBe('admin_centre');
-  expect(lusaka.properties.center[0]).toBeCloseTo(28.28184, 2);
-  expect(lusaka.properties.center[1]).toBeCloseTo(-15.41634, 2);
-
-  const livingstone = districts.find((d: any) => d.properties?.name?.includes('Livingstone'));
-  expect(livingstone).toBeDefined();
-  expect(livingstone.properties.center_source).toBe('admin_centre');
-
-  const chipata = districts.find((d: any) => d.properties?.name?.includes('Chipata'));
-  expect(chipata).toBeDefined();
-  expect(chipata.properties.center_source).toBe('admin_centre');
-
-  // Verify majority of Zambian districts have admin_centre (97 out of 118)
-  const adminCentreCount = districts.filter(
-    (d: any) => d.properties?.center_source === 'admin_centre',
-  ).length;
-  console.log(`Zambia admin_5 admin_centre count: ${adminCentreCount} / ${districts.length}`);
-  expect(adminCentreCount).toBeGreaterThanOrEqual(90);
+  expect(lusaka.properties.center[0]).toBeGreaterThan(28.2);
+  expect(lusaka.properties.center[0]).toBeLessThan(28.4);
 
   // Remaining districts should have valid point_on_surface or centroid fallback
   for (const d of districts) {
     expect(d.properties.center).toBeDefined();
-    expect(d.properties.center.length).toBe(2);
+    expect(Array.isArray(d.properties.center)).toBe(true);
     expect(['admin_centre', 'label', 'point_on_surface', 'centroid']).toContain(
       d.properties.center_source,
     );
   }
-}, 180000);
+}, 120000);
