@@ -13,7 +13,7 @@ export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 7;
 
 type Source = 'cache' | 'generated';
 
@@ -108,14 +108,14 @@ function buildMapshaperInputsAndCommands(geojson: any): {
       `var s = "admin_centre"; ` +
       `if (!c && this.properties.label_point) { c = this.properties.label_point; s = "label"; } ` +
       `if (!c) { ` +
-      `  var hasInner = typeof this.innerX === "number" && !isNaN(this.innerX) && typeof this.innerY === "number" && !isNaN(this.innerY); ` +
       `  var hasCentroid = typeof this.centroidX === "number" && !isNaN(this.centroidX) && typeof this.centroidY === "number" && !isNaN(this.centroidY); ` +
-      `  if (hasInner) { ` +
-      `    c = [Math.round(this.innerX * 1e5) / 1e5, Math.round(this.innerY * 1e5) / 1e5]; ` +
-      `    s = "point_on_surface"; ` +
-      `  } else if (hasCentroid) { ` +
+      `  var hasInner = typeof this.innerX === "number" && !isNaN(this.innerX) && typeof this.innerY === "number" && !isNaN(this.innerY); ` +
+      `  if (hasCentroid) { ` +
       `    c = [Math.round(this.centroidX * 1e5) / 1e5, Math.round(this.centroidY * 1e5) / 1e5]; ` +
       `    s = "centroid"; ` +
+      `  } else if (hasInner) { ` +
+      `    c = [Math.round(this.innerX * 1e5) / 1e5, Math.round(this.innerY * 1e5) / 1e5]; ` +
+      `    s = "point_on_surface"; ` +
       `  } ` +
       `} else { ` +
       `  c = [Math.round(c[0] * 1e5) / 1e5, Math.round(c[1] * 1e5) / 1e5]; ` +

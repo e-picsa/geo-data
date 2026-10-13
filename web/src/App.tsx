@@ -159,15 +159,13 @@ function App() {
   const centersStats = useMemo(() => {
     if (!geoJsonData?.features) return null;
     let adminCentre = 0;
-    let pointOnSurface = 0;
-    let other = 0;
+    let fallback = 0;
     for (const f of geoJsonData.features) {
       const s = f.properties?.center_source;
       if (s === 'admin_centre') adminCentre++;
-      else if (s === 'point_on_surface') pointOnSurface++;
-      else other++;
+      else fallback++;
     }
-    return { total: geoJsonData.features.length, adminCentre, pointOnSurface, other };
+    return { total: geoJsonData.features.length, adminCentre, fallback };
   }, [geoJsonData]);
 
   // Raw bounds for the currently selected admin level (falls back to the
@@ -393,12 +391,9 @@ function App() {
                     <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
                     admin_centre: {centersStats.adminCentre}
                   </span>
-                  <span
-                    className="flex items-center gap-1.5"
-                    title="Mapshaper pole of inaccessibility fallback inside polygon"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-                    fallback: {centersStats.pointOnSurface + centersStats.other}
+                  <span className="flex items-center gap-1.5" title="Geometric centroid fallback">
+                    <span className="w-2 h-2 rounded-full bg-slate-500 inline-block" />
+                    fallback: {centersStats.fallback}
                   </span>
                 </div>
               )}

@@ -297,20 +297,24 @@ export function LibertyMap({
         type: 'circle',
         source: CENTERS_SOURCE_ID,
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 7],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.5, 7, 3.5, 10, 5],
           'circle-color': [
             'match',
             ['get', 'center_source'],
             'admin_centre',
-            '#2563eb', // Blue
+            '#2563eb', // Indigo Blue
             'label',
             '#0d9488', // Teal
+            'centroid',
+            '#64748b', // Slate
             'point_on_surface',
-            '#d97706', // Amber
+            '#64748b', // Slate
             '#64748b', // Slate
           ],
+          'circle-opacity': 0.85,
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2,
+          'circle-stroke-width': 1,
+          'circle-stroke-opacity': 0.8,
         },
       });
 

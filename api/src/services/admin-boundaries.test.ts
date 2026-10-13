@@ -69,11 +69,25 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for M
     expect(district.properties.center.length).toBe(2);
     expect(typeof district.properties.center[0]).toBe('number');
     expect(typeof district.properties.center[1]).toBe('number');
-    // MW districts in OSM lack admin_centre node relations, so fallback to point_on_surface / centroid
-    expect(['point_on_surface', 'centroid', 'admin_centre', 'label']).toContain(
+    // MW districts in OSM lack admin_centre node relations, so fallback to centroid / point_on_surface
+    expect(['centroid', 'point_on_surface', 'admin_centre', 'label']).toContain(
       district.properties.center_source,
     );
   }
+
+  // Dowa center should be near the geometric centroid [33.79, -13.59]
+  const dowa = districts.find((d: any) => d.properties?.name === 'Dowa');
+  expect(dowa).toBeDefined();
+  expect(dowa.properties.center[0]).toBeGreaterThan(33.7);
+  expect(dowa.properties.center[0]).toBeLessThan(33.9);
+  expect(dowa.properties.center[1]).toBeLessThan(-13.5);
+  expect(dowa.properties.center[1]).toBeGreaterThan(-13.7);
+
+  // Mzimba center should be near the geometric centroid [33.64, -11.77]
+  const mzimba = districts.find((d: any) => d.properties?.name === 'Mzimba');
+  expect(mzimba).toBeDefined();
+  expect(mzimba.properties.center[1]).toBeLessThan(-11.6);
+  expect(mzimba.properties.center[1]).toBeGreaterThan(-12.0);
 }, 120000);
 
 test('adminBoundaries - Caches raw PBF and derived JSON after successful request', async () => {
@@ -98,13 +112,18 @@ test('adminBoundaries - Caches raw PBF and derived JSON after successful request
 
   await new Promise((r) => setTimeout(r, 200));
 
-  // Derived cache paths use derived/v6/...
+  // Derived cache paths use derived/v7/...
   const cache = getCache();
-  const derived = await cache.get('derived/v6/country=MW/topojson.json');
+  const derived = await cache.get('derived/v7/country=MW/topojson.json');
   expect(derived).not.toBeNull();
 
   // Second request - should hit cache
-  const res2 = await adminBoundaries(req);
+  const req2 = new Request('http://localhost/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ country_code: 'MW' }),
+  });
+  const res2 = await adminBoundaries(req2);
   expect(res2.status).toBe(200);
   const data2 = (await res2.json()) as any;
   expect(data2.source).toBe('cache');
