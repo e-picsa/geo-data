@@ -57,7 +57,7 @@ function App() {
   // Base-layer preview mode — the sidebar shows matching export options only
   // (vector pack in vector mode, raster pack in raster mode).
   const [baseMode, setBaseMode] = useState<BaseMode>('vector');
-  const [showCenters, setShowCenters] = useState<boolean>(true);
+  const [includeCenters, setIncludeCenters] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
@@ -276,63 +276,31 @@ function App() {
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
-    const blob = new Blob([data.topojson], { type: 'application/json' });
+    let content = data.topojson;
+    if (!includeCenters) {
+      try {
+        const parsed = JSON.parse(data.topojson);
+        for (const objKey of Object.keys(parsed.objects || {})) {
+          const obj = parsed.objects[objKey];
+          if (obj?.geometries) {
+            for (const geom of obj.geometries) {
+              if (geom.properties) {
+                delete geom.properties.center;
+                delete geom.properties.center_source;
+              }
+            }
+          }
+        }
+        content = JSON.stringify(parsed);
+      } catch (e) {
+        console.error('Failed to strip centers from TopoJSON', e);
+      }
+    }
+    const blob = new Blob([content], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${data.country_code}.topo.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadCentersCsv = () => {
-    if (!geoJsonData) return;
-    const header = 'id,name,admin_level,longitude,latitude,center_source\r\n';
-    const rows = geoJsonData.features
-      .map((f: any) => {
-        const p = f.properties || {};
-        const coords = p.center || [];
-        const name = `"${(p.name || '').replace(/"/g, '""')}"`;
-        return `${p.id ?? ''},${name},${p.admin_level ?? ''},${coords[0] ?? ''},${coords[1] ?? ''},${p.center_source ?? ''}`;
-      })
-      .join('\r\n');
-
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${countryCode}_admin_${adminLevel}_centers.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadCentersGeoJson = () => {
-    if (!geoJsonData) return;
-    const fc = {
-      type: 'FeatureCollection',
-      features: geoJsonData.features.map((f: any) => ({
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: f.properties?.center,
-        },
-        properties: {
-          id: f.properties?.id,
-          name: f.properties?.name,
-          admin_level: f.properties?.admin_level,
-          center_source: f.properties?.center_source,
-        },
-      })),
-    };
-    const blob = new Blob([JSON.stringify(fc, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${countryCode}_admin_${adminLevel}_centers.geojson`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -405,13 +373,19 @@ function App() {
               <div className="font-medium text-right">{data.size_kb} KB</div>
             </div>
 
-            {centersStats && (
-              <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5 text-xs text-slate-600">
-                <div className="flex justify-between font-medium text-slate-700">
-                  <span>Level {adminLevel} Centers:</span>
-                  <span>{centersStats.total} units</span>
-                </div>
-                <div className="flex justify-between text-[11px] text-slate-500">
+            <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5 text-xs text-slate-600">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeCenters}
+                  onChange={(e) => setIncludeCenters(e.target.checked)}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-xs font-medium text-slate-700">Include Centers</span>
+              </label>
+
+              {includeCenters && centersStats && (
+                <div className="flex justify-between text-[11px] text-slate-500 pl-6">
                   <span
                     className="flex items-center gap-1.5"
                     title="OSM admin_centre relation member node"
@@ -427,17 +401,8 @@ function App() {
                     fallback: {centersStats.pointOnSurface + centersStats.other}
                   </span>
                 </div>
-                <label className="flex items-center gap-2 mt-1 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={showCenters}
-                    onChange={(e) => setShowCenters(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-slate-700">Show Centers on Map</span>
-                </label>
-              </div>
-            )}
+              )}
+            </div>
 
             <button
               onClick={downloadTopojson}
@@ -445,21 +410,6 @@ function App() {
             >
               Download TopoJSON
             </button>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={downloadCentersCsv}
-                className="w-full bg-white border border-slate-300 text-slate-700 text-xs font-medium py-2 px-2 rounded-md shadow-sm hover:bg-slate-50 transition-colors text-center"
-              >
-                Centers (CSV)
-              </button>
-              <button
-                onClick={downloadCentersGeoJson}
-                className="w-full bg-white border border-slate-300 text-slate-700 text-xs font-medium py-2 px-2 rounded-md shadow-sm hover:bg-slate-50 transition-colors text-center"
-              >
-                Centers (GeoJSON)
-              </button>
-            </div>
 
             {/* Tile-pack export follows the map base mode: what you preview is
                 what you export. Boundary summary + TopoJSON stay in both modes. */}
@@ -547,7 +497,7 @@ function App() {
           apiUrl={API_URL}
           baseMode={baseMode}
           onBaseModeChange={setBaseMode}
-          showCenters={showCenters}
+          showCenters={includeCenters}
         />
         <ZoomBadge zoom={mapZoom} />
 
