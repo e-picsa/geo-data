@@ -6,7 +6,12 @@ import { getCache, type CacheProvider } from '../utils/cache/index.ts';
 import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
 import { fetchGeofabrikBoundaries } from './geofabrik';
-import { stringifyTopojsonReadable, summarizeTopojson } from '../utils/topojson.utils.ts';
+import { shouldUseGeofabrik } from './geofabrik/url-mapping.ts';
+import {
+  stringifyTopojsonReadable,
+  stripCentersFromTopojson,
+  summarizeTopojson,
+} from '../utils/topojson.utils.ts';
 import { isCentroidInsideGeometry } from '../utils/geometry.utils.ts';
 import { corsHeaders } from '../utils/cors.ts';
 export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
@@ -84,10 +89,31 @@ export const adminBoundaries = async (
     }
     const validatedCode = validated.data.country_code;
 
+    if (!shouldUseGeofabrik(validatedCode)) {
+      return ErrorResponse({ error: `Unsupported country: ${validatedCode}` }, 400);
+    }
+
     const { topojsonString, source } = await getBoundariesTopojson(validatedCode, req.signal);
 
+    const url = new URL(req.url);
+    const includeCentersParam =
+      url.searchParams.get('include_centers') ?? url.searchParams.get('centers');
+
+    let finalTopojsonString = topojsonString;
+    // For raw TopoJSON downloads, default include_centers to false to match the web UI download default,
+    // unless explicitly requested with include_centers=true / centers=true.
+    // For JSON envelope responses (e.g. POST /), default include_centers to true so web UI and tests have centers.
+    const shouldIncludeCenters = rawTopojson
+      ? includeCentersParam === 'true'
+      : includeCentersParam !== 'false';
+
+    if (!shouldIncludeCenters) {
+      const stripped = stripCentersFromTopojson(JSON.parse(topojsonString));
+      finalTopojsonString = stringifyTopojsonReadable(stripped);
+    }
+
     if (rawTopojson) {
-      return new Response(topojsonString, {
+      return new Response(finalTopojsonString, {
         status: 200,
         headers: {
           ...corsHeaders,
@@ -97,7 +123,7 @@ export const adminBoundaries = async (
       });
     }
 
-    return buildSuccessResponse({ country_code: validatedCode }, source, topojsonString);
+    return buildSuccessResponse({ country_code: validatedCode }, source, finalTopojsonString);
   } catch (error) {
     console.error(typeof error, error);
     const errorMsg = error instanceof Error ? error.message : String(error);

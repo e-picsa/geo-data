@@ -10,6 +10,7 @@ import { TrashIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid'
 import { getCountryOsmLevels } from './data/osm-admin-levels';
 import { countries } from './data/countries';
 import { bboxForFeatures, getBufferedBboxForZoom } from './utils/tiles';
+import { stringifyTopojsonReadable } from './utils/topojson.utils';
 
 interface BoundaryResponse {
   country_code: string;
@@ -303,7 +304,7 @@ function App() {
             }
           }
         }
-        content = JSON.stringify(parsed);
+        content = stringifyTopojsonReadable(parsed);
       } catch (e) {
         console.error('Failed to strip centers from TopoJSON', e);
       }

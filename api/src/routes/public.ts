@@ -36,8 +36,8 @@ export const handlePublicRoutes = async (req: Request, pathname: string): Promis
   if (req.method === 'GET' && boundariesMatch) {
     const countryCode = boundariesMatch[1].toUpperCase();
     const ext = boundariesMatch[2]?.toLowerCase();
-    const rawTopo =
-      url.searchParams.get('format') === 'topojson' || ext === '.topojson' || ext === '.topo.json';
+    const isJson = ext === '.json' || url.searchParams.get('format') === 'json';
+    const rawTopo = !isJson;
 
     return adminBoundaries(req, countryCode, rawTopo);
   }

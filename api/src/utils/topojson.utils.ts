@@ -54,6 +54,26 @@ export function stringifyTopojsonReadable(topo: Record<string, unknown>): string
 
   return `${trimmed}${sep}\n  "arcs": ${arcsBlock}\n}\n`;
 }
+
+/**
+ * Removes `center` and `center_source` from geometry properties in all TopoJSON objects.
+ */
+export function stripCentersFromTopojson(topo: Record<string, unknown>): Record<string, unknown> {
+  const cloned = JSON.parse(JSON.stringify(topo));
+  for (const objKey of Object.keys(cloned.objects || {})) {
+    const obj = cloned.objects[objKey] as Record<string, unknown> | undefined;
+    if (obj?.geometries && Array.isArray(obj.geometries)) {
+      for (const geom of obj.geometries) {
+        if (geom?.properties) {
+          delete geom.properties.center;
+          delete geom.properties.center_source;
+        }
+      }
+    }
+  }
+  return cloned;
+}
+
 type TopojsonSummary = {
   size_kb: number;
   feature_count: number;
