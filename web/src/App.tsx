@@ -168,6 +168,20 @@ function App() {
     return { total: geoJsonData.features.length, adminCentre, fallback };
   }, [geoJsonData]);
 
+  // Country-wide bounding box for fitting the map view
+  const countryBbox = useMemo<[number, number, number, number] | null>(() => {
+    const isGlob = countryCode?.toUpperCase() === 'GLOBAL';
+    if (isGlob) return WORLD_BBOX;
+    if (data?.bbox && data.bbox.length >= 4) {
+      return data.bbox.slice(0, 4) as [number, number, number, number];
+    }
+    const fromFull = bboxForFeatures(fullGeoJson);
+    if (fromFull) return fromFull;
+    const fromFiltered = bboxForFeatures(geoJsonData);
+    if (fromFiltered) return fromFiltered;
+    return null;
+  }, [countryCode, data?.bbox, fullGeoJson, geoJsonData]);
+
   // Raw bounds for the currently selected admin level (falls back to the
   // country bbox until features load), plus the tile-snapped box actually exported.
   // GLOBAL has no boundary data — its cover is the whole world.
@@ -481,11 +495,7 @@ function App() {
             buffer outline only applies to raster packs, so it shows in raster
             mode for countries. */}
         <LibertyMap
-          bbox={
-            ((isGlobal ? WORLD_BBOX : data?.bbox) as
-              | [number, number, number, number]
-              | undefined) ?? null
-          }
+          bbox={countryBbox}
           geoJsonData={geoJsonData as GeoJSON.FeatureCollection | null}
           exportBbox={isGlobal || baseMode !== 'raster' ? null : exportBbox}
           onZoomChange={setMapZoom}

@@ -127,7 +127,7 @@ function buildMapshaperInputsAndCommands(geojson: any): {
       `  center: c, ` +
       `  center_source: s ` +
       `}; '`,
-    `-o format=topojson output.topojson`,
+    `-o format=topojson bbox output.topojson`,
   ];
 
   return { input, commands };

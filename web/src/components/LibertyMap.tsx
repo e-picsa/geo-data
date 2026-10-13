@@ -194,7 +194,7 @@ export function LibertyMap({
     map.on('load', reportZoom);
 
     const cancelCapture = whenStyleReady(map, () => {
-      baseLayerIdsRef.current = (map.getStyle()?.layers ?? []).map((l) => l.id);
+      baseLayerIdsRef.current = (map.getStyle()?.layers ?? []).map((l: any) => l.id);
     });
 
     return () => {
@@ -297,7 +297,7 @@ export function LibertyMap({
         type: 'circle',
         source: CENTERS_SOURCE_ID,
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.5, 7, 3.5, 10, 5],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 7],
           'circle-color': [
             'match',
             ['get', 'center_source'],
@@ -311,14 +311,14 @@ export function LibertyMap({
             '#64748b', // Slate
             '#64748b', // Slate
           ],
-          'circle-opacity': 0.85,
+          'circle-opacity': 0.7,
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1,
-          'circle-stroke-opacity': 0.8,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-opacity': 0.85,
         },
       });
 
-      map.on('click', CENTERS_CIRCLE_LAYER_ID, (e) => {
+      map.on('click', CENTERS_CIRCLE_LAYER_ID, (e: any) => {
         const feature = e.features?.[0];
         if (!feature) return;
         const coords = (feature.geometry as any).coordinates.slice();
@@ -385,22 +385,31 @@ export function LibertyMap({
   // Fit to country bounds when the country changes.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !bbox) return;
+    if (!map || !bbox || bbox.length < 4) return;
+    const [minLon, minLat, maxLon, maxLat] = bbox;
+    if (
+      !Number.isFinite(minLon) ||
+      !Number.isFinite(minLat) ||
+      !Number.isFinite(maxLon) ||
+      !Number.isFinite(maxLat)
+    ) {
+      return;
+    }
     const fit = () => {
       try {
         map.fitBounds(
           [
-            [bbox[0], bbox[1]],
-            [bbox[2], bbox[3]],
+            [minLon, minLat],
+            [maxLon, maxLat],
           ],
-          { padding: 40, animate: false },
+          { padding: 40, maxZoom: 12, duration: 800 },
         );
       } catch (err) {
         console.error('[LibertyMap] fitBounds failed:', err);
       }
     };
     return whenStyleReady(map, fit);
-  }, [bbox]);
+  }, [bbox?.[0], bbox?.[1], bbox?.[2], bbox?.[3]]);
 
   return (
     <div className="relative h-full w-full">
