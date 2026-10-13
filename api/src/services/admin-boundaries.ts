@@ -12,7 +12,7 @@ import { stringifyTopojsonReadable, summarizeTopojson } from '../utils/topojson.
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 
 type Source = 'cache' | 'generated';
 
@@ -22,33 +22,42 @@ type CachePaths = {
   topojson: string;
 };
 
+export async function getBoundariesTopojson(
+  countryCode: string,
+  signal?: AbortSignal,
+): Promise<{ topojsonString: string; source: Source }> {
+  const cache = getCache();
+  const paths = buildCachePaths(countryCode);
+
+  const cachedTopojson = await readCache<any>(cache, paths.topojson);
+  if (cachedTopojson) {
+    console.log(`TopoJSON cache hit for ${countryCode}.`);
+    const serializedTopojson = stringifyTopojsonReadable(cachedTopojson);
+    return { topojsonString: serializedTopojson, source: 'cache' };
+  }
+
+  console.log(`Attempting to fetch boundaries from Geofabrik for ${countryCode}...`);
+  const osmData = await fetchGeofabrikBoundaries({
+    countryCode,
+    signal,
+  });
+  console.log(`Successfully fetched boundaries from Geofabrik for ${countryCode}`);
+
+  const topojsonString = await convertGeoJsonToTopojson(osmData, paths);
+
+  const serializedTopojson = stringifyTopojsonReadable(JSON.parse(topojsonString));
+  await writeCache(cache, paths.topojson, serializedTopojson);
+
+  return { topojsonString: serializedTopojson, source: 'generated' };
+}
+
 export const adminBoundaries = async (req: Request) => {
   try {
     const params = await validateBody(req, BOUNDARY_REQUEST_SCHEMA);
     const { country_code } = params;
-    const cache = getCache();
-    const paths = buildCachePaths(country_code);
 
-    const cachedTopojson = await readCache<any>(cache, paths.topojson);
-    if (cachedTopojson) {
-      console.log(`TopoJSON cache hit for ${country_code}.`);
-      const serializedTopojson = stringifyTopojsonReadable(cachedTopojson);
-      return buildSuccessResponse(params, 'cache', serializedTopojson);
-    }
-
-    console.log(`Attempting to fetch boundaries from Geofabrik for ${country_code}...`);
-    const osmData = await fetchGeofabrikBoundaries({
-      countryCode: country_code,
-      signal: req.signal,
-    });
-    console.log(`Successfully fetched boundaries from Geofabrik for ${country_code}`);
-
-    const topojsonString = await convertGeoJsonToTopojson(osmData, paths);
-
-    const serializedTopojson = stringifyTopojsonReadable(JSON.parse(topojsonString));
-    await writeCache(cache, paths.topojson, serializedTopojson);
-
-    return buildSuccessResponse(params, 'generated', serializedTopojson);
+    const { topojsonString, source } = await getBoundariesTopojson(country_code, req.signal);
+    return buildSuccessResponse(params, source, topojsonString);
   } catch (error) {
     if (error instanceof Response) {
       return error;
@@ -86,17 +95,6 @@ async function writeCache(cache: CacheProvider, key: string, value: unknown) {
   });
 }
 
-/**
- * Writes the topojson to cache using a human-readable serialization:
- * - Top-level metadata (type, bbox, transform, objects) is pretty-printed.
- * - The `arcs` array is placed at the end with one arc per line, so the
- *   file remains greppable/diffable without exploding in size.
- *
- * If your CacheProvider only accepts objects, swap this to call
- * `cache.set(key, topojson)` and move the formatting to a separate
- * disk-write path.
- */
-
 function buildMapshaperInputsAndCommands(geojson: any): {
   input: Record<string, unknown>;
   commands: string[];
@@ -110,16 +108,32 @@ function buildMapshaperInputsAndCommands(geojson: any): {
     `-clean allow-overlaps`,
     `-simplify weighting=0.5 10%`,
     `-filter-islands min-area=10km2`,
-    `-each 'this.properties = { id: this.properties["@id"] || this.id, name: this.properties.name || "", admin_level: this.properties.admin_level }'`,
+    `-each '` +
+      `var c = this.properties.admin_centre; ` +
+      `var s = "admin_centre"; ` +
+      `if (!c && this.properties.label_point) { c = this.properties.label_point; s = "label"; } ` +
+      `if (!c) { ` +
+      `  var x = this.innerX !== undefined && !isNaN(this.innerX) ? this.innerX : this.centroidX; ` +
+      `  var y = this.innerY !== undefined && !isNaN(this.innerY) ? this.innerY : this.centroidY; ` +
+      `  c = [Math.round(x * 1e5) / 1e5, Math.round(y * 1e5) / 1e5]; ` +
+      `  s = (this.innerX !== undefined && !isNaN(this.innerX)) ? "point_on_surface" : "centroid"; ` +
+      `} else { ` +
+      `  c = [Math.round(c[0] * 1e5) / 1e5, Math.round(c[1] * 1e5) / 1e5]; ` +
+      `} ` +
+      `this.properties = { ` +
+      `  id: this.properties.id || this.properties["@id"] || this.id, ` +
+      `  name: this.properties.name || "", ` +
+      `  admin_level: this.properties.admin_level, ` +
+      `  center: c, ` +
+      `  center_source: s ` +
+      `}; '`,
+    `-o format=topojson output.topojson`,
   ];
-
-  commands.push(`-o output.topojson format=topojson quantization=1e3 bbox`);
 
   return { input, commands };
 }
 
-async function convertGeoJsonToTopojson(geojson: unknown, paths: CachePaths): Promise<string> {
-  console.log('Converting to GeoJSON...');
+async function convertGeoJsonToTopojson(geojson: any, paths: CachePaths): Promise<string> {
   const cache = getCache();
 
   // Optional/debug cache

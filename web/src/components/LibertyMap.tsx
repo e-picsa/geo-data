@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 // Explicit worker URL: Vite prebundling breaks maplibre's relative worker
 // resolution, which silently kills all vector rendering (raster/shading
@@ -12,6 +12,8 @@ const LIBERTY_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 const BOUNDARY_SOURCE_ID = 'admin-boundaries';
 const BOUNDARY_FILL_LAYER_ID = 'admin-boundaries-fill';
 const BOUNDARY_LINE_LAYER_ID = 'admin-boundaries-line';
+const CENTERS_SOURCE_ID = 'admin-centers';
+const CENTERS_CIRCLE_LAYER_ID = 'admin-centers-circle';
 const EXPORT_BBOX_SOURCE_ID = 'export-bbox';
 const EXPORT_BBOX_LAYER_ID = 'export-bbox-line';
 const RASTER_SOURCE_ID = 'liberty-raster-preview';
@@ -88,6 +90,8 @@ interface LibertyMapProps {
   /** Controlled base-mode toggle (drives matching sidebar export options). */
   baseMode: BaseMode;
   onBaseModeChange: (mode: BaseMode) => void;
+  /** Toggle rendering of district/admin center markers */
+  showCenters?: boolean;
 }
 
 /**
@@ -103,6 +107,7 @@ export function LibertyMap({
   apiUrl,
   baseMode,
   onBaseModeChange,
+  showCenters = true,
 }: LibertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -117,6 +122,33 @@ export function LibertyMap({
     onZoomChangeRef.current = onZoomChange;
   }, [onZoomChange]);
 
+  const centersData = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!geoJsonData || !showCenters) return null;
+    const features: GeoJSON.Feature[] = [];
+    for (const f of geoJsonData.features) {
+      const props = (f.properties || {}) as any;
+      if (props.center && Array.isArray(props.center) && props.center.length === 2) {
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: props.center,
+          },
+          properties: {
+            id: props.id,
+            name: props.name || '',
+            admin_level: props.admin_level,
+            center_source: props.center_source || 'centroid',
+          },
+        });
+      }
+    }
+    return {
+      type: 'FeatureCollection',
+      features,
+    };
+  }, [geoJsonData, showCenters]);
+
   // Create once (StrictMode-safe via cleanup).
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -130,16 +162,8 @@ export function LibertyMap({
     mapRef.current = map;
 
     const reportZoom = () => onZoomChangeRef.current(Math.round(map.getZoom()));
-    // Leaflet parity: discrete wheel zoom. MapLibre scroll-zooms continuously
-    // with no snap option, so drive integer steps ourselves: one level per
-    // wheel tick, with a cooldown so trackpad event floods don't skip levels.
-    // `around` keeps the point under the cursor stationary, like Leaflet's
-    // scrollWheelZoom (MapLibre zoomIn()/zoomOut() would use the map center).
-    // (The zoomend snap below stays as a safety net, e.g. for touch pinch.)
     map.scrollZoom.disable();
     let lastStep = 0;
-    // In-flight step target: successive ticks during an animation step from
-    // the target, not the mid-flight camera, so levels can't be skipped.
     let targetZoom: number | null = null;
     const WHEEL_COOLDOWN_MS = 250;
     const onWheel = (e: WheelEvent) => {
@@ -149,7 +173,6 @@ export function LibertyMap({
       if (now - lastStep < WHEEL_COOLDOWN_MS) return;
       lastStep = now;
       const rect = container.getBoundingClientRect();
-      // easeTo `around` takes geographic coordinates, not screen pixels.
       const around = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
       const base = targetZoom ?? Math.round(map.getZoom());
       targetZoom = Math.min(
@@ -160,8 +183,6 @@ export function LibertyMap({
     };
     const container = containerRef.current;
     container.addEventListener('wheel', onWheel, { passive: false });
-    // Leaflet parity: keep the map on discrete zoom levels. easeTo re-fires
-    // zoomend, but the snapped value is integral so this terminates.
     const snapZoom = () => {
       targetZoom = null;
       const z = map.getZoom();
@@ -171,8 +192,7 @@ export function LibertyMap({
     map.on('moveend', reportZoom);
     map.on('zoomend', snapZoom);
     map.on('load', reportZoom);
-    // Capture the Liberty style's own layer ids before any overlay is added
-    // (effects below register their readiness handlers after this one).
+
     const cancelCapture = whenStyleReady(map, () => {
       baseLayerIdsRef.current = (map.getStyle()?.layers ?? []).map((l) => l.id);
     });
@@ -202,7 +222,6 @@ export function LibertyMap({
           tileSize: 256,
           maxzoom: 12,
         });
-        // Slip beneath overlays if they already exist (later overlays append above anyway).
         const before = [BOUNDARY_FILL_LAYER_ID, EXPORT_BBOX_LAYER_ID].find((id) =>
           map.getLayer(id),
         );
@@ -252,6 +271,78 @@ export function LibertyMap({
     };
     return whenStyleReady(map, apply);
   }, [geoJsonData]);
+
+  // District / admin centers overlay
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!centersData || centersData.features.length === 0) {
+      if (map.getSource(CENTERS_SOURCE_ID)) {
+        if (map.getLayer(CENTERS_CIRCLE_LAYER_ID)) map.removeLayer(CENTERS_CIRCLE_LAYER_ID);
+        map.removeSource(CENTERS_SOURCE_ID);
+      }
+      return;
+    }
+
+    const apply = () => {
+      if (map.getSource(CENTERS_SOURCE_ID)) {
+        (map.getSource(CENTERS_SOURCE_ID) as maplibregl.GeoJSONSource).setData(centersData);
+        return;
+      }
+
+      map.addSource(CENTERS_SOURCE_ID, { type: 'geojson', data: centersData });
+      map.addLayer({
+        id: CENTERS_CIRCLE_LAYER_ID,
+        type: 'circle',
+        source: CENTERS_SOURCE_ID,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 7],
+          'circle-color': [
+            'match',
+            ['get', 'center_source'],
+            'admin_centre',
+            '#2563eb', // Blue
+            'label',
+            '#0d9488', // Teal
+            'point_on_surface',
+            '#d97706', // Amber
+            '#64748b', // Slate
+          ],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+        },
+      });
+
+      map.on('click', CENTERS_CIRCLE_LAYER_ID, (e) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const coords = (feature.geometry as any).coordinates.slice();
+        const { name, admin_level, center_source } = feature.properties as any;
+
+        new maplibregl.Popup({ offset: 10 })
+          .setLngLat(coords)
+          .setHTML(
+            `<div style="font-family: sans-serif; font-size: 13px; line-height: 1.4; color: #1e293b;">` +
+              `<strong style="font-size: 14px; display: block; margin-bottom: 4px;">${name || 'Unnamed Unit'}</strong>` +
+              `<div><strong>Admin Level:</strong> ${admin_level}</div>` +
+              `<div><strong>Source:</strong> <span style="font-family: monospace; font-size: 11px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px;">${center_source}</span></div>` +
+              `<div><strong>Center:</strong> ${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}</div>` +
+              `</div>`,
+          )
+          .addTo(map);
+      });
+
+      map.on('mouseenter', CENTERS_CIRCLE_LAYER_ID, () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', CENTERS_CIRCLE_LAYER_ID, () => {
+        map.getCanvas().style.cursor = '';
+      });
+    };
+
+    return whenStyleReady(map, apply);
+  }, [centersData]);
 
   // Export bbox overlay: subtle grey outline of the buffered tile cover at
   // max zoom for the selected admin level (low zooms cover a larger area).

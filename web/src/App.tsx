@@ -57,25 +57,26 @@ function App() {
   // Base-layer preview mode — the sidebar shows matching export options only
   // (vector pack in vector mode, raster pack in raster mode).
   const [baseMode, setBaseMode] = useState<BaseMode>('vector');
+  const [showCenters, setShowCenters] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
 
-  // Mirror of countryCode for the popstate handler (avoids a stale closure).
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+  // Country code mirror for popstate comparison (avoids stale closures).
   const countryCodeRef = useRef(countryCode);
   useEffect(() => {
     countryCodeRef.current = countryCode;
   }, [countryCode]);
 
-  const API_URL = import.meta.env.VITE_API_URL || '/api';
-
-  // Fire-and-forget: warm the server tile cache (z0–8) as soon as we know a
-  // country is needed, so a later export mostly serves cached tiles.
-  // Render calls serialize server-side; failures are only logged.
+  // Request the server render raster preview tiles into the cache for
+  // zooms up to the preview cap (z8 by default, same as maxZoom initially).
   const prewarmTiles = useCallback(
-    (country_code: string, bbox: number[], buffer: number) => {
+    (country_code: string, bbox: number[] | undefined, buffer: number) => {
       if (!bbox || bbox.length < 4) return;
-      fetch(`${API_URL}/prewarm-tiles`, {
+      const baseUrl = API_URL.replace(/\/$/, '');
+      fetch(`${baseUrl}/prewarm-tiles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ country_code, bbox, buffer }),
@@ -139,13 +140,11 @@ function App() {
     );
 
     if (candidates.length > 0) {
-      return candidates.includes(2) ? 2 : candidates[0];
+      return candidates[0];
     }
-    if (availableLevels.length > 0) {
-      return availableLevels[0];
-    }
+
     return selectedAdminLevel;
-  }, [countryCode, availableLevels, selectedAdminLevel]);
+  }, [countryCode, selectedAdminLevel, availableLevels]);
 
   const geoJsonData = useMemo(() => {
     if (!fullGeoJson) return null;
@@ -156,6 +155,20 @@ function App() {
       ),
     };
   }, [fullGeoJson, adminLevel]);
+
+  const centersStats = useMemo(() => {
+    if (!geoJsonData?.features) return null;
+    let adminCentre = 0;
+    let pointOnSurface = 0;
+    let other = 0;
+    for (const f of geoJsonData.features) {
+      const s = f.properties?.center_source;
+      if (s === 'admin_centre') adminCentre++;
+      else if (s === 'point_on_surface') pointOnSurface++;
+      else other++;
+    }
+    return { total: geoJsonData.features.length, adminCentre, pointOnSurface, other };
+  }, [geoJsonData]);
 
   // Raw bounds for the currently selected admin level (falls back to the
   // country bbox until features load), plus the tile-snapped box actually exported.
@@ -274,6 +287,58 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadCentersCsv = () => {
+    if (!geoJsonData) return;
+    const header = 'id,name,admin_level,longitude,latitude,center_source\r\n';
+    const rows = geoJsonData.features
+      .map((f: any) => {
+        const p = f.properties || {};
+        const coords = p.center || [];
+        const name = `"${(p.name || '').replace(/"/g, '""')}"`;
+        return `${p.id ?? ''},${name},${p.admin_level ?? ''},${coords[0] ?? ''},${coords[1] ?? ''},${p.center_source ?? ''}`;
+      })
+      .join('\r\n');
+
+    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${countryCode}_admin_${adminLevel}_centers.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadCentersGeoJson = () => {
+    if (!geoJsonData) return;
+    const fc = {
+      type: 'FeatureCollection',
+      features: geoJsonData.features.map((f: any) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: f.properties?.center,
+        },
+        properties: {
+          id: f.properties?.id,
+          name: f.properties?.name,
+          admin_level: f.properties?.admin_level,
+          center_source: f.properties?.center_source,
+        },
+      })),
+    };
+    const blob = new Blob([JSON.stringify(fc, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${countryCode}_admin_${adminLevel}_centers.geojson`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex h-screen w-screen flex-col md:flex-row bg-slate-50">
       {/* Sidebar Controls */}
@@ -340,12 +405,61 @@ function App() {
               <div className="font-medium text-right">{data.size_kb} KB</div>
             </div>
 
+            {centersStats && (
+              <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5 text-xs text-slate-600">
+                <div className="flex justify-between font-medium text-slate-700">
+                  <span>Level {adminLevel} Centers:</span>
+                  <span>{centersStats.total} units</span>
+                </div>
+                <div className="flex justify-between text-[11px] text-slate-500">
+                  <span
+                    className="flex items-center gap-1.5"
+                    title="OSM admin_centre relation member node"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
+                    admin_centre: {centersStats.adminCentre}
+                  </span>
+                  <span
+                    className="flex items-center gap-1.5"
+                    title="Mapshaper pole of inaccessibility fallback inside polygon"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                    fallback: {centersStats.pointOnSurface + centersStats.other}
+                  </span>
+                </div>
+                <label className="flex items-center gap-2 mt-1 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showCenters}
+                    onChange={(e) => setShowCenters(e.target.checked)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-slate-700">Show Centers on Map</span>
+                </label>
+              </div>
+            )}
+
             <button
               onClick={downloadTopojson}
               className="mt-2 w-full bg-white border border-slate-300 text-slate-700 font-medium py-2 px-4 rounded-md shadow-sm hover:bg-slate-50 transition-colors"
             >
               Download TopoJSON
             </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={downloadCentersCsv}
+                className="w-full bg-white border border-slate-300 text-slate-700 text-xs font-medium py-2 px-2 rounded-md shadow-sm hover:bg-slate-50 transition-colors text-center"
+              >
+                Centers (CSV)
+              </button>
+              <button
+                onClick={downloadCentersGeoJson}
+                className="w-full bg-white border border-slate-300 text-slate-700 text-xs font-medium py-2 px-2 rounded-md shadow-sm hover:bg-slate-50 transition-colors text-center"
+              >
+                Centers (GeoJSON)
+              </button>
+            </div>
 
             {/* Tile-pack export follows the map base mode: what you preview is
                 what you export. Boundary summary + TopoJSON stay in both modes. */}
@@ -433,6 +547,7 @@ function App() {
           apiUrl={API_URL}
           baseMode={baseMode}
           onBaseModeChange={setBaseMode}
+          showCenters={showCenters}
         />
         <ZoomBadge zoom={mapZoom} />
 
