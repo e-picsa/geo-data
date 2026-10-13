@@ -29,6 +29,13 @@ Welcome! This system is a monorepo consisting of:
 - Avoid introducing any heavy DOM libraries into the frontend. The entire application is designed to be lightweight.
 - For local dev, run `npm start` (or `bun start`) in the project root to spool up both instances concurrently.
 
+## AI Assistant Operational Guidelines (Token & Tool Efficiency)
+
+- **Minimal Tool Calls**: Do not run repetitive polling commands (e.g. repeatedly tailing or checking log files in loops). When executing long-running test commands, either wait synchronously or wait for the system to notify upon completion without intermediate polling.
+- **Focused Execution**: When tasked with a targeted code change (such as removing console log spam or adjusting a UI component), make the targeted edit directly. Avoid expanding scope or running multi-minute integration suites unless explicitly requested.
+- **Clean Console Output**: Keep runtime and test logs quiet. Never commit noisy loops, raw dump logs, or repetitive warning messages into production code paths.
+- **Token Parsimony**: Keep reasoning and output direct, actionable, and succinct. Avoid speculative explanations or repeating context.
+
 ## Versioning
 
 - The release version lives in the root `package.json` (surfaced in the web UI via `VITE_APP_VERSION`).

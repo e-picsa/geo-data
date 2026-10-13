@@ -7,12 +7,13 @@ import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
 import { fetchGeofabrikBoundaries } from './geofabrik';
 import { stringifyTopojsonReadable, summarizeTopojson } from '../utils/topojson.utils.ts';
+export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
 
 /**
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 
 type Source = 'cache' | 'generated';
 
@@ -59,25 +60,13 @@ export const adminBoundaries = async (req: Request) => {
     const { topojsonString, source } = await getBoundariesTopojson(country_code, req.signal);
     return buildSuccessResponse(params, source, topojsonString);
   } catch (error) {
-    if (error instanceof Response) {
-      return error;
-    }
-
     console.error(typeof error, error);
-
-    const e = error as any;
-    const msg =
-      typeof e === 'string'
-        ? e
-        : e?.details || e?.error || e?.message || e?.msg || 'Failed to generate admin boundaries';
-
-    return ErrorResponse(msg);
+    return ErrorResponse(error);
   }
 };
 
 function buildCachePaths(countryCode: string): CachePaths {
   const prefix = `derived/v${CACHE_VERSION}/country=${countryCode}`;
-
   return {
     prefix,
     geojson: `${prefix}/geojson.json`,
@@ -86,13 +75,19 @@ function buildCachePaths(countryCode: string): CachePaths {
 }
 
 async function readCache<T>(cache: CacheProvider, key: string): Promise<T | null> {
-  return await cache.get<T>(key);
+  try {
+    return await cache.get<T>(key);
+  } catch {
+    return null;
+  }
 }
 
-async function writeCache(cache: CacheProvider, key: string, value: unknown) {
-  return cache.set(key, value).catch((err) => {
+async function writeCache(cache: CacheProvider, key: string, data: unknown): Promise<void> {
+  try {
+    await cache.set(key, data);
+  } catch (err) {
     console.error(`Non-fatal error saving cache key "${key}":`, err);
-  });
+  }
 }
 
 function buildMapshaperInputsAndCommands(geojson: any): {
@@ -113,10 +108,15 @@ function buildMapshaperInputsAndCommands(geojson: any): {
       `var s = "admin_centre"; ` +
       `if (!c && this.properties.label_point) { c = this.properties.label_point; s = "label"; } ` +
       `if (!c) { ` +
-      `  var x = this.innerX !== undefined && !isNaN(this.innerX) ? this.innerX : this.centroidX; ` +
-      `  var y = this.innerY !== undefined && !isNaN(this.innerY) ? this.innerY : this.centroidY; ` +
-      `  c = [Math.round(x * 1e5) / 1e5, Math.round(y * 1e5) / 1e5]; ` +
-      `  s = (this.innerX !== undefined && !isNaN(this.innerX)) ? "point_on_surface" : "centroid"; ` +
+      `  var hasInner = typeof this.innerX === "number" && !isNaN(this.innerX) && typeof this.innerY === "number" && !isNaN(this.innerY); ` +
+      `  var hasCentroid = typeof this.centroidX === "number" && !isNaN(this.centroidX) && typeof this.centroidY === "number" && !isNaN(this.centroidY); ` +
+      `  if (hasInner) { ` +
+      `    c = [Math.round(this.innerX * 1e5) / 1e5, Math.round(this.innerY * 1e5) / 1e5]; ` +
+      `    s = "point_on_surface"; ` +
+      `  } else if (hasCentroid) { ` +
+      `    c = [Math.round(this.centroidX * 1e5) / 1e5, Math.round(this.centroidY * 1e5) / 1e5]; ` +
+      `    s = "centroid"; ` +
+      `  } ` +
       `} else { ` +
       `  c = [Math.round(c[0] * 1e5) / 1e5, Math.round(c[1] * 1e5) / 1e5]; ` +
       `} ` +

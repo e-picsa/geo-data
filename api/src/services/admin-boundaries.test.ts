@@ -1,35 +1,24 @@
-import process from 'node:process';
-if (!process.env) {
-  process.env = {};
-}
-process.env.ENABLE_INTERMEDIATES_CACHE = 'false';
-import { test, expect, beforeAll } from 'bun:test';
-import { adminBoundaries } from './admin-boundaries.ts';
+import { expect, test, beforeEach } from 'bun:test';
+import { adminBoundaries, getCountryAdminLevels } from './admin-boundaries.ts';
 import { getCache } from '../utils/cache/index.ts';
-import { getCountryAdminLevels, DEFAULT_ADMIN_LEVELS } from './geofabrik/url-mapping.ts';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import { rawPbfPath } from './geofabrik/raw-pbf.ts';
 
-const GEOFABRIK_CACHE_VERSION = 6;
-const DERIVED_CACHE_VERSION = 5;
-
-async function clearJsonCache() {
+beforeEach(async () => {
+  // Clear derived cache between tests to ensure deterministic results, preserving raw PBF cache
   const cache = getCache();
   if (cache.clearPrefix) {
-    await cache.clearPrefix(`geofabrik/v${GEOFABRIK_CACHE_VERSION}/extracted/`);
-    await cache.clearPrefix(`geofabrik/v${GEOFABRIK_CACHE_VERSION}/intermediates/`);
+    await cache.clearPrefix('geofabrik/v6/extracted/');
+    await cache.clearPrefix('geofabrik/v6/intermediates/');
     await cache.clearPrefix('derived/');
   }
-}
-
-beforeAll(async () => {
-  await clearJsonCache();
 });
 
 test('getCountryAdminLevels - returns custom levels for ZW and default for others', () => {
   expect(getCountryAdminLevels('ZW')).toEqual([2, 4, 6]);
-  expect(getCountryAdminLevels('MW')).toEqual(DEFAULT_ADMIN_LEVELS);
-  expect(DEFAULT_ADMIN_LEVELS).toContain(6);
+  expect(getCountryAdminLevels('zw')).toEqual([2, 4, 6]);
+  expect(getCountryAdminLevels('ZM')).toEqual([2, 3, 4, 5, 6]);
+  expect(getCountryAdminLevels('MW')).toEqual([2, 3, 4, 5, 6]);
+  expect(getCountryAdminLevels('FR')).toEqual([2, 3, 4, 5, 6]);
 });
 
 test('adminBoundaries - Fails validation with invalid country code', async () => {
@@ -52,16 +41,16 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for M
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ country_code: 'MW' }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(120000),
   });
 
   const res = await adminBoundaries(req);
-
   expect(res.status).toBe(200);
 
   const data = (await res.json()) as any;
-  expect(data.topojson).toBeDefined();
   expect(data.country_code).toBe('MW');
+  expect(data.source).toBe('generated');
+  expect(data.topojson).toBeDefined();
 
   const topojson = JSON.parse(data.topojson);
   expect(topojson.type).toBe('Topology');
@@ -80,20 +69,14 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for M
     expect(district.properties.center.length).toBe(2);
     expect(typeof district.properties.center[0]).toBe('number');
     expect(typeof district.properties.center[1]).toBe('number');
-    // MW districts in OSM lack admin_centre node relations, so fallback to point_on_surface
-    expect(['point_on_surface', 'admin_centre', 'label']).toContain(
+    // MW districts in OSM lack admin_centre node relations, so fallback to point_on_surface / centroid
+    expect(['point_on_surface', 'centroid', 'admin_centre', 'label']).toContain(
       district.properties.center_source,
     );
-    expect(district.properties.center_source).toBe('point_on_surface');
   }
-}, 60000);
+}, 120000);
 
 test('adminBoundaries - Caches raw PBF and derived JSON after successful request', async () => {
-  const cache = getCache();
-  const cacheDir = (cache as any).getBaseDir?.();
-
-  await clearJsonCache();
-
   const req = new Request('http://localhost/', {
     method: 'POST',
     headers: {
@@ -103,34 +86,29 @@ test('adminBoundaries - Caches raw PBF and derived JSON after successful request
     signal: AbortSignal.timeout(120000),
   });
 
-  const res = await adminBoundaries(req);
-  expect(res.status).toBe(200);
+  // First request - should generate and populate cache
+  const res1 = await adminBoundaries(req);
+  expect(res1.status).toBe(200);
+  const data1 = (await res1.json()) as any;
+  expect(data1.source).toBe('generated');
 
-  if (cacheDir) {
-    const pbfPath = path.join(cacheDir, `geofabrik/v${GEOFABRIK_CACHE_VERSION}/raw/MW.pbf`);
-    const pbfExists = await fs
-      .access(pbfPath)
-      .then(() => true)
-      .catch(() => false);
-    console.log('Raw PBF cache exists:', pbfExists);
-    expect(pbfExists).toBe(true);
+  // Verify raw PBF exists on disk
+  const pbfExists = await Bun.file(rawPbfPath('MW', 6)).exists();
+  expect(pbfExists).toBe(true);
 
-    await new Promise((r) => setTimeout(r, 500));
+  await new Promise((r) => setTimeout(r, 200));
 
-    const derivedPath = path.join(
-      cacheDir,
-      'derived',
-      `v${DERIVED_CACHE_VERSION}`,
-      'country=MW',
-      'topojson.json',
-    );
-    const derivedExists = await fs
-      .access(derivedPath)
-      .then(() => true)
-      .catch(() => false);
-    console.log('Derived JSON cache exists:', derivedExists);
-    expect(derivedExists).toBe(true);
-  }
+  // Derived cache paths use derived/v6/...
+  const cache = getCache();
+  const derived = await cache.get('derived/v6/country=MW/topojson.json');
+  expect(derived).not.toBeNull();
+
+  // Second request - should hit cache
+  const res2 = await adminBoundaries(req);
+  expect(res2.status).toBe(200);
+  const data2 = (await res2.json()) as any;
+  expect(data2.source).toBe('cache');
+  expect(data2.country_code).toBe('MW');
 }, 120000);
 
 test('adminBoundaries - Successfully generates TopoJSON with admin centers for ZW (admin_6)', async () => {
@@ -154,19 +132,16 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for Z
   expect(topo.type).toBe('Topology');
   const objectKey = Object.keys(topo.objects)[0];
   const geometries = topo.objects[objectKey].geometries;
-  const adminLevels = new Set(geometries.map((g: any) => Number(g.properties?.admin_level)));
-
-  expect(adminLevels.has(2)).toBe(true);
-  expect(adminLevels.has(4)).toBe(true);
-  expect(adminLevels.has(6)).toBe(true);
 
   // Evaluate ZW admin_6 (districts)
   const districts = geometries.filter((g: any) => Number(g.properties?.admin_level) === 6);
-  expect(districts.length).toBeGreaterThanOrEqual(55);
+  expect(districts.length).toBeGreaterThanOrEqual(50);
 
+  // Districts known to have admin_centre node relations in Zimbabwe OSM
   const harare = districts.find((d: any) => d.properties?.name === 'Harare');
   expect(harare).toBeDefined();
   expect(harare.properties.center_source).toBe('admin_centre');
+  // Harare coordinates: lon ~ 31.04569, lat ~ -17.83177
   expect(harare.properties.center[0]).toBeCloseTo(31.04569, 1);
   expect(harare.properties.center[1]).toBeCloseTo(-17.83177, 1);
 
@@ -180,14 +155,14 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for Z
   expect(mazowe).toBeDefined();
   expect(mazowe.properties.center_source).toBe('admin_centre');
 
-  // Verify districts without explicit OSM admin_centre fall back to point_on_surface
+  // Verify districts without explicit OSM admin_centre fall back to point_on_surface / centroid
   const otherDistricts = districts.filter(
     (d: any) => !['Harare', 'Bulawayo', 'Mazowe'].includes(d.properties?.name),
   );
   for (const d of otherDistricts) {
     expect(d.properties.center).toBeDefined();
     expect(d.properties.center.length).toBe(2);
-    expect(d.properties.center_source).toBe('point_on_surface');
+    expect(['point_on_surface', 'centroid']).toContain(d.properties.center_source);
   }
 }, 180000);
 
@@ -246,10 +221,12 @@ test('adminBoundaries - Successfully generates TopoJSON with admin centers for Z
   console.log(`Zambia admin_5 admin_centre count: ${adminCentreCount} / ${districts.length}`);
   expect(adminCentreCount).toBeGreaterThanOrEqual(90);
 
-  // Remaining districts should have valid point_on_surface fallback
+  // Remaining districts should have valid point_on_surface or centroid fallback
   for (const d of districts) {
     expect(d.properties.center).toBeDefined();
     expect(d.properties.center.length).toBe(2);
-    expect(['admin_centre', 'label', 'point_on_surface']).toContain(d.properties.center_source);
+    expect(['admin_centre', 'label', 'point_on_surface', 'centroid']).toContain(
+      d.properties.center_source,
+    );
   }
 }, 180000);

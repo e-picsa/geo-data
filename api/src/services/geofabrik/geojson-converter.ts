@@ -1,7 +1,7 @@
 import { relationToFeature } from '@osmix/geojson';
 import type { ExtractedOsmData } from './boundary-cache.ts';
 import type { FeatureCollection, Feature } from 'geojson';
-import type { OsmEntityType, OsmTags, OsmWay } from 'osmix';
+import type { OsmWay } from 'osmix';
 import { VALID_BOUNDARY_ROLES } from './pbf-extractor.ts';
 
 /**
@@ -10,9 +10,7 @@ import { VALID_BOUNDARY_ROLES } from './pbf-extractor.ts';
 export function convertToGeoJSON(data: ExtractedOsmData): FeatureCollection {
   const { nodes, ways, relations } = data;
 
-  const skippedFeatures: { id: number; ref: number; type: OsmEntityType; tags?: OsmTags }[] = [];
-
-  // 1. Filter out relations that are missing required boundary ways (e.g. partial border relations or external datasets)
+  // 1. Filter out relations that are missing required boundary ways (e.g. cross-border relations from neighboring countries)
   const filteredRelations = relations.filter((relation) => {
     const { members } = relation;
     // Only boundary ways are strictly required to construct the polygon geometry.
@@ -21,28 +19,8 @@ export function convertToGeoJSON(data: ExtractedOsmData): FeatureCollection {
       ({ type, ref, role = '' }) =>
         type === 'way' && VALID_BOUNDARY_ROLES.has(role) && !(ref in ways),
     );
-    if (missingWay) {
-      const { type, ref } = missingWay;
-      const { id, tags } = relation;
-      skippedFeatures.push({ id, type, ref, tags });
-      return false;
-    }
-    return true;
+    return !missingWay;
   });
-
-  // debug logging
-  const relationsByAdminLevel: Record<string, number> = {};
-  filteredRelations.forEach(({ tags }) => {
-    const adminLevel = tags?.admin_level || 'unknown';
-    relationsByAdminLevel[adminLevel] ??= 0;
-    relationsByAdminLevel[adminLevel]++;
-  });
-  skippedFeatures.forEach(({ id, ref, type, tags }) => {
-    const url1 = `https://www.openstreetmap.org/relation/${id}`;
-    const url2 = `https://www.openstreetmap.org/${type}/${ref}`;
-    console.warn('Skip missing entry (likely different country)', url1, url2, { id, tags });
-  });
-  console.log({ relationsByAdminLevel });
 
   // 2. Define resolution callbacks
   const refToPosition = (ref: number): [number, number] => {
@@ -58,50 +36,49 @@ export function convertToGeoJSON(data: ExtractedOsmData): FeatureCollection {
   const getWay = (id: number): OsmWay => {
     const refs = ways[id];
     if (!refs) {
-      // Fail fast on missing geometry rather than producing invalid GeoJSON
       const url = `https://www.openstreetmap.org/way/${id}`;
       throw new Error(`Generation failed: Way ${id} is missing from the extract.\n${url}`);
     }
-    return { id, refs };
+    return { id, refs } as any;
   };
 
-  // 3. Process entities into features
+  // 3. Convert relations to features
   console.log('Constructing GeoJSON features...');
   const features: Feature[] = [];
 
-  // Convert Relations
-  // Administrative boundaries are primarily built from multipolygon relations.
   for (const relation of filteredRelations) {
     try {
       const feature = relationToFeature(relation, refToPosition, getWay);
 
-      // Extract admin_centre and label candidate coordinates from relation members
-      let adminCentre: [number, number] | undefined;
-      let labelPoint: [number, number] | undefined;
+      if (feature) {
+        // Look up representative center nodes from relation members
+        let adminCentreCoords: [number, number] | undefined;
+        let labelCoords: [number, number] | undefined;
 
-      for (const member of relation.members) {
-        if (member.type === 'node') {
-          if (member.role === 'admin_centre' && nodes[member.ref]) {
-            adminCentre = nodes[member.ref];
-          } else if (member.role === 'label' && nodes[member.ref]) {
-            labelPoint = nodes[member.ref];
+        for (const member of relation.members || []) {
+          if (member.type === 'node') {
+            if (member.role === 'admin_centre' && !adminCentreCoords) {
+              const pt = nodes[member.ref];
+              if (pt) adminCentreCoords = pt;
+            } else if (member.role === 'label' && !labelCoords) {
+              const pt = nodes[member.ref];
+              if (pt) labelCoords = pt;
+            }
           }
         }
+
+        const props = (feature.properties ??= {});
+        if (adminCentreCoords) {
+          props.admin_centre = adminCentreCoords;
+        }
+        if (labelCoords) {
+          props.label_point = labelCoords;
+        }
+
+        features.push(feature);
       }
-
-      const extraProps: Record<string, unknown> = {};
-      if (adminCentre) extraProps.admin_centre = adminCentre;
-      if (labelPoint) extraProps.label_point = labelPoint;
-
-      feature.properties = {
-        ...feature.properties,
-        ...extraProps,
-      };
-
-      features.push(feature);
     } catch (error) {
       console.error(`Failed to generate feature for relation ${relation.id}:`, error);
-      throw error;
     }
   }
 
