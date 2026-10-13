@@ -62,7 +62,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const API_URL = import.meta.env.VITE_API_URL || '/api';
 
   // Country code mirror for popstate comparison (avoids stale closures).
   const countryCodeRef = useRef(countryCode);
