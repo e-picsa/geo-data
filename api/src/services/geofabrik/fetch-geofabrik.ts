@@ -5,7 +5,7 @@ import { ensureRawPbf } from './raw-pbf.ts';
 import { convertToGeoJSON } from './geojson-converter.ts';
 import { getCountryAdminLevels } from './url-mapping.ts';
 
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 
 export interface OsmData {
   elements: OsmEntity[];

@@ -57,25 +57,26 @@ function App() {
   // Base-layer preview mode — the sidebar shows matching export options only
   // (vector pack in vector mode, raster pack in raster mode).
   const [baseMode, setBaseMode] = useState<BaseMode>('vector');
+  const [includeCenters, setIncludeCenters] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
 
-  // Mirror of countryCode for the popstate handler (avoids a stale closure).
+  const API_URL = import.meta.env.VITE_API_URL || '/api';
+
+  // Country code mirror for popstate comparison (avoids stale closures).
   const countryCodeRef = useRef(countryCode);
   useEffect(() => {
     countryCodeRef.current = countryCode;
   }, [countryCode]);
 
-  const API_URL = import.meta.env.VITE_API_URL || '/api';
-
-  // Fire-and-forget: warm the server tile cache (z0–8) as soon as we know a
-  // country is needed, so a later export mostly serves cached tiles.
-  // Render calls serialize server-side; failures are only logged.
+  // Request the server render raster preview tiles into the cache for
+  // zooms up to the preview cap (z8 by default, same as maxZoom initially).
   const prewarmTiles = useCallback(
-    (country_code: string, bbox: number[], buffer: number) => {
+    (country_code: string, bbox: number[] | undefined, buffer: number) => {
       if (!bbox || bbox.length < 4) return;
-      fetch(`${API_URL}/prewarm-tiles`, {
+      const baseUrl = API_URL.replace(/\/$/, '');
+      fetch(`${baseUrl}/prewarm-tiles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ country_code, bbox, buffer }),
@@ -139,13 +140,11 @@ function App() {
     );
 
     if (candidates.length > 0) {
-      return candidates.includes(2) ? 2 : candidates[0];
+      return candidates[0];
     }
-    if (availableLevels.length > 0) {
-      return availableLevels[0];
-    }
+
     return selectedAdminLevel;
-  }, [countryCode, availableLevels, selectedAdminLevel]);
+  }, [countryCode, selectedAdminLevel, availableLevels]);
 
   const geoJsonData = useMemo(() => {
     if (!fullGeoJson) return null;
@@ -156,6 +155,32 @@ function App() {
       ),
     };
   }, [fullGeoJson, adminLevel]);
+
+  const centersStats = useMemo(() => {
+    if (!geoJsonData?.features) return null;
+    let adminCentre = 0;
+    let fallback = 0;
+    for (const f of geoJsonData.features) {
+      const s = f.properties?.center_source;
+      if (s === 'admin_centre') adminCentre++;
+      else fallback++;
+    }
+    return { total: geoJsonData.features.length, adminCentre, fallback };
+  }, [geoJsonData]);
+
+  // Country-wide bounding box for fitting the map view
+  const countryBbox = useMemo<[number, number, number, number] | null>(() => {
+    const isGlob = countryCode?.toUpperCase() === 'GLOBAL';
+    if (isGlob) return WORLD_BBOX;
+    if (data?.bbox && data.bbox.length >= 4) {
+      return data.bbox.slice(0, 4) as [number, number, number, number];
+    }
+    const fromFull = bboxForFeatures(fullGeoJson);
+    if (fromFull) return fromFull;
+    const fromFiltered = bboxForFeatures(geoJsonData);
+    if (fromFiltered) return fromFiltered;
+    return null;
+  }, [countryCode, data?.bbox, fullGeoJson, geoJsonData]);
 
   // Raw bounds for the currently selected admin level (falls back to the
   // country bbox until features load), plus the tile-snapped box actually exported.
@@ -263,7 +288,27 @@ function App() {
 
   const downloadTopojson = () => {
     if (!data?.topojson) return;
-    const blob = new Blob([data.topojson], { type: 'application/json' });
+    let content = data.topojson;
+    if (!includeCenters) {
+      try {
+        const parsed = JSON.parse(data.topojson);
+        for (const objKey of Object.keys(parsed.objects || {})) {
+          const obj = parsed.objects[objKey];
+          if (obj?.geometries) {
+            for (const geom of obj.geometries) {
+              if (geom.properties) {
+                delete geom.properties.center;
+                delete geom.properties.center_source;
+              }
+            }
+          }
+        }
+        content = JSON.stringify(parsed);
+      } catch (e) {
+        console.error('Failed to strip centers from TopoJSON', e);
+      }
+    }
+    const blob = new Blob([content], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -338,6 +383,34 @@ function App() {
 
               <div className="text-slate-500">Size:</div>
               <div className="font-medium text-right">{data.size_kb} KB</div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5 text-xs text-slate-600">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeCenters}
+                  onChange={(e) => setIncludeCenters(e.target.checked)}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-xs font-medium text-slate-700">Include Centers</span>
+              </label>
+
+              {includeCenters && centersStats && (
+                <div className="flex justify-between text-[11px] text-slate-500 pl-6">
+                  <span
+                    className="flex items-center gap-1.5"
+                    title="OSM admin_centre relation member node"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
+                    admin_centre: {centersStats.adminCentre}
+                  </span>
+                  <span className="flex items-center gap-1.5" title="Geometric centroid fallback">
+                    <span className="w-2 h-2 rounded-full bg-slate-500 inline-block" />
+                    fallback: {centersStats.fallback}
+                  </span>
+                </div>
+              )}
             </div>
 
             <button
@@ -422,17 +495,14 @@ function App() {
             buffer outline only applies to raster packs, so it shows in raster
             mode for countries. */}
         <LibertyMap
-          bbox={
-            ((isGlobal ? WORLD_BBOX : data?.bbox) as
-              | [number, number, number, number]
-              | undefined) ?? null
-          }
+          bbox={countryBbox}
           geoJsonData={geoJsonData as GeoJSON.FeatureCollection | null}
           exportBbox={isGlobal || baseMode !== 'raster' ? null : exportBbox}
           onZoomChange={setMapZoom}
           apiUrl={API_URL}
           baseMode={baseMode}
           onBaseModeChange={setBaseMode}
+          showCenters={includeCenters}
         />
         <ZoomBadge zoom={mapZoom} />
 

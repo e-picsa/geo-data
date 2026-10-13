@@ -1,7 +1,7 @@
 import { corsHeaders } from './cors.ts';
 
 /**
- * Return an erorr response
+ * Return an error response
  *
  * Note - if reading from js-client need to await error context body for message
  * https://github.com/supabase/functions-js/issues/45
@@ -23,9 +23,22 @@ export function ErrorResponse(msg: any, status = 400) {
   });
 }
 
-export function JSONResponse<T>(data: T, status = 200) {
+export function JSONResponse<T>(data: T, initOrStatus: number | ResponseInit = 200) {
+  if (typeof initOrStatus === 'number') {
+    return new Response(JSON.stringify(data), {
+      status: initOrStatus,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const { headers, status, ...rest } = initOrStatus;
   return new Response(JSON.stringify(data), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    status,
+    status: status ?? 200,
+    ...rest,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+      ...headers,
+    },
   });
 }

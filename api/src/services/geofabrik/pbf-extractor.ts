@@ -24,8 +24,11 @@ const PROGRESS_EVERY_BLOCKS = 1000;
 
 const DEFAULT_ADMIN_LEVELS = new Set([2, 3, 4, 5, 6]);
 
-// Valid roles for boundary geometries. Explicitly excludes 'subarea' and 'label'.
-const VALID_BOUNDARY_ROLES = new Set(['outer', 'inner', '']);
+// Valid roles for boundary geometries.
+export const VALID_BOUNDARY_ROLES = new Set(['outer', 'inner', '']);
+
+// Valid roles for administrative reference nodes (town center, boma, or cartographic label point).
+export const VALID_NODE_ROLES = new Set(['admin_centre', 'label']);
 
 export class PbfBoundaryExtractor {
   private readonly adminLevels: Set<number>;
@@ -68,7 +71,7 @@ export class PbfBoundaryExtractor {
       if (!tags || tags.boundary !== 'administrative' || !tags.admin_level) return false;
       if (!this.adminLevels.has(Number(tags.admin_level))) return false;
 
-      // Filter to includ target country (where tagged)
+      // Filter to include target country (where tagged)
       const iso1Code = tags['ISO3166-1'];
       if (iso1Code && iso1Code !== countryCode) return false;
       const iso2Code = tags['ISO3166-2'];
@@ -77,18 +80,12 @@ export class PbfBoundaryExtractor {
       return true;
     });
 
-    // Filter relation members to only include valid ways and nodes (no subareas)
+    // Filter relation members to only include valid ways and reference nodes (admin_centre / label)
     const relations = relationsRaw.map((relation) => {
       relation.members = relation.members.filter((member) => {
         const { type, role = '' } = member;
         if (type === 'way' && VALID_BOUNDARY_ROLES.has(role)) return true;
-
-        // NOTE - admin_centre nodes can be included by uncommenting below
-        // However they also bloat the topojson slightly (can have properties trimmed)
-        // and so only useful if planning to actively use. Centroid for polygon can always
-        // be calculated on the fly
-
-        // if (type === 'node' && role === 'admin_centre') return true;
+        if (type === 'node' && VALID_NODE_ROLES.has(role)) return true;
         return false;
       });
       return relation;
@@ -105,7 +102,9 @@ export class PbfBoundaryExtractor {
       }
     }
 
-    console.log(`Found ${relations.length} relations requiring ${requiredWays.size} ways.`);
+    console.log(
+      `Found ${relations.length} relations requiring ${requiredWays.size} ways and ${requiredNodes.size} reference nodes.`,
+    );
 
     // PASS 2: Ways
     const ways = await this.filterBlocks<OsmWay>('way', ({ id }) => requiredWays.has(id));
@@ -118,7 +117,7 @@ export class PbfBoundaryExtractor {
       }
     }
 
-    console.log(`Found ${ways.length} ways requiring ${requiredNodes.size} nodes.`);
+    console.log(`Found ${ways.length} ways requiring ${requiredNodes.size} total nodes.`);
 
     // PASS 3: Nodes (Convert to flat coordinate map to save memory/JSON space)
     const rawNodes = await this.filterBlocks<OsmNode>('node', ({ id }) => requiredNodes.has(id));
@@ -158,68 +157,45 @@ export class PbfBoundaryExtractor {
           (targetType === 'node' && isOsmType('way', firstEntity)) ||
           (targetType === 'way' && isOsmType('relation', firstEntity))
         ) {
+          console.log(`Fast-forward: Reached end of ${targetType}s at block ${blockCount}`);
           break streamLoop;
         }
 
-        // 2. UNDER-SHOOT CHECK (Block Skipping)
-        // If the block is not our target type, skip the rest of the iterator instantly.
+        // 2. WRONG-TYPE CHECK (Fast-Forward skipping)
         if (!isOsmType(targetType, firstEntity)) {
-          continue streamLoop;
+          continue;
         }
 
-        // 3. TARGET ZONE (Process the block)
-        // Process the first entity we already peeked at
+        // 3. PROCESS THE BLOCK
         if (filterFn(firstEntity as T)) {
-          const cleaned = this.cleanEntity(targetType, firstEntity) as T;
-          entities.push(cleaned);
+          entities.push(this.trimEntityTags(firstEntity) as T);
         }
 
-        // Process the rest of the block
         for (const entity of entityIterator) {
           if (filterFn(entity as T)) {
-            const cleaned = this.cleanEntity(targetType, entity) as T;
-            entities.push(cleaned);
+            entities.push(this.trimEntityTags(entity) as T);
           }
         }
       }
 
       if (blockCount % PROGRESS_EVERY_BLOCKS === 0) {
-        process.stdout.write(`\rScanned ${blockCount} blocks for ${targetType}s...`);
+        const elapsedSec = ((performance.now() - start) / 1000).toFixed(1);
+        console.log(`Processed ${blockCount} blocks (${elapsedSec}s)... found ${entities.length}`);
       }
     }
 
-    process.stdout.write('\n');
-    const end = performance.now();
-    console.log(`${targetType} extracted in (${((end - start) / 1000).toFixed(1)}s)`);
     return entities;
   }
 
-  // Strictly enforces the allowlist for Relation tags
-  private cleanEntity<T extends OsmEntity>(type: 'relation' | 'way' | 'node', entity: T) {
-    // Clean tags, and omit empty
-    if (type === 'relation') {
-      const relation = entity as OsmRelation;
-      const { id, members, tags } = relation;
-      if (tags) {
-        const cleaned = Object.entries(tags).filter(([key]) => RELATION_TAG_ALLOWLIST.has(key));
-        if (cleaned.length > 0) {
-          return { id, tags: Object.fromEntries(cleaned), members };
-        }
+  private trimEntityTags(entity: OsmEntity): OsmEntity {
+    if (entity.type !== 'relation' || !entity.tags) return entity;
+
+    const trimmedTags: Record<string, string> = {};
+    for (const [key, value] of Object.entries(entity.tags)) {
+      if (RELATION_TAG_ALLOWLIST.has(key)) {
+        trimmedTags[key] = value;
       }
-      return { id, members };
     }
-    // Keep minimal id and refs for ways
-    if (type === 'way') {
-      const way = entity as OsmWay;
-      const { id, refs } = way;
-      return { id, refs };
-    }
-    // Keep minimal id, lat and lon for nodes
-    // (tags like admin_centre also defined in relation members data)
-    if (type === 'node') {
-      const node = entity as OsmNode;
-      const { id, lat, lon } = node;
-      return { id, lat, lon };
-    }
+    return { ...entity, tags: trimmedTags };
   }
 }

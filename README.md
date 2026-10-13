@@ -16,14 +16,14 @@ bun install
 bun start
 ```
 
-The Vite dev server proxies `/api` requests to the Bun API at [localhost:8080](http://localhost:8080), so the frontend works seamlessly in development without CORS issues.
+The Vite dev server proxies `/api` requests to the Bun API at [localhost:5174](http://localhost:5174), so the frontend works seamlessly in development without CORS issues.
 
 Use a rest client like [Insomnia](https://insomnia.rest) to test requests
 
 E.g. POST request for admin_4 boundaries
 
 ```shell
-curl --request POST --url http://localhost:8080/ --data '{"country_code":"ZM","admin_level":2}'
+curl --request POST --url http://localhost:5174/ --data '{"country_code":"ZM","admin_level":2}'
 ```
 
 First request will download the Geofabrik PBF extract for the country
@@ -42,7 +42,7 @@ Subsequent requests will be served from local cache [./api/.cache](./api/.cache)
 
 | Variable       | Description                                                                                     |
 | -------------- | ----------------------------------------------------------------------------------------------- |
-| `PORT`         | The port the API server listens on (default: `8080`)                                            |
+| `PORT`         | The port the API server listens on (default: `5174` locally, `8080` in Docker/Cloud Run)        |
 | `CACHE_BUCKET` | GCS bucket name for caching PBF extracts and derived TopoJSON. If not set, caching is disabled. |
 | `VITE_API_URL` | (Frontend build-time) The production API URL. Defaults to `/api` for local dev.                 |
 

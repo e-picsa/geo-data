@@ -10,7 +10,7 @@ Welcome! This system is a monorepo consisting of:
 ### The API (Backend)
 
 - Written in TypeScript and runs on **Bun**.
-- Uses `Bun.serve()` in `api/src/main.ts` as the webserver.
+- Uses `Bun.serve()` in `api/src/main.ts` as the webserver (defaults to port `5174` in local dev).
 - The core logic downloads Geofabrik PBF extracts, extracts boundary relations, then translates them via Mapshaper into TopoJSON.
 - Environment variables are accessed via `process.env`. Make sure `CACHE_BUCKET` is present if you want GCS caching.
 - To add dependencies, use `bun add <pkg> --cwd api`.
@@ -19,15 +19,22 @@ Welcome! This system is a monorepo consisting of:
 ### The Web (Frontend)
 
 - Written in React + Vite + Tailwind CSS.
-- **Vite Proxy:** Vite intercepts calls to `/api` and forwards them to `http://localhost:8080` (the Bun API).
-- **Map:** Uses `react-leaflet` to display map bounds. TopoJSON data from the API is first ran through `topojson-client` to render standard GeoJSON paths on Leaflet.
+- **Vite Proxy:** Vite intercepts calls to `/api` and forwards them to `http://localhost:5174` (the Bun API).
+- **Map:** Uses MapLibre to display map bounds and vector/raster layers. TopoJSON data from the API is run through `topojson-client` to render GeoJSON features.
 - To add dependencies, use `bun add <pkg> --cwd web` (since shadcn initialization failed, we are avoiding `npx`).
 - Styling uses pure Tailwind classes in `className`.
 
 ## Best Practices
 
 - Avoid introducing any heavy DOM libraries into the frontend. The entire application is designed to be lightweight.
-- For local dev, run `npm run dev` in the project root to spool up both instances concurrently.
+- For local dev, run `npm start` (or `bun start`) in the project root to spool up both instances concurrently.
+
+## AI Assistant Operational Guidelines (Token & Tool Efficiency)
+
+- **Minimal Tool Calls**: Do not run repetitive polling commands (e.g. repeatedly tailing or checking log files in loops). When executing long-running test commands, either wait synchronously or wait for the system to notify upon completion without intermediate polling.
+- **Focused Execution**: When tasked with a targeted code change (such as removing console log spam or adjusting a UI component), make the targeted edit directly. Avoid expanding scope or running multi-minute integration suites unless explicitly requested.
+- **Clean Console Output**: Keep runtime and test logs quiet. Never commit noisy loops, raw dump logs, or repetitive warning messages into production code paths.
+- **Token Parsimony**: Keep reasoning and output direct, actionable, and succinct. Avoid speculative explanations or repeating context.
 
 ## Versioning
 

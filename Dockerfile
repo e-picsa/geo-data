@@ -48,6 +48,7 @@ RUN curl -fsSL -o /tmp/go-pmtiles.tar.gz \
   && chmod +x /usr/local/bin/pmtiles && rm /tmp/go-pmtiles.tar.gz
 ENV PMTILES_BIN=/usr/local/bin/pmtiles
 
+ENV PORT=8080
 EXPOSE 8080
 
 WORKDIR /app/api
