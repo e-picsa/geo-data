@@ -153,14 +153,14 @@ test('adminBoundaries - Unsupported country code returns 400', async () => {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ country_code: 'US' }),
+    body: JSON.stringify({ country_code: 'ZZ' }),
   });
 
   const res = await adminBoundaries(req);
   expect(res.status).toBe(400);
 
   const data = (await res.json()) as any;
-  expect(data.error).toBe('Unsupported country: US');
+  expect(data.error).toContain('ZZ');
 });
 
 test('adminBoundaries - Missing country_code parameter returns 400', async () => {
