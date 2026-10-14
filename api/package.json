@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "start": "bun --watch --no-clear-screen run src/main.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "prewarm": "bun scripts/prewarm-boundaries.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.10",
