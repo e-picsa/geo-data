@@ -113,6 +113,7 @@ export const adminBoundaries = async (
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json',
+          'Content-Disposition': `attachment; filename="${validatedCode}.topo.json"`,
           'Cache-Control': 'public, max-age=86400',
         },
       });

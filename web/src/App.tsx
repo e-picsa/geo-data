@@ -61,6 +61,8 @@ function App() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BoundaryResponse | null>(null);
+  const [downloadingTopo, setDownloadingTopo] = useState<boolean>(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -286,16 +288,42 @@ function App() {
 
   const isGlobal = countryCode.toUpperCase() === 'GLOBAL';
 
-  const downloadTopojson = () => {
-    if (!data?.country_code) return;
-    const baseUrl = API_URL.replace(/\/$/, '');
-    const downloadUrl = `${baseUrl}/boundaries/${data.country_code}.topo.json?include_centers=${includeCenters}`;
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `${data.country_code}.topo.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const downloadTopojson = async () => {
+    if (!data?.country_code || downloadingTopo) return;
+    setDownloadingTopo(true);
+    setDownloadError(null);
+    try {
+      const baseUrl = API_URL.replace(/\/$/, '');
+      const downloadUrl = `${baseUrl}/boundaries/${data.country_code}.topo.json?include_centers=${includeCenters}`;
+      const res = await fetch(downloadUrl);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error((errData as any).error || `Download failed with status ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      // Blob URLs are same-origin, so the `download` attribute is honored in
+      // Chrome (a cross-origin `href` would ignore it and open in a new tab).
+      let filename = `${data.country_code}.topo.json`;
+      const contentDisposition = res.headers.get('Content-Disposition');
+      if (contentDisposition) {
+        const m = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (m && m[1]) filename = m[1];
+      }
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Defer revocation so the browser has started consuming the blob;
+      // immediate revoke can abort the download in Firefox/Safari.
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err: any) {
+      setDownloadError(err instanceof Error ? err.message : 'Download failed.');
+    } finally {
+      setDownloadingTopo(false);
+    }
   };
 
   return (
@@ -394,10 +422,19 @@ function App() {
 
             <button
               onClick={downloadTopojson}
-              className="mt-2 w-full bg-white border border-slate-300 text-slate-700 font-medium py-2 px-4 rounded-md shadow-sm hover:bg-slate-50 transition-colors"
+              disabled={downloadingTopo}
+              className="mt-2 w-full bg-white border border-slate-300 text-slate-700 font-medium py-2 px-4 rounded-md shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
             >
-              Download TopoJSON
+              {downloadingTopo ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
+                  Downloading...
+                </>
+              ) : (
+                'Download TopoJSON'
+              )}
             </button>
+            {downloadError && <div className="text-red-600 text-xs mt-1">{downloadError}</div>}
 
             {/* Tile-pack export follows the map base mode: what you preview is
                 what you export. Boundary summary + TopoJSON stay in both modes. */}
