@@ -316,7 +316,9 @@ function App() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Defer revocation so the browser has started consuming the blob;
+      // immediate revoke can abort the download in Firefox/Safari.
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (err: any) {
       setDownloadError(err instanceof Error ? err.message : 'Download failed.');
     } finally {
