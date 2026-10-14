@@ -1,6 +1,6 @@
 {
   "name": "geo-data",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "Monorepo for managing Geo data within the E-PICSA App",
   "main": "index.js",
   "scripts": {
@@ -13,6 +13,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,cjs,js,json,md,css,scss}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,cjs,js,json,md,css,scss}\"",
     "update:osm-levels": "bun scripts/update-osm-admin-levels.ts",
+    "prewarm:boundaries": "cd api && bun run prewarm",
     "prepare": "husky"
   },
   "lint-staged": {

@@ -4,6 +4,7 @@ import { PbfBoundaryExtractor } from './pbf-extractor.ts';
 import { ensureRawPbf } from './raw-pbf.ts';
 import { convertToGeoJSON } from './geojson-converter.ts';
 import { getCountryAdminLevels } from './url-mapping.ts';
+import { BoundaryError } from '../boundary-errors.ts';
 
 const CACHE_VERSION = 6;
 
@@ -38,7 +39,12 @@ export async function fetchGeofabrikBoundaries(options: FetchGeofabrikOptions) {
   const extracted = await extractor.extract();
 
   if (extracted.relations.length === 0) {
-    throw new Error(`No boundaries found for country code: ${countryCode}`);
+    throw new BoundaryError(
+      'NO_BOUNDARIES_FOUND',
+      `No administrative boundaries found for "${countryCode}" in the current OpenStreetMap extract.`,
+      404,
+      false,
+    );
   }
   await cache.save(extracted);
   return convertToGeoJSON(extracted);

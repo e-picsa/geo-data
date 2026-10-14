@@ -23,12 +23,14 @@ test('public routes - GET /unknown returns 404', async () => {
   expect(res.status).toBe(404);
 });
 
-test('public routes - GET /boundaries/ZZ returns 400 for unsupported country', async () => {
+test('public routes - GET /boundaries/ZZ returns 404 for unsupported country', async () => {
   const req = new Request('http://localhost/boundaries/ZZ', { method: 'GET' });
   const res = await handlePublicRoutes(req, '/boundaries/ZZ');
-  expect(res.status).toBe(400);
+  expect(res.status).toBe(404);
   const data = (await res.json()) as any;
   expect(data.error).toContain('ZZ');
+  expect(data.code).toBe('COUNTRY_NOT_SUPPORTED');
+  expect(data.retryable).toBe(false);
 });
 
 test('public routes - GET /boundaries/XYZ returns 404 for invalid route format', async () => {

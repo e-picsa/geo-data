@@ -224,11 +224,23 @@ function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ country_code: upper }),
+          // First-time generation (cold cache) downloads and processes the
+          // country PBF server-side and can take minutes. Bail out client-side
+          // so the UI never hangs indefinitely; a retry often hits the warmed
+          // cache (the server keeps generating only while connected, so a
+          // retry may restart generation — still the actionable path).
+          signal: AbortSignal.timeout(120000),
         });
 
         if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.error || 'Failed to fetch boundaries');
+          const errorData = await res.json().catch(() => ({}));
+          const retryHint =
+            (errorData as any).retryable === true
+              ? ' You can retry — boundary data is generated on first request and cached afterwards.'
+              : '';
+          throw new Error(
+            `${(errorData as any).error || 'Failed to fetch boundaries'}${retryHint}`,
+          );
         }
 
         const payload: BoundaryResponse = await res.json();
@@ -236,7 +248,13 @@ function App() {
         prewarmTiles(payload.country_code, payload.bbox, tileBuffer);
       } catch (err: any) {
         if (err instanceof Error) {
-          setError(err.message);
+          if (err.name === 'TimeoutError') {
+            setError(
+              'Request timed out while preparing boundary data. The dataset may still be generating — please retry in a few minutes.',
+            );
+          } else {
+            setError(err.message);
+          }
         } else {
           setError('An unexpected error occurred while fetching boundaries.');
         }
@@ -295,10 +313,16 @@ function App() {
     try {
       const baseUrl = API_URL.replace(/\/$/, '');
       const downloadUrl = `${baseUrl}/boundaries/${data.country_code}.topo.json?include_centers=${includeCenters}`;
-      const res = await fetch(downloadUrl);
+      const res = await fetch(downloadUrl, { signal: AbortSignal.timeout(120000) });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error((errData as any).error || `Download failed with status ${res.status}`);
+        const retryHint =
+          (errData as any).retryable === true
+            ? ' You can retry — boundary data is generated on first request and cached afterwards.'
+            : '';
+        throw new Error(
+          `${(errData as any).error || `Download failed with status ${res.status}`}${retryHint}`,
+        );
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -320,7 +344,13 @@ function App() {
       // immediate revoke can abort the download in Firefox/Safari.
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (err: any) {
-      setDownloadError(err instanceof Error ? err.message : 'Download failed.');
+      if (err instanceof Error && err.name === 'TimeoutError') {
+        setDownloadError(
+          'Download timed out while boundary data was being prepared. Please retry in a few minutes.',
+        );
+      } else {
+        setDownloadError(err instanceof Error ? err.message : 'Download failed.');
+      }
     } finally {
       setDownloadingTopo(false);
     }

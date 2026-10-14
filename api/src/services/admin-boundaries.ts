@@ -13,7 +13,9 @@ import {
 } from '../utils/topojson.utils.ts';
 import { isCentroidInsideGeometry } from '../utils/geometry.utils.ts';
 import { corsHeaders } from '../utils/cors.ts';
+import { toBoundaryErrorResponse } from './boundary-errors.ts';
 export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
+export { PREWARM_COUNTRIES } from './geofabrik/url-mapping.ts';
 
 /**
  * Bust cache if conversion or processing methods change.
@@ -122,8 +124,10 @@ export const adminBoundaries = async (
     return buildSuccessResponse({ country_code: validatedCode }, source, finalTopojsonString);
   } catch (error) {
     console.error(typeof error, error);
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    return ErrorResponse({ error: errorMsg }, 400);
+    // validateBody rejects with a ready-made Response — pass it through rather
+    // than stringifying it into "[object Response]".
+    if (error instanceof Response) return error;
+    return toBoundaryErrorResponse(error, req.signal);
   }
 };
 
