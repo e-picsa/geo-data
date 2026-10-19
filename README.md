@@ -57,9 +57,22 @@ To speed up requests, raw Geofabrik PBF extracts and derived TopoJSON are cached
 3. Configure **Object Lifecycle Management** on the bucket to automatically delete objects older than 90 days.
 4. The compute identity running this service (e.g., Cloud Run service account) needs `roles/storage.objectAdmin` on the target bucket.
 
+### Cache Versions
+
+Cached objects are namespaced by two independent versions, both bumped by hand when the code that produces them changes:
+
+| Constant            | Location                                        | Invalidates                                                                            | Cost of bumping                                        |
+| ------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `CACHE_VERSION = 6` | `api/src/services/geofabrik/fetch-geofabrik.ts` | Extraction output under `geofabrik/v6/…` (raw PBF, extracted relations, intermediates) | Full cold path: re-download the PBF and re-extract     |
+| `CACHE_VERSION = 8` | `api/src/services/admin-boundaries.ts`          | Derived TopoJSON under `derived/v8/…`                                                  | Mapshaper re-run over already-extracted data (seconds) |
+
+Bump the **extraction** version when anything upstream of the extracted relations changes (`api/src/services/geofabrik/**`, including the OSM entity handling). Bump the **derived** version when the conversion, simplification, or centring changes (`topojson.utils.ts`, `geometry.utils.ts`, cache paths, response shaping that alters stored bytes). Dependency bumps matter too: `mapshaper` affects the derived output, `osmix`/`pbf` the extraction output. If unsure, bump both — the cost is a slower first generation, never wrong data.
+
+Because the keys are versioned in source, the `Warm` step picks up a bump automatically; that is the only time warming does real work instead of three cache reads.
+
 ### Boundary Prewarm (MW, ZM, ZW)
 
-Only a small subset of countries is actually used, so only those are warmed — everything else generates on demand and then caches.
+Only a small subset of countries is actually used, so only those are warmed — everything else generates on demand and then caches. Adding a country to this list is a two-file change; see [Adding a Country](#adding-a-country).
 
 Warming is the final `Warm` step of the Cloud Build pipeline (`cloudbuild.yaml`), which runs immediately after the new revision is deployed. `gcloud run services update` only returns once the revision is serving, so the step is a true post-rollout hook — no polling, no deploy-ordering race. It simply requests `GET /boundaries/{MW,ZM,ZW}`: the service generates and caches them with the identity it already runs as, so **no extra credentials or repository variables are needed**, and the exact code path end users hit is exercised.
 
@@ -98,6 +111,31 @@ The API does not currently support levels greater than 5, as these are not used 
 
 **Further Reference:**
 [OSM Wiki for admin_level](https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries).
+
+## Adding a Country
+
+Every served country comes from one config map: `GEOFABRIK_COUNTRIES` in `api/src/services/geofabrik/url-mapping.ts`. Add an entry:
+
+```ts
+GH: { geofabrikPath: 'africa/ghana', pbfSizeMb: 95 },
+```
+
+- **`geofabrikPath`** — the extract path from [download.geofabrik.de](https://download.geofabrik.de/), relative to the site root (`africa/ghana`). A country with no entry returns `404 COUNTRY_NOT_SUPPORTED`.
+- **`pbfSizeMb`** — approximate upstream size, informational only (ops visibility). Nothing enforces a limit against it.
+- **`adminLevels`** — optional override of `DEFAULT_ADMIN_LEVELS` (`[2, 3, 4, 5, 6]`). Set it where a country's OSM tagging doesn't map cleanly onto those levels; Zimbabwe is the existing example (`[2, 4, 6]` — levels 3 and 5 aren't used there). `bun run update:osm-levels` regenerates candidate levels from OSM for review.
+
+A new country works immediately: the first request downloads the extract, generates, and caches it. No deploy-time step is involved.
+
+### Adding a Country to the Prewarm List
+
+Prewarming is reserved for the few countries the app opens on. It costs real generation time on every cache-version bump, so keep the list short — everything else is generated on demand and cached.
+
+Promoting a country to the prewarm list means editing **both**:
+
+1. `PREWARM_COUNTRIES` in `api/src/services/geofabrik/url-mapping.ts` — drives the "instantly available" hint in `404` responses.
+2. `_PREWARM_COUNTRIES` in `cloudbuild.yaml` — drives the `Warm` step after each rollout.
+
+Editing only one is silent: nothing fails, the API just advertises a country the warm step never fetches, or warms one it doesn't mention. There is no automated check for the mismatch.
 
 ## Cloud Run Deployment (API)
 
