@@ -9,10 +9,10 @@ export interface CountryConfig {
 export const DEFAULT_ADMIN_LEVELS = [2, 3, 4, 5, 6];
 
 /**
- * Small subset of countries that actually gets used. Warm these into the
- * boundary cache after deploy / cache bumps via `bun run prewarm:boundaries`
- * so end users never pay first-generation cost. Every other configured
- * country is still served on demand (generated synchronously, then cached).
+ * Small subset of countries that actually gets used. The `Warm` step in
+ * `cloudbuild.yaml` requests these immediately after each rollout so end users
+ * never pay first-generation cost. Every other configured country is still
+ * served on demand (generated synchronously, then cached).
  */
 export const PREWARM_COUNTRIES = ['MW', 'ZM', 'ZW'];
 

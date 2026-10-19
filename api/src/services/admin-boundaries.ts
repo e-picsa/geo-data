@@ -15,7 +15,6 @@ import { isCentroidInsideGeometry } from '../utils/geometry.utils.ts';
 import { corsHeaders } from '../utils/cors.ts';
 import { toBoundaryErrorResponse } from './boundary-errors.ts';
 export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
-export { PREWARM_COUNTRIES } from './geofabrik/url-mapping.ts';
 
 /**
  * Bust cache if conversion or processing methods change.

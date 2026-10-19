@@ -1,0 +1,148 @@
+# Cloud Build pipeline for the boundaries API, run by the Developer Connect
+# trigger on push to `main`.
+#
+# This file replaces the inline build config the trigger was originally created
+# with. To adopt it, open the trigger and set:
+#   * Configuration: "Cloud Build configuration file"
+#   * Location:      Repository, path `cloudbuild.yaml`
+# and clear the trigger's inline substitutions — trigger substitutions override
+# the ones defined here.
+#
+# $COMMIT_SHA, $REPO_NAME, $BUILD_ID, $LOCATION, $PROJECT_ID are built-in
+# trigger substitutions and keep working unchanged.
+
+substitutions:
+  _AR_HOSTNAME: europe-west1-docker.pkg.dev
+  _AR_PROJECT_ID: picsa-apps
+  _AR_REPOSITORY: cloud-run-source-deploy
+  _SERVICE_NAME: geo-boundaries-topojson-git
+  _DEPLOY_REGION: europe-west1
+  _TRIGGER_ID: ce47b79c-a6e9-46bc-8cdc-75bc74a64393
+  # Countries warmed into the boundary cache after each rollout. Keep in step
+  # with PREWARM_COUNTRIES in api/src/services/geofabrik/url-mapping.ts.
+  _PREWARM_COUNTRIES: MW ZM ZW
+  _PREWARM_BASE_URL: https://geo-data-api.picsa.app
+
+steps:
+  # Pull the previous image so the Docker layer cache is reused.
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - '-c'
+      - >-
+        docker pull
+        $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
+        || exit 0
+    id: Pull
+    entrypoint: /bin/bash
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - '--cache-from'
+      - >-
+        $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
+      - '-t'
+      - >-
+        $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - '-t'
+      - >-
+        $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
+      - .
+      - '-f'
+      - Dockerfile
+    id: Build
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - '--all-tags'
+      - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME
+    id: Push
+
+  # `gcloud run services update` blocks until the new revision is ready and
+  # serving traffic, so everything before this step is a pre-deploy hook and
+  # everything after it is a true post-rollout hook.
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    args:
+      - run
+      - services
+      - update
+      - $_SERVICE_NAME
+      - >-
+        --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - >-
+        --update-labels=managed-by=gcp-cloud-build-deploy-cloud-run,gcb-trigger-id=$_TRIGGER_ID,gcb-trigger-region=$LOCATION,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID
+      - '--region=$_DEPLOY_REGION'
+      - '--max-instances=1'
+      - '--quiet'
+    id: Deploy
+    entrypoint: gcloud
+
+  # Post-deploy warm for the countries that are actually used.
+  #
+  # This goes through the public API rather than writing GCS directly, so it
+  # needs no credentials of its own: the service generates and caches with the
+  # identity it already runs as. It also exercises the exact code path end users
+  # hit, and it warms the commit that shipped ($COMMIT_SHA built the image).
+  #
+  # Cost is three cache reads on a normal deploy — near zero. Real work only
+  # happens after a cache-version bump, which is why this needs no path filter.
+  #
+  # Failures warn rather than fail the build: the revision is already serving,
+  # so a red build would roll nothing back and would only make deploys look
+  # broken. An unwarmed country still generates on the first user request.
+  #
+  # Timeouts are bounded so a stuck warm can't kill the build:
+  #   curl       --retry-max-time 1200s per country
+  #   this step  4200s
+  #   build      5400s (below), leaving headroom for Pull/Build/Push/Deploy
+  - name: gcr.io/cloud-builders/curl
+    id: Warm
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -uo pipefail
+        base="$_PREWARM_BASE_URL"
+        failed=""
+        for cc in $_PREWARM_COUNTRIES; do
+          start=$(date +%s)
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --connect-timeout 20 --max-time 900 \
+            --retry 1 --retry-delay 10 --retry-max-time 1200 \
+            "$base/boundaries/$cc")
+          [ -n "$code" ] || code=000
+          elapsed=$(( $(date +%s) - start ))
+          if [ "$code" = "200" ]; then
+            echo "prewarm $cc: ok ($elapsed s, http $code)"
+          else
+            echo "prewarm $cc: FAILED (http $code, $elapsed s)"
+            failed="$failed $cc"
+          fi
+        done
+        if [ -n "$failed" ]; then
+          echo "prewarm incomplete:$failed"
+          echo "These countries are generated on demand by the first request instead."
+        else
+          echo "prewarm complete: $_PREWARM_COUNTRIES"
+        fi
+        exit 0
+    timeout: 4200s
+
+# Bounded so a slow warm can finish without the build being cancelled.
+timeout: 5400s
+
+images:
+  - >-
+    $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+  - >-
+    $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
+
+options:
+  requestedVerifyOption: VERIFIED
+  substitutionOption: ALLOW_LOOSE
+  logging: CLOUD_LOGGING_ONLY
+
+tags:
+  - gcp-cloud-build-deploy-cloud-run
+  - geo-boundaries-topojson-git

@@ -59,7 +59,21 @@ To speed up requests, raw Geofabrik PBF extracts and derived TopoJSON are cached
 
 ### Boundary Prewarm (MW, ZM, ZW)
 
-Only a small subset of countries is actually used, so only those are warmed — everything else generates on demand and then caches. Warming is managed by the `prewarm-boundaries` CI workflow (`.github/workflows/prewarm-boundaries.yml`), which runs on pushes to `main` that change the boundary pipeline (extraction, conversion, cache I/O, dependencies) and writes the warmed TopoJSON straight to GCS. Because cache keys are versioned in code, warming from the same commit the Cloud Run revision deploys means the keys it reads already exist — no rollout-timing dependency, and no HTTP timeouts mid-generation. Use **Run workflow** (`workflow_dispatch`) to fill gaps from GCS 90-day lifecycle expiry without a redeploy. Requires `CACHE_BUCKET`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, and `GCP_SERVICE_ACCOUNT` repo variables (see the workflow header).
+Only a small subset of countries is actually used, so only those are warmed — everything else generates on demand and then caches.
+
+Warming is the final `Warm` step of the Cloud Build pipeline (`cloudbuild.yaml`), which runs immediately after the new revision is deployed. `gcloud run services update` only returns once the revision is serving, so the step is a true post-rollout hook — no polling, no deploy-ordering race. It simply requests `GET /boundaries/{MW,ZM,ZW}`: the service generates and caches them with the identity it already runs as, so **no extra credentials or repository variables are needed**, and the exact code path end users hit is exercised.
+
+The step costs three cache reads on a normal deploy and only does real work after a cache-version bump. It warns instead of failing the build, because by that point the revision is already serving — a failed warm rolls nothing back, and the country simply generates on the first user request.
+
+To fill gaps without a redeploy (e.g. after GCS 90-day lifecycle expiry):
+
+```bash
+for cc in MW ZM ZW; do
+  curl -fsS "https://geo-data-api.picsa.app/boundaries/$cc" -o /dev/null && echo "$cc warmed"
+done
+```
+
+If a country's cold generation exceeds the Cloud Run request timeout (300s by default), the warm step logs a warning but the country stays cold — raise the service timeout (`--timeout=900`) or warm it manually with the loop above.
 
 ## Features
 
@@ -110,6 +124,10 @@ The easiest way to deploy is through the Google Cloud Run Console using **Develo
 4. Cloud Run will automatically detect the `Dockerfile` at the repo root.
 5. Set environment variables (`CACHE_BUCKET`, etc.) as needed.
 6. Cloud Run will automatically build and deploy on every push to your selected branch.
+
+The build itself is defined in [`cloudbuild.yaml`](./cloudbuild.yaml): pull → build → push → `gcloud run services update` → warm. The trigger must be configured to read it — set **Configuration** to _Cloud Build configuration file_ with path `cloudbuild.yaml`, and clear any inline substitutions on the trigger, since trigger substitutions override the file's.
+
+Because `gcloud run services update` blocks until the new revision is serving traffic, anything added after the `Deploy` step is a genuine post-deploy hook and anything before it is a genuine pre-deploy hook. `$COMMIT_SHA` is available throughout, so steps can target the exact image that was built.
 
 The API is currently deployed at `https://geo-data-api.picsa.app`.
 

@@ -17,7 +17,22 @@ export async function validateBody<T extends z.ZodType>(
   const result = schema.safeParse(body);
 
   if (!result.success) {
-    throw ErrorResponse(z.flattenError(result.error), 400);
+    const { formErrors, fieldErrors } = z.flattenError(result.error);
+    const fields = Object.keys(fieldErrors);
+
+    // Keep the Zod detail for debugging, but always include a human-readable
+    // `error` — every other failure body on these routes carries one.
+    throw ErrorResponse(
+      {
+        error:
+          fields.length > 0
+            ? `Invalid request body: ${fields.join(', ')}.`
+            : 'Invalid request body.',
+        formErrors,
+        fieldErrors,
+      },
+      400,
+    );
   }
 
   return result.data;

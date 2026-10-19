@@ -13,7 +13,6 @@
     "format": "prettier --write \"**/*.{ts,tsx,cjs,js,json,md,css,scss}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,cjs,js,json,md,css,scss}\"",
     "update:osm-levels": "bun scripts/update-osm-admin-levels.ts",
-    "prewarm:boundaries": "cd api && bun run prewarm",
     "prepare": "husky"
   },
   "lint-staged": {
