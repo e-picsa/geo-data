@@ -1,12 +1,20 @@
 export interface CountryConfig {
   geofabrikPath: string | null;
+  /** Approximate upstream PBF size. Informational only (ops visibility) —
+   * nothing enforces a limit; see PREWARM_COUNTRIES below. */
   pbfSizeMb: number;
   adminLevels?: number[];
 }
 
-const PBF_SIZE_THRESHOLD_MB = 100;
-
 export const DEFAULT_ADMIN_LEVELS = [2, 3, 4, 5, 6];
+
+/**
+ * Small subset of countries that actually gets used. The `Warm` step in
+ * `cloudbuild.yaml` requests these immediately after each rollout so end users
+ * never pay first-generation cost. Every other configured country is still
+ * served on demand (generated synchronously, then cached).
+ */
+export const PREWARM_COUNTRIES = ['MW', 'ZM', 'ZW'];
 
 export const GEOFABRIK_COUNTRIES: Record<string, CountryConfig> = {
   AO: { geofabrikPath: 'africa/angola', pbfSizeMb: 75 },
@@ -142,12 +150,6 @@ export function getCountryConfig(countryCode: string): CountryConfig | null {
 export function getCountryAdminLevels(countryCode: string): number[] {
   const config = getCountryConfig(countryCode);
   return config?.adminLevels ?? DEFAULT_ADMIN_LEVELS;
-}
-
-export function shouldUseGeofabrik(countryCode: string): boolean {
-  const config = getCountryConfig(countryCode);
-  if (!config || !config.geofabrikPath) return false;
-  return config.pbfSizeMb <= PBF_SIZE_THRESHOLD_MB;
 }
 
 export function getGeofabrikUrl(countryCode: string): string | null {

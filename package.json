@@ -1,6 +1,6 @@
 {
   "name": "geo-data",
-  "version": "3.2.1",
+  "version": "3.2.4",
   "description": "Monorepo for managing Geo data within the E-PICSA App",
   "main": "index.js",
   "scripts": {

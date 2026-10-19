@@ -147,7 +147,7 @@ test('adminBoundaries - Invalid country code returns 400', async () => {
   expect(data.error).toBeDefined();
 });
 
-test('adminBoundaries - Unsupported country code returns 400', async () => {
+test('adminBoundaries - Unsupported country code returns 404 with a non-retryable code', async () => {
   const req = new Request('http://localhost/', {
     method: 'POST',
     headers: {
@@ -157,10 +157,12 @@ test('adminBoundaries - Unsupported country code returns 400', async () => {
   });
 
   const res = await adminBoundaries(req);
-  expect(res.status).toBe(400);
+  expect(res.status).toBe(404);
 
   const data = (await res.json()) as any;
   expect(data.error).toContain('ZZ');
+  expect(data.code).toBe('COUNTRY_NOT_SUPPORTED');
+  expect(data.retryable).toBe(false);
 });
 
 test('adminBoundaries - Missing country_code parameter returns 400', async () => {

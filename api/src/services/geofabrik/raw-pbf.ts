@@ -1,7 +1,8 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fetchWithRetry } from '../../utils/fetch.ts';
-import { getGeofabrikUrl } from './url-mapping.ts';
+import { PREWARM_COUNTRIES, getGeofabrikUrl } from './url-mapping.ts';
+import { BoundaryError } from '../boundary-errors.ts';
 
 const MIN_VALID_PBF_BYTES = 50_000;
 
@@ -35,13 +36,31 @@ export async function ensureRawPbf(
 
   const url = getGeofabrikUrl(countryCode);
   if (!url) {
-    throw new Error(`No Geofabrik URL for country code: ${countryCode}`);
+    throw new BoundaryError(
+      'COUNTRY_NOT_SUPPORTED',
+      `No boundary data source for country code "${countryCode}" (no Geofabrik extract configured). Instantly available: ${PREWARM_COUNTRIES.join(', ')}.`,
+      404,
+      false,
+    );
   }
 
   console.log(`Downloading PBF from Geofabrik for ${countryCode}...`);
   const response = await fetchWithRetry(url, { signal });
   if (!response.ok) {
-    throw new Error(`Failed to download PBF: HTTP ${response.status}`);
+    if (response.status === 504) {
+      throw new BoundaryError(
+        'GENERATION_TIMEOUT',
+        `Boundary source for "${countryCode}" timed out (upstream HTTP 504). First-time generation can take several minutes — please retry shortly.`,
+        504,
+        true,
+      );
+    }
+    throw new BoundaryError(
+      'UPSTREAM_UNAVAILABLE',
+      `Boundary source download failed for "${countryCode}" (upstream HTTP ${response.status}). Please retry in a few minutes.`,
+      502,
+      true,
+    );
   }
 
   await mkdir(dirname(pbfPath), { recursive: true });
