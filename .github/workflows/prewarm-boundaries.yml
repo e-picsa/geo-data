@@ -1,0 +1,72 @@
+name: Prewarm Boundaries
+
+# Warms the derived boundary cache (MW, ZM, ZW) in GCS when the boundary
+# pipeline changes — cache keys are versioned in code, so warming from the
+# same commit the Cloud Run revision deploys guarantees the keys it reads
+# already exist. No rollout-timing dependency: this writes to GCS directly
+# rather than going through HTTP (no waiting for deploy, no client timeouts
+# mid-generation). workflow_dispatch covers GCS lifecycle-expiry gaps
+# without a redeploy.
+#
+# Trigger paths mirror the files that determine warmed content: extraction +
+# conversion + cache read/write, the warm list, dependency lockfiles (a
+# mapshaper/osmix bump can alter output), and this workflow itself.
+# Response shaping / error mapping (boundary-errors.ts) and routing are
+# intentionally excluded — they don't change cached bytes.
+#
+# Required repo configuration (Settings → Variables):
+#   vars.CACHE_BUCKET                  GCS bucket (same value as the Cloud Run service env)
+#   vars.GCP_WORKLOAD_IDENTITY_PROVIDER Workload Identity Federation provider resource name
+#   vars.GCP_SERVICE_ACCOUNT            Service account email with roles/storage.objectAdmin on the bucket
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "api/src/services/admin-boundaries.ts"
+      - "api/src/services/geofabrik/**"
+      - "api/src/utils/topojson.utils.ts"
+      - "api/src/utils/geometry.utils.ts"
+      - "api/src/utils/cache/**"
+      - "api/scripts/prewarm-boundaries.ts"
+      - "api/package.json"
+      - "bun.lock"
+      - ".github/workflows/prewarm-boundaries.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: prewarm-boundaries
+  cancel-in-progress: false
+
+jobs:
+  prewarm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Prewarm boundary cache
+        run: bun run prewarm:boundaries
+        env:
+          CACHE_BUCKET: ${{ vars.CACHE_BUCKET }}

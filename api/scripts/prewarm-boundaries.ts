@@ -2,14 +2,15 @@
  * Warm the derived boundary cache for the small subset of countries that
  * actually gets used (see PREWARM_COUNTRIES).
  *
- * Run after deploy or cache-version bumps so end users never pay
- * first-generation cost (PBF download + extract + Mapshaper, minutes):
+ * Executed by the `prewarm-boundaries` CI workflow, which triggers on pushes
+ * to main that change the boundary pipeline (extraction, conversion, cache
+ * I/O, dependencies). It checks out the same commit it warms, so the cache
+ * keys it writes are exactly the ones the newly deployed Cloud Run revision
+ * reads (no rollout-timing dependency, no request timeouts: it writes to GCS
+ * directly rather than going through HTTP).
  *
- *   cd api && bun run prewarm
- *
- * Writes through getCache(), so it warms GCS when CACHE_BUCKET is set and
- * the local .cache dir otherwise. Must run with cwd=api so the local cache
- * lands where the dev server reads it.
+ * Must run with cwd=api so the throwaway local PBF workspace lands in
+ * api/.cache (GCS holds the persistent warmed output via CACHE_BUCKET).
  */
 import { getBoundariesTopojson } from '../src/services/admin-boundaries.ts';
 import { PREWARM_COUNTRIES } from '../src/services/geofabrik/url-mapping.ts';

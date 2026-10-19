@@ -57,6 +57,10 @@ To speed up requests, raw Geofabrik PBF extracts and derived TopoJSON are cached
 3. Configure **Object Lifecycle Management** on the bucket to automatically delete objects older than 90 days.
 4. The compute identity running this service (e.g., Cloud Run service account) needs `roles/storage.objectAdmin` on the target bucket.
 
+### Boundary Prewarm (MW, ZM, ZW)
+
+Only a small subset of countries is actually used, so only those are warmed — everything else generates on demand and then caches. Warming is managed by the `prewarm-boundaries` CI workflow (`.github/workflows/prewarm-boundaries.yml`), which runs on pushes to `main` that change the boundary pipeline (extraction, conversion, cache I/O, dependencies) and writes the warmed TopoJSON straight to GCS. Because cache keys are versioned in code, warming from the same commit the Cloud Run revision deploys means the keys it reads already exist — no rollout-timing dependency, and no HTTP timeouts mid-generation. Use **Run workflow** (`workflow_dispatch`) to fill gaps from GCS 90-day lifecycle expiry without a redeploy. Requires `CACHE_BUCKET`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, and `GCP_SERVICE_ACCOUNT` repo variables (see the workflow header).
+
 ## Features
 
 - Fetches OSM boundary data from Geofabrik PBF extracts for `admin_level`s 2 through 8.
