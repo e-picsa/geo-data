@@ -94,9 +94,7 @@ export function LayerControls({
 
                 <PopoverPanel className="absolute left-0 top-full mt-2 z-50 w-56 rounded-lg bg-white p-3 shadow-xl ring-1 ring-black/10 focus:outline-none text-slate-800 space-y-2.5">
                   <div>
-                    <div className="text-[11px] font-semibold text-slate-600 mb-1.5">
-                      Shortlist Colors
-                    </div>
+                    <div className="text-[11px] font-semibold text-slate-600 mb-1.5">Colour</div>
                     <div className="flex items-center gap-1.5">
                       {SHORTLIST_COLORS.map((c) => {
                         const isSelected = color.toLowerCase() === c.toLowerCase();
