@@ -61,10 +61,10 @@ To speed up requests, raw Geofabrik PBF extracts and derived TopoJSON are cached
 
 Cached objects are namespaced by two independent versions, both bumped by hand when the code that produces them changes:
 
-| Constant            | Location                                        | Invalidates                                                                            | Cost of bumping                                        |
-| ------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `CACHE_VERSION = 6` | `api/src/services/geofabrik/fetch-geofabrik.ts` | Extraction output under `geofabrik/v6/…` (raw PBF, extracted relations, intermediates) | Full cold path: re-download the PBF and re-extract     |
-| `CACHE_VERSION = 8` | `api/src/services/admin-boundaries.ts`          | Derived TopoJSON under `derived/v8/…`                                                  | Mapshaper re-run over already-extracted data (seconds) |
+| Constant             | Location                                        | Invalidates                                                                            | Cost of bumping                                        |
+| -------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `CACHE_VERSION = 6`  | `api/src/services/geofabrik/fetch-geofabrik.ts` | Extraction output under `geofabrik/v6/…` (raw PBF, extracted relations, intermediates) | Full cold path: re-download the PBF and re-extract     |
+| `CACHE_VERSION = 10` | `api/src/services/admin-boundaries.ts`          | Derived TopoJSON under `derived/v10/…`                                                 | Mapshaper re-run over already-extracted data (seconds) |
 
 Bump the **extraction** version when anything upstream of the extracted relations changes (`api/src/services/geofabrik/**`, including the OSM entity handling). Bump the **derived** version when the conversion, simplification, or centring changes (`topojson.utils.ts`, `geometry.utils.ts`, cache paths, response shaping that alters stored bytes). Dependency bumps matter too: `mapshaper` affects the derived output, `osmix`/`pbf` the extraction output. If unsure, bump both — the cost is a slower first generation, never wrong data.
 

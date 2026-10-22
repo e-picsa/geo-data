@@ -38,6 +38,9 @@ COPY --from=build /app/api/node_modules ./api/node_modules
 COPY package.json ./
 COPY api/package.json ./api/
 COPY api/src ./api/src
+# Runtime data (custom boundary layers, e.g. mw_epa.geojson). If this is not
+# copied, the API still advertises the layer but has no features to return.
+COPY api/data ./api/data
 
 # go-pmtiles CLI (static binary): converts the MBTiles staged by
 # POST /export-pmtiles into a single-file .pmtiles archive.
