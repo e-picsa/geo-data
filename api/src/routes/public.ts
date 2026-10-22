@@ -24,8 +24,11 @@ export const handlePublicRoutes = async (req: Request, pathname: string): Promis
     return adminBoundaries(req, undefined, rawTopo);
   }
 
-  // Boundaries POST: POST / or POST /boundaries
-  if (req.method === 'POST' && (pathname === '/' || pathname === '/boundaries')) {
+  // Boundaries POST: POST /, POST /boundaries, or POST /admin-boundaries
+  if (
+    req.method === 'POST' &&
+    (pathname === '/' || pathname === '/boundaries' || pathname === '/admin-boundaries')
+  ) {
     return adminBoundaries(req);
   }
 

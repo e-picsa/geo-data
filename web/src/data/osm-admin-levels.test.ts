@@ -72,6 +72,15 @@ describe('osm-admin-levels', () => {
       expect(lvl6?.label).toContain('(Not in data)');
     });
 
+    test('disables level 6 for Malawi when not present in availableLevels', () => {
+      const options = getAdminLevelOptions('MW', [2, 3, 4]);
+      const lvl6 = options.find((o) => o.value === 6);
+
+      expect(lvl6?.disabled).toBe(true);
+      expect(lvl6?.disabledReason).toBe('not_in_data');
+      expect(lvl6?.label).toContain('(Not in data)');
+    });
+
     test('enables level 6 when present in availableLevels', () => {
       const options = getAdminLevelOptions('ZW', [2, 4, 6]);
       const lvl6 = options.find((o) => o.value === 6);
@@ -81,12 +90,14 @@ describe('osm-admin-levels', () => {
       expect(lvl6?.label).toBe('Level 6: Districts');
     });
 
-    test('handles fallback when countryCode is omitted', () => {
+    test('handles fallback when countryCode is omitted (levels 2..6)', () => {
       const options = getAdminLevelOptions();
-      expect(options.length).toBe(7); // levels 2..8
+      expect(options.length).toBe(5); // levels 2..6
       const lvl2 = options.find((o) => o.value === 2);
       expect(lvl2?.label).toBe('Level 2: Country');
       expect(lvl2?.disabled).toBe(false);
+      const lvl6 = options.find((o) => o.value === 6);
+      expect(lvl6).toBeDefined();
     });
   });
 });

@@ -2,14 +2,24 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import * as topojsonClient from 'topojson-client';
 import { CountrySelect } from './components/CountrySelect';
 import { AdminLevelSelect } from './components/AdminLevelSelect';
+import { CustomLayerSelect } from './components/CustomLayerSelect';
+import { LayerControls, type LayerAttributionInfo } from './components/LayerControls';
 import { ExportTilesButton } from './components/ExportTilesButton';
 import { ExportPmtilesButton } from './components/ExportPmtilesButton';
 import { LibertyMap, type BaseMode } from './components/LibertyMap';
 import { ZoomBadge } from './components/ZoomBadge';
 import { TrashIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
-import { getCountryOsmLevels } from './data/osm-admin-levels';
-import { countries } from './data/countries';
+import { getCountryOsmLevels, type CustomLayerInfo } from './data/osm-admin-levels';
 import { bboxForFeatures, getBufferedBboxForZoom } from './utils/tiles';
+import {
+  DEFAULT_ADMIN_LAYER_COLOR,
+  DEFAULT_ADMIN_FILL_OPACITY,
+  DEFAULT_CUSTOM_LAYER_COLOR,
+  DEFAULT_CUSTOM_FILL_OPACITY,
+  getLayerPreferences,
+  saveLayerPreferences,
+  type LayerPreferences,
+} from './utils/layerPreferences';
 
 interface BoundaryResponse {
   country_code: string;
@@ -19,7 +29,17 @@ interface BoundaryResponse {
   bbox: number[];
   /** topojson stringified already */
   topojson: string;
+  custom_layers?: CustomLayerInfo[];
 }
+
+const OSM_ADMIN_ATTRIBUTION: LayerAttributionInfo = {
+  sourceName: 'OpenStreetMap (OSM) via Geofabrik',
+  sourceUrl:
+    'https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries',
+  license: 'Open Database License (ODbL)',
+  details:
+    'Administrative boundary relations extracted from OpenStreetMap Geofabrik country extracts and topologically processed using Mapshaper.',
+};
 
 /** Path prefix the app is served from (supports Vite base-path deploys). */
 function appBasePath(): string {
@@ -51,6 +71,23 @@ function App() {
   // Global is the default country (root `/` with no code in the URL).
   const [countryCode, setCountryCode] = useState<string>(() => getCountryCodeFromUrl() ?? 'GLOBAL');
   const [selectedAdminLevel, setSelectedAdminLevel] = useState<number>(2);
+  const [selectedCustomLayer, setSelectedCustomLayer] = useState<string | null>(null);
+
+  // Administrative layer preferences (visibility, color, fillOpacity, labels)
+  const [adminLayerPrefs, setAdminLayerPrefs] = useState<LayerPreferences>(() =>
+    getLayerPreferences('admin', DEFAULT_ADMIN_LAYER_COLOR, DEFAULT_ADMIN_FILL_OPACITY, true),
+  );
+
+  // Custom layer preferences (visibility, color, fillOpacity, labels)
+  const [customLayerPrefs, setCustomLayerPrefs] = useState<LayerPreferences>(() =>
+    getLayerPreferences(
+      selectedCustomLayer || 'default',
+      DEFAULT_CUSTOM_LAYER_COLOR,
+      DEFAULT_CUSTOM_FILL_OPACITY,
+      true,
+    ),
+  );
+
   const [tileMaxZoom, setTileMaxZoom] = useState(8);
   const [tileBuffer, setTileBuffer] = useState(1);
   const [mapZoom, setMapZoom] = useState(2);
@@ -71,6 +108,95 @@ function App() {
   useEffect(() => {
     countryCodeRef.current = countryCode;
   }, [countryCode]);
+
+  // Load preferences from localStorage when active custom layer changes
+  useEffect(() => {
+    if (selectedCustomLayer) {
+      setCustomLayerPrefs(
+        getLayerPreferences(
+          selectedCustomLayer,
+          DEFAULT_CUSTOM_LAYER_COLOR,
+          DEFAULT_CUSTOM_FILL_OPACITY,
+          true,
+        ),
+      );
+    }
+  }, [selectedCustomLayer]);
+
+  // Admin layer preference handlers
+  const handleAdminColorChange = (newColor: string) => {
+    const updated: LayerPreferences = { ...adminLayerPrefs, color: newColor };
+    setAdminLayerPrefs(updated);
+    saveLayerPreferences('admin', updated);
+  };
+
+  const handleResetAdminColor = () => {
+    const updated: LayerPreferences = {
+      ...adminLayerPrefs,
+      color: DEFAULT_ADMIN_LAYER_COLOR,
+      fillOpacity: DEFAULT_ADMIN_FILL_OPACITY,
+    };
+    setAdminLayerPrefs(updated);
+    saveLayerPreferences('admin', updated);
+  };
+
+  const handleAdminOpacityChange = (fillOpacity: number) => {
+    const updated: LayerPreferences = { ...adminLayerPrefs, fillOpacity };
+    setAdminLayerPrefs(updated);
+    saveLayerPreferences('admin', updated);
+  };
+
+  const handleToggleAdminVisible = (visible: boolean) => {
+    const updated: LayerPreferences = { ...adminLayerPrefs, visible };
+    setAdminLayerPrefs(updated);
+    saveLayerPreferences('admin', updated);
+  };
+
+  const handleToggleAdminLabels = (show: boolean) => {
+    const updated: LayerPreferences = { ...adminLayerPrefs, showLabels: show };
+    setAdminLayerPrefs(updated);
+    saveLayerPreferences('admin', updated);
+  };
+
+  // Custom layer preference handlers
+  const handleCustomColorChange = (newColor: string) => {
+    if (!selectedCustomLayer) return;
+    const updated: LayerPreferences = { ...customLayerPrefs, color: newColor };
+    setCustomLayerPrefs(updated);
+    saveLayerPreferences(selectedCustomLayer, updated);
+  };
+
+  const handleResetCustomColor = () => {
+    if (!selectedCustomLayer) return;
+    const updated: LayerPreferences = {
+      ...customLayerPrefs,
+      color: DEFAULT_CUSTOM_LAYER_COLOR,
+      fillOpacity: DEFAULT_CUSTOM_FILL_OPACITY,
+    };
+    setCustomLayerPrefs(updated);
+    saveLayerPreferences(selectedCustomLayer, updated);
+  };
+
+  const handleCustomOpacityChange = (fillOpacity: number) => {
+    if (!selectedCustomLayer) return;
+    const updated: LayerPreferences = { ...customLayerPrefs, fillOpacity };
+    setCustomLayerPrefs(updated);
+    saveLayerPreferences(selectedCustomLayer, updated);
+  };
+
+  const handleToggleCustomVisible = (visible: boolean) => {
+    if (!selectedCustomLayer) return;
+    const updated: LayerPreferences = { ...customLayerPrefs, visible };
+    setCustomLayerPrefs(updated);
+    saveLayerPreferences(selectedCustomLayer, updated);
+  };
+
+  const handleToggleCustomLabels = (show: boolean) => {
+    if (!selectedCustomLayer) return;
+    const updated: LayerPreferences = { ...customLayerPrefs, showLabels: show };
+    setCustomLayerPrefs(updated);
+    saveLayerPreferences(selectedCustomLayer, updated);
+  };
 
   // Request the server render raster preview tiles into the cache for
   // zooms up to the preview cap (z8 by default, same as maxZoom initially).
@@ -123,8 +249,26 @@ function App() {
     return Array.from(levels).sort((a: number, b: number) => a - b);
   }, [fullGeoJson]);
 
-  // Derive active admin level during render to avoid cascading renders
-  const adminLevel = useMemo(() => {
+  const availableCustomLayers = useMemo(() => {
+    if (data?.custom_layers && data.custom_layers.length > 0) {
+      return data.custom_layers;
+    }
+    return [];
+  }, [data]);
+
+  const availableCustomLayerIds = useMemo(() => {
+    if (!fullGeoJson?.features) return [];
+    const ids = new Set<string>();
+    for (const f of fullGeoJson.features) {
+      if (f.properties?.custom_layer) {
+        ids.add(f.properties.custom_layer);
+      }
+    }
+    return Array.from(ids);
+  }, [fullGeoJson]);
+
+  // Derive active admin level (strictly levels present in data/supported by country)
+  const adminLevel = useMemo<number>(() => {
     const osmInfo = getCountryOsmLevels(countryCode ?? undefined);
     const isSupportedByCountry =
       !osmInfo?.levels || Boolean(osmInfo.levels[String(selectedAdminLevel)]);
@@ -135,7 +279,7 @@ function App() {
       return selectedAdminLevel;
     }
 
-    const candidates = [2, 3, 4, 5, 6, 7, 8].filter(
+    const candidates = [2, 3, 4, 5, 6].filter(
       (level) =>
         (!osmInfo?.levels || Boolean(osmInfo.levels[String(level)])) &&
         (!availableLevels.length || availableLevels.includes(level)),
@@ -148,27 +292,44 @@ function App() {
     return selectedAdminLevel;
   }, [countryCode, selectedAdminLevel, availableLevels]);
 
-  const geoJsonData = useMemo(() => {
+  const activeCustomLayer = useMemo(() => {
+    if (!selectedCustomLayer) return null;
+    return availableCustomLayers.find((l) => l.id === selectedCustomLayer) || null;
+  }, [selectedCustomLayer, availableCustomLayers]);
+
+  // Separate GeoJSON collections for Admin Boundaries and Custom Sectoral Layers
+  const adminGeoJsonData = useMemo(() => {
     if (!fullGeoJson) return null;
     return {
       ...fullGeoJson,
       features: fullGeoJson.features.filter(
-        (f: any) => Number(f.properties.admin_level) === adminLevel,
+        (f: any) => Number(f.properties?.admin_level) === adminLevel,
       ),
     };
   }, [fullGeoJson, adminLevel]);
 
+  const customGeoJsonData = useMemo(() => {
+    if (!fullGeoJson || !selectedCustomLayer) return null;
+    return {
+      ...fullGeoJson,
+      features: fullGeoJson.features.filter(
+        (f: any) => f.properties?.custom_layer === selectedCustomLayer,
+      ),
+    };
+  }, [fullGeoJson, selectedCustomLayer]);
+
   const centersStats = useMemo(() => {
-    if (!geoJsonData?.features) return null;
+    const fc = adminGeoJsonData;
+    if (!fc?.features) return null;
     let adminCentre = 0;
     let fallback = 0;
-    for (const f of geoJsonData.features) {
+    for (const f of fc.features) {
       const s = f.properties?.center_source;
       if (s === 'admin_centre') adminCentre++;
       else fallback++;
     }
-    return { total: geoJsonData.features.length, adminCentre, fallback };
-  }, [geoJsonData]);
+    return { total: fc.features.length, adminCentre, fallback };
+  }, [adminGeoJsonData]);
 
   // Country-wide bounding box for fitting the map view
   const countryBbox = useMemo<[number, number, number, number] | null>(() => {
@@ -179,26 +340,25 @@ function App() {
     }
     const fromFull = bboxForFeatures(fullGeoJson);
     if (fromFull) return fromFull;
-    const fromFiltered = bboxForFeatures(geoJsonData);
+    const fromFiltered = bboxForFeatures(adminGeoJsonData);
     if (fromFiltered) return fromFiltered;
     return null;
-  }, [countryCode, data?.bbox, fullGeoJson, geoJsonData]);
+  }, [countryCode, data?.bbox, fullGeoJson, adminGeoJsonData]);
 
-  // Raw bounds for the currently selected admin level (falls back to the
-  // country bbox until features load), plus the tile-snapped box actually exported.
-  // GLOBAL has no boundary data — its cover is the whole world.
+  // Raw bounds for active layers (falls back to country bbox)
   const baseBbox = useMemo<[number, number, number, number] | null>(() => {
     if (countryCode?.toUpperCase() === 'GLOBAL') return WORLD_BBOX;
-    const fromFeatures = bboxForFeatures(geoJsonData);
-    if (fromFeatures) return fromFeatures;
+    const fromAdmin = bboxForFeatures(adminGeoJsonData);
+    if (fromAdmin) return fromAdmin;
+    const fromCustom = bboxForFeatures(customGeoJsonData);
+    if (fromCustom) return fromCustom;
     if (data?.bbox && data.bbox.length >= 4) {
       return data.bbox.slice(0, 4) as [number, number, number, number];
     }
     return null;
-  }, [geoJsonData, data, countryCode]);
+  }, [adminGeoJsonData, customGeoJsonData, data, countryCode]);
 
-  // Honest preview of the discrete tile buffer: outer edges of the buffered
-  // tile cover at max zoom (low zooms cover a larger geographic area).
+  // Honest preview of discrete tile buffer
   const exportBbox = useMemo<[number, number, number, number] | null>(() => {
     if (!baseBbox) return null;
     return getBufferedBboxForZoom(baseBbox, tileBuffer, tileMaxZoom);
@@ -212,8 +372,7 @@ function App() {
       setError(null);
       setData(null);
 
-      // GLOBAL needs no boundary fetch — world cover only (and never prewarms
-      // the raster cache: warming the whole world would be ~87k tiles).
+      // GLOBAL needs no boundary fetch — world cover only
       if (upper === 'GLOBAL') {
         setLoading(false);
         return;
@@ -224,11 +383,6 @@ function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ country_code: upper }),
-          // First-time generation (cold cache) downloads and processes the
-          // country PBF server-side and can take minutes. Bail out client-side
-          // so the UI never hangs indefinitely; a retry often hits the warmed
-          // cache (the server keeps generating only while connected, so a
-          // retry may restart generation — still the actionable path).
           signal: AbortSignal.timeout(120000),
         });
 
@@ -243,9 +397,11 @@ function App() {
           );
         }
 
-        const payload: BoundaryResponse = await res.json();
-        setData(payload);
-        prewarmTiles(payload.country_code, payload.bbox, tileBuffer);
+        const json: BoundaryResponse = await res.json();
+        setData(json);
+
+        // Prewarm raster tiles
+        prewarmTiles(upper, json.bbox, tileBuffer);
       } catch (err: any) {
         if (err instanceof Error) {
           if (err.name === 'TimeoutError') {
@@ -265,46 +421,30 @@ function App() {
     [API_URL, prewarmTiles, tileBuffer],
   );
 
-  const handleCountryChange = useCallback(
-    (newCode: string) => {
-      const upper = newCode.toUpperCase();
-      if (upper === countryCodeRef.current) return;
-      window.history.pushState({ countryCode: upper }, '', countryUrl(upper));
-      void loadCountry(upper);
-    },
-    [loadCountry],
-  );
-
-  // Initial load: country comes from the URL; the root `/` loads GLOBAL.
-  const didInitRef = useRef(false);
-  useEffect(() => {
-    if (didInitRef.current) return;
-    didInitRef.current = true;
-    void loadCountry(getCountryCodeFromUrl() ?? 'GLOBAL');
-  }, [loadCountry]);
-
-  // Back/forward buttons: URL is the source of truth.
+  // Popstate sync
   useEffect(() => {
     const onPopState = () => {
-      const code = getCountryCodeFromUrl() ?? 'GLOBAL';
-      if (code === countryCodeRef.current) return;
-      void loadCountry(code);
+      const fromUrl = getCountryCodeFromUrl() ?? 'GLOBAL';
+      if (fromUrl !== countryCodeRef.current) {
+        loadCountry(fromUrl);
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, [loadCountry]);
 
-  // Keep the tab title in sync with the selected country.
+  // Initial load
   useEffect(() => {
-    if (!countryCode) {
-      document.title = 'Geo Boundaries';
-      return;
-    }
-    const label = countries.find((c) => c.code === countryCode)?.label ?? countryCode;
-    document.title = `${label} · Geo Boundaries`;
-  }, [countryCode]);
+    loadCountry(countryCode);
+  }, []);
 
-  const isGlobal = countryCode.toUpperCase() === 'GLOBAL';
+  const handleCountryChange = (code: string) => {
+    const upper = code.toUpperCase();
+    if (upper === countryCode) return;
+    const url = countryUrl(upper);
+    window.history.pushState({}, '', url);
+    loadCountry(upper);
+  };
 
   const downloadTopojson = async () => {
     if (!data?.country_code || downloadingTopo) return;
@@ -326,8 +466,6 @@ function App() {
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      // Blob URLs are same-origin, so the `download` attribute is honored in
-      // Chrome (a cross-origin `href` would ignore it and open in a new tab).
       let filename = `${data.country_code}.topo.json`;
       const contentDisposition = res.headers.get('Content-Disposition');
       if (contentDisposition) {
@@ -340,8 +478,6 @@ function App() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      // Defer revocation so the browser has started consuming the blob;
-      // immediate revoke can abort the download in Firefox/Safari.
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (err: any) {
       if (err instanceof Error && err.name === 'TimeoutError') {
@@ -356,162 +492,247 @@ function App() {
     }
   };
 
+  const isGlobal = countryCode.toUpperCase() === 'GLOBAL';
+
   return (
-    <div className="flex h-screen w-screen flex-col md:flex-row bg-slate-50">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-100 font-sans text-slate-900">
       {/* Sidebar Controls */}
-      <div className="w-full md:w-80 bg-white border-r border-slate-200 p-6 flex flex-col gap-6 shadow-sm z-10 overflow-y-auto">
-        <div>
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Geo Boundaries</h1>
-            <span className="text-xs text-slate-500 font-mono">
-              v{import.meta.env.VITE_APP_VERSION}
-            </span>
-          </div>
-          <p className="text-sm text-slate-500 mt-1">API Testing Interface</p>
+      <div className="w-80 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full shadow-lg z-10">
+        <div className="p-4 border-b border-slate-200 flex-shrink-0">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">E-PICSA Geo Data</h1>
+          <p className="text-xs text-slate-500 mt-1">Country boundaries & offline tile packs</p>
         </div>
 
-        <div className="flex flex-col gap-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Country</label>
-            <CountrySelect value={countryCode} onChange={handleCountryChange} />
-          </div>
-
-          {!isGlobal && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-slate-700">Admin Level</label>
-                <a
-                  href="https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
-                  title="View OSM admin levels definition for specific countries"
-                >
-                  <span>OSM Guide</span>
-                  <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden="true" />
-                </a>
-              </div>
-              <AdminLevelSelect
-                value={adminLevel}
-                onChange={setSelectedAdminLevel}
-                countryCode={countryCode}
-                availableLevels={availableLevels}
-              />
-            </div>
-          )}
-        </div>
-
-        {error && (
-          <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-md text-sm">
-            {error}
-          </div>
-        )}
-
-        {data && (
-          <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-slate-200">
-            <h3 className="font-semibold text-slate-900 text-sm">Results Summary</h3>
-
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div className="text-slate-500">Source:</div>
-              <div className="font-medium text-right capitalize">{data.source}</div>
-
-              <div className="text-slate-500">Features:</div>
-              <div className="font-medium text-right">{data.feature_count}</div>
-
-              <div className="text-slate-500">Size:</div>
-              <div className="font-medium text-right">{data.size_kb} KB</div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5 text-xs text-slate-600">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={includeCenters}
-                  onChange={(e) => setIncludeCenters(e.target.checked)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span className="text-xs font-medium text-slate-700">Include Centers</span>
+        {/* 50/50 Split Container: Both controls and results summary share 50% height and are independently scrollable */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {/* Top 50%: Layer & Country Controls */}
+          <div className="h-1/2 min-h-0 overflow-y-auto p-4 flex flex-col gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                Country
               </label>
-
-              {includeCenters && centersStats && (
-                <div className="flex justify-between text-[11px] text-slate-500 pl-6">
-                  <span
-                    className="flex items-center gap-1.5"
-                    title="OSM admin_centre relation member node"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
-                    admin_centre: {centersStats.adminCentre}
-                  </span>
-                  <span className="flex items-center gap-1.5" title="Geometric centroid fallback">
-                    <span className="w-2 h-2 rounded-full bg-slate-500 inline-block" />
-                    fallback: {centersStats.fallback}
-                  </span>
-                </div>
-              )}
+              <CountrySelect value={countryCode} onChange={handleCountryChange} />
             </div>
 
-            <button
-              onClick={downloadTopojson}
-              disabled={downloadingTopo}
-              className="mt-2 w-full bg-white border border-slate-300 text-slate-700 font-medium py-2 px-4 rounded-md shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
-            >
-              {downloadingTopo ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
-                  Downloading...
-                </>
-              ) : (
-                'Download TopoJSON'
-              )}
-            </button>
-            {downloadError && <div className="text-red-600 text-xs mt-1">{downloadError}</div>}
+            {!isGlobal && (
+              <div className="space-y-4">
+                {/* Administrative Layers Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Administrative Level
+                    </label>
+                    <a
+                      href="https://wiki.openstreetmap.org/wiki/Tag:boundary=administrative#10_admin_level_values_for_specific_countries"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
+                      title="View OSM admin levels definition for specific countries"
+                    >
+                      <span>OSM Guide</span>
+                      <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden="true" />
+                    </a>
+                  </div>
+                  <AdminLevelSelect
+                    value={adminLevel}
+                    onChange={setSelectedAdminLevel}
+                    countryCode={countryCode}
+                    availableLevels={availableLevels}
+                    disabled={loading}
+                  />
 
-            {/* Tile-pack export follows the map base mode: what you preview is
-                what you export. Boundary summary + TopoJSON stay in both modes. */}
-            {baseMode === 'raster' ? (
-              <ExportTilesButton
-                countryCode={data.country_code}
-                bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
-                buffer={tileBuffer}
-                onBufferChange={setTileBuffer}
-                apiUrl={API_URL}
-                maxZoom={tileMaxZoom}
-                onMaxZoomChange={setTileMaxZoom}
-              />
-            ) : (
-              <ExportPmtilesButton
-                countryCode={data.country_code}
-                bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
-                apiUrl={API_URL}
-              />
+                  {/* Administrative Layer Controls (Visibility, Colors, Opacity, Labels, Attribution Dropdown) */}
+                  <LayerControls
+                    visible={adminLayerPrefs.visible}
+                    onToggleVisible={handleToggleAdminVisible}
+                    color={adminLayerPrefs.color}
+                    defaultColor={DEFAULT_ADMIN_LAYER_COLOR}
+                    onColorChange={handleAdminColorChange}
+                    onResetColor={handleResetAdminColor}
+                    fillOpacity={adminLayerPrefs.fillOpacity}
+                    onOpacityChange={handleAdminOpacityChange}
+                    showLabels={adminLayerPrefs.showLabels}
+                    onToggleLabels={handleToggleAdminLabels}
+                    attribution={OSM_ADMIN_ATTRIBUTION}
+                    disabled={loading || !adminGeoJsonData?.features?.length}
+                  />
+                </div>
+
+                {/* Custom Sectoral Layers Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Custom Layer
+                    </label>
+                    {availableCustomLayers.length > 0 && (
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        {availableCustomLayers.length} available
+                      </span>
+                    )}
+                  </div>
+                  <CustomLayerSelect
+                    value={selectedCustomLayer}
+                    onChange={setSelectedCustomLayer}
+                    customLayers={availableCustomLayers}
+                    availableCustomLayerIds={availableCustomLayerIds}
+                    disabled={loading || availableCustomLayers.length === 0}
+                  />
+
+                  {/* Custom Layer Controls (Repeated component) */}
+                  {activeCustomLayer && (
+                    <LayerControls
+                      visible={customLayerPrefs.visible}
+                      onToggleVisible={handleToggleCustomVisible}
+                      color={customLayerPrefs.color}
+                      defaultColor={DEFAULT_CUSTOM_LAYER_COLOR}
+                      onColorChange={handleCustomColorChange}
+                      onResetColor={handleResetCustomColor}
+                      fillOpacity={customLayerPrefs.fillOpacity}
+                      onOpacityChange={handleCustomOpacityChange}
+                      showLabels={customLayerPrefs.showLabels}
+                      onToggleLabels={handleToggleCustomLabels}
+                      attribution={activeCustomLayer.citation}
+                      disabled={loading || !customGeoJsonData?.features?.length}
+                    />
+                  )}
+                </div>
+              </div>
             )}
           </div>
-        )}
 
-        {isGlobal && !loading && (
-          <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-slate-200">
-            <h3 className="font-semibold text-slate-900 text-sm">Global Base Layer</h3>
-            {baseMode === 'vector' ? (
-              <>
-                <p className="text-xs text-slate-500">
-                  Worldwide vector base (zooms 0–6, no tile buffer). Country packs start at z7 and
-                  layer over this base.
-                </p>
+          {/* Bottom 50%: Results Summary & Exports */}
+          <div className="h-1/2 min-h-0 overflow-y-auto border-t border-slate-200 flex flex-col bg-slate-50/30">
+            {error && (
+              <div className="m-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-md text-sm">
+                {error}
+              </div>
+            )}
 
-                <ExportPmtilesButton countryCode="GLOBAL" bbox={WORLD_BBOX} apiUrl={API_URL} />
-              </>
-            ) : (
-              <p className="text-xs text-slate-500">
-                Raster packs are per-country — select a country to export WebP tiles (the map
-                preview above still shows the server-rendered raster for comparison).
-              </p>
+            {data && (
+              <div className="p-4 flex flex-col gap-3">
+                <h3 className="font-semibold text-slate-900 text-sm">Results Summary</h3>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="text-slate-500">Source:</div>
+                  <div className="font-medium text-right capitalize">{data.source}</div>
+
+                  <div className="text-slate-500">Admin Features:</div>
+                  <div className="font-medium text-right">
+                    {adminGeoJsonData?.features?.length || 0}
+                  </div>
+
+                  {activeCustomLayer && (
+                    <>
+                      <div className="text-emerald-700 font-medium">Custom Features:</div>
+                      <div className="font-semibold text-emerald-700 text-right">
+                        {customGeoJsonData?.features?.length || 0}
+                      </div>
+                    </>
+                  )}
+
+                  <div className="text-slate-500">Size:</div>
+                  <div className="font-medium text-right">{data.size_kb} KB</div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5 text-xs text-slate-600">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={includeCenters}
+                      onChange={(e) => setIncludeCenters(e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-medium text-slate-700">Include Centers</span>
+                  </label>
+
+                  {includeCenters && centersStats && (
+                    <div className="flex justify-between text-[11px] text-slate-500 pl-6">
+                      <span
+                        className="flex items-center gap-1.5"
+                        title="OSM admin_centre relation member node"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
+                        admin_centre: {centersStats.adminCentre}
+                      </span>
+                      <span
+                        className="flex items-center gap-1.5"
+                        title="Geometric centroid fallback"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-slate-500 inline-block" />
+                        fallback: {centersStats.fallback}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={downloadTopojson}
+                  disabled={downloadingTopo}
+                  className="mt-2 w-full bg-white border border-slate-300 text-slate-700 font-medium py-2 px-4 rounded-md shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                >
+                  {downloadingTopo ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
+                      Downloading...
+                    </>
+                  ) : (
+                    'Download TopoJSON'
+                  )}
+                </button>
+                {downloadError && <div className="text-red-600 text-xs mt-1">{downloadError}</div>}
+
+                {baseMode === 'raster' ? (
+                  <ExportTilesButton
+                    countryCode={data.country_code}
+                    bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
+                    buffer={tileBuffer}
+                    onBufferChange={setTileBuffer}
+                    apiUrl={API_URL}
+                    maxZoom={tileMaxZoom}
+                    onMaxZoomChange={setTileMaxZoom}
+                  />
+                ) : (
+                  <ExportPmtilesButton
+                    countryCode={data.country_code}
+                    bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
+                    apiUrl={API_URL}
+                  />
+                )}
+              </div>
+            )}
+
+            {isGlobal && !loading && (
+              <div className="p-4 flex flex-col gap-3">
+                <h3 className="font-semibold text-slate-900 text-sm">Global Base Layer</h3>
+                {baseMode === 'vector' ? (
+                  <>
+                    <p className="text-xs text-slate-500">
+                      Worldwide vector base (zooms 0–6, no tile buffer). Country packs start at z7
+                      and layer over this base.
+                    </p>
+
+                    <ExportPmtilesButton countryCode="GLOBAL" bbox={WORLD_BBOX} apiUrl={API_URL} />
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Raster packs are per-country — select a country to export WebP tiles (the map
+                    preview above still shows the server-rendered raster for comparison).
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!data && !loading && !error && !isGlobal && (
+              <div className="p-4 text-xs text-slate-400 italic">
+                Select a country and layer to view results summary.
+              </div>
             )}
           </div>
-        )}
+        </div>
 
         {/* Admin Tools - Dev Only */}
         {import.meta.env.DEV && (
-          <div className="mt-auto pt-4 border-t border-slate-200">
+          <div className="p-3 border-t border-slate-200 flex-shrink-0 bg-white">
             <button
               onClick={async () => {
                 if (!confirm('Are you sure you want to clear the server cache?')) return;
@@ -522,42 +743,47 @@ function App() {
                   });
                   if (!res.ok) throw new Error('Failed to clear cache');
                   alert('Cache cleared successfully!');
-                } catch (e: any) {
-                  alert(e.message || 'Error clearing cache');
+                  loadCountry(countryCode);
+                } catch (err: any) {
+                  alert(`Error: ${err.message}`);
                 }
               }}
-              className="w-full flex justify-center items-center gap-2 bg-red-50 text-red-600 font-medium py-2 px-4 rounded-md shadow-sm border border-red-200 hover:bg-red-100 transition-colors text-sm"
+              className="text-xs text-slate-400 hover:text-red-600 flex items-center gap-1 transition-colors"
             >
-              <TrashIcon className="h-5 w-5" />
-              Clear Server Cache (Dev)
+              <TrashIcon className="w-3.5 h-3.5" />
+              <span>Clear Boundary Cache</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* Map Area */}
-      <div className="flex-1 relative z-0">
-        {/* Base-mode preview: vector style vs server-rendered WebP. The dashed
-            buffer outline only applies to raster packs, so it shows in raster
-            mode for countries. */}
+      {/* Main Map View */}
+      <div className="flex-1 relative h-full">
         <LibertyMap
           bbox={countryBbox}
-          geoJsonData={geoJsonData as GeoJSON.FeatureCollection | null}
-          exportBbox={isGlobal || baseMode !== 'raster' ? null : exportBbox}
+          adminGeoJsonData={adminLayerPrefs.visible ? adminGeoJsonData : null}
+          adminLayerColor={adminLayerPrefs.color}
+          adminFillOpacity={adminLayerPrefs.fillOpacity}
+          showAdminLabels={adminLayerPrefs.visible && adminLayerPrefs.showLabels}
+          customGeoJsonData={customLayerPrefs.visible ? customGeoJsonData : null}
+          customLayerColor={customLayerPrefs.color}
+          customFillOpacity={customLayerPrefs.fillOpacity}
+          showCustomLabels={customLayerPrefs.visible && customLayerPrefs.showLabels}
+          exportBbox={exportBbox}
           onZoomChange={setMapZoom}
           apiUrl={API_URL}
           baseMode={baseMode}
           onBaseModeChange={setBaseMode}
           showCenters={includeCenters}
         />
+
         <ZoomBadge zoom={mapZoom} />
 
-        {/* Loading overlay for Map */}
         {loading && (
-          <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-[400] flex items-center justify-center">
-            <div className="bg-white px-6 py-3 rounded-full shadow-lg border border-slate-200 font-medium text-slate-700 flex items-center gap-3">
-              <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
-              Processing Data...
+          <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-white p-4 rounded-lg shadow-xl border border-slate-200 flex items-center gap-3">
+              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-sm font-medium text-slate-700">Loading boundaries...</span>
             </div>
           </div>
         )}

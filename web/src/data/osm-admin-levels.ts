@@ -14,6 +14,23 @@ export interface OsmAdminLevelsData {
   countries: Record<string, CountryOsmLevels>;
 }
 
+export interface LayerCitation {
+  sourceName: string;
+  sourceUrl: string;
+  retrievalDate: string;
+  details: string;
+  license?: string;
+}
+
+export interface CustomLayerInfo {
+  id: string;
+  countryCode: string;
+  name: string;
+  category: 'agriculture' | 'environment' | 'health' | 'statistical';
+  description: string;
+  citation: LayerCitation;
+}
+
 export const osmAdminLevels = osmData as OsmAdminLevelsData;
 
 export function getCountryOsmLevels(countryCode?: string): CountryOsmLevels | null {
@@ -33,7 +50,7 @@ export interface AdminLevelOptionInfo {
 }
 
 /**
- * Returns options for administrative levels 2 through 8.
+ * Returns options for administrative levels 2 through 6.
  *
  * @param countryCode - 2-letter ISO country code (e.g. "ZW")
  * @param availableLevels - Admin levels actually present in the loaded GeoJSON/TopoJSON dataset
@@ -43,7 +60,7 @@ export function getAdminLevelOptions(
   availableLevels?: number[],
 ): AdminLevelOptionInfo[] {
   const countryInfo = getCountryOsmLevels(countryCode);
-  const levelsToShow = [2, 3, 4, 5, 6, 7, 8];
+  const levelsToShow = [2, 3, 4, 5, 6];
 
   return levelsToShow.map((level) => {
     const defaultLabel = osmAdminLevels.defaultLabels[String(level)] || `Level ${level}`;
@@ -62,9 +79,6 @@ export function getAdminLevelOptions(
         disabled = true;
         disabledReason = 'not_in_data';
       }
-    } else if (level > 6) {
-      disabled = true;
-      disabledReason = 'not_in_data';
     }
 
     let displayLabel = `Level ${level}: ${effectiveLabel}`;
