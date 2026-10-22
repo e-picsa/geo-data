@@ -26,6 +26,8 @@ export interface LayerControlsProps {
   onResetColor: () => void;
   fillOpacity: number;
   onOpacityChange: (opacity: number) => void;
+  lineOpacity: number;
+  onLineOpacityChange: (opacity: number) => void;
   showLabels: boolean;
   onToggleLabels: (show: boolean) => void;
   attribution: LayerAttributionInfo;
@@ -34,7 +36,7 @@ export interface LayerControlsProps {
 
 /**
  * Streamlined layer controls:
- * - Line 1: Visibility toggle, Popover Color & Opacity Picker, Color Reset (no label), Labels checkbox ("Labels")
+ * - Line 1: Visibility toggle, Popover Color & Opacity Picker (Fill & Outline sliders), Color Reset (no label), Labels checkbox ("Labels")
  * - Line 2: Source attribution dropdown with distinct yellow background
  */
 export function LayerControls({
@@ -46,6 +48,8 @@ export function LayerControls({
   onResetColor,
   fillOpacity,
   onOpacityChange,
+  lineOpacity,
+  onLineOpacityChange,
   showLabels,
   onToggleLabels,
   attribution,
@@ -88,8 +92,8 @@ export function LayerControls({
                     open ? 'ring-2 ring-indigo-500 scale-110' : ''
                   }`}
                   style={{ backgroundColor: color }}
-                  title="Change color & fill opacity"
-                  aria-label="Change color & fill opacity"
+                  title="Change color & opacity"
+                  aria-label="Change color & opacity"
                 />
 
                 <PopoverPanel className="absolute left-0 top-full mt-2 z-50 w-56 rounded-lg bg-white p-3 shadow-xl ring-1 ring-black/10 focus:outline-none text-slate-800 space-y-2.5">
@@ -147,7 +151,26 @@ export function LayerControls({
                       className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                       aria-label="Fill opacity slider"
                     />
-                    <div className="text-[10px] text-slate-400">Outline border remains opaque</div>
+                  </div>
+
+                  {/* Outline Opacity Slider within Picker */}
+                  <div className="pt-2 border-t border-slate-100 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-slate-600 font-medium">
+                      <span>Outline Opacity</span>
+                      <span className="font-mono text-slate-500">
+                        {Math.round(lineOpacity * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={lineOpacity}
+                      onChange={(e) => onLineOpacityChange(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                      aria-label="Outline opacity slider"
+                    />
                   </div>
                 </PopoverPanel>
               </>

@@ -8,8 +8,10 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   DEFAULT_ADMIN_LAYER_COLOR,
   DEFAULT_ADMIN_FILL_OPACITY,
+  DEFAULT_ADMIN_LINE_OPACITY,
   DEFAULT_CUSTOM_LAYER_COLOR,
   DEFAULT_CUSTOM_FILL_OPACITY,
+  DEFAULT_CUSTOM_LINE_OPACITY,
 } from '../utils/layerPreferences';
 
 maplibregl.config.WORKER_URL = maplibreWorkerUrl;
@@ -101,6 +103,8 @@ interface LibertyMapProps {
   adminLayerColor?: string;
   /** Active admin layer fill opacity (0.0 to 1.0). Border outline stays opaque. */
   adminFillOpacity?: number;
+  /** Active admin layer outline/line opacity (0.0 to 1.0). */
+  adminLineOpacity?: number;
   /** Toggle rendering of labels for the administrative layer. */
   showAdminLabels?: boolean;
   /** Custom layer features (e.g. EPAs, rendered in customLayerColor). */
@@ -109,6 +113,8 @@ interface LibertyMapProps {
   customLayerColor?: string;
   /** Active custom layer fill opacity (0.0 to 1.0). Border outline stays opaque. */
   customFillOpacity?: number;
+  /** Active custom layer outline/line opacity (0.0 to 1.0). */
+  customLineOpacity?: number;
   /** Toggle rendering of labels for the custom layer. */
   showCustomLabels?: boolean;
   /** Legacy single geoJsonData prop for backwards-compatibility. */
@@ -134,10 +140,12 @@ export function LibertyMap({
   adminGeoJsonData,
   adminLayerColor = DEFAULT_ADMIN_LAYER_COLOR,
   adminFillOpacity = DEFAULT_ADMIN_FILL_OPACITY,
+  adminLineOpacity = DEFAULT_ADMIN_LINE_OPACITY,
   showAdminLabels = false,
   customGeoJsonData,
   customLayerColor = DEFAULT_CUSTOM_LAYER_COLOR,
   customFillOpacity = DEFAULT_CUSTOM_FILL_OPACITY,
+  customLineOpacity = DEFAULT_CUSTOM_LINE_OPACITY,
   showCustomLabels = false,
   geoJsonData,
   exportBbox,
@@ -359,7 +367,7 @@ export function LibertyMap({
         map.setPaintProperty(ADMIN_FILL_LAYER_ID, 'fill-color', adminLayerColor);
         map.setPaintProperty(ADMIN_FILL_LAYER_ID, 'fill-opacity', adminFillOpacity);
         map.setPaintProperty(ADMIN_LINE_LAYER_ID, 'line-color', adminLayerColor);
-        map.setPaintProperty(ADMIN_LINE_LAYER_ID, 'line-opacity', 1.0);
+        map.setPaintProperty(ADMIN_LINE_LAYER_ID, 'line-opacity', adminLineOpacity);
         return;
       }
       map.addSource(ADMIN_SOURCE_ID, { type: 'geojson', data: effectiveAdminData });
@@ -373,11 +381,11 @@ export function LibertyMap({
         id: ADMIN_LINE_LAYER_ID,
         type: 'line',
         source: ADMIN_SOURCE_ID,
-        paint: { 'line-color': adminLayerColor, 'line-width': 2, 'line-opacity': 1.0 },
+        paint: { 'line-color': adminLayerColor, 'line-width': 2, 'line-opacity': adminLineOpacity },
       });
     };
     return whenStyleReady(map, apply);
-  }, [effectiveAdminData, adminLayerColor, adminFillOpacity]);
+  }, [effectiveAdminData, adminLayerColor, adminFillOpacity, adminLineOpacity]);
 
   // Administrative Boundary Text Labels
   useEffect(() => {
@@ -440,7 +448,7 @@ export function LibertyMap({
         map.setPaintProperty(CUSTOM_FILL_LAYER_ID, 'fill-color', customLayerColor);
         map.setPaintProperty(CUSTOM_FILL_LAYER_ID, 'fill-opacity', customFillOpacity);
         map.setPaintProperty(CUSTOM_LINE_LAYER_ID, 'line-color', customLayerColor);
-        map.setPaintProperty(CUSTOM_LINE_LAYER_ID, 'line-opacity', 1.0);
+        map.setPaintProperty(CUSTOM_LINE_LAYER_ID, 'line-opacity', customLineOpacity);
         return;
       }
       map.addSource(CUSTOM_SOURCE_ID, { type: 'geojson', data: customGeoJsonData });
@@ -454,11 +462,15 @@ export function LibertyMap({
         id: CUSTOM_LINE_LAYER_ID,
         type: 'line',
         source: CUSTOM_SOURCE_ID,
-        paint: { 'line-color': customLayerColor, 'line-width': 2, 'line-opacity': 1.0 },
+        paint: {
+          'line-color': customLayerColor,
+          'line-width': 2,
+          'line-opacity': customLineOpacity,
+        },
       });
     };
     return whenStyleReady(map, apply);
-  }, [customGeoJsonData, customLayerColor, customFillOpacity]);
+  }, [customGeoJsonData, customLayerColor, customFillOpacity, customLineOpacity]);
 
   // Custom Layer Text Labels
   useEffect(() => {

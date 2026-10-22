@@ -14,8 +14,10 @@ import { bboxForFeatures, getBufferedBboxForZoom } from './utils/tiles';
 import {
   DEFAULT_ADMIN_LAYER_COLOR,
   DEFAULT_ADMIN_FILL_OPACITY,
+  DEFAULT_ADMIN_LINE_OPACITY,
   DEFAULT_CUSTOM_LAYER_COLOR,
   DEFAULT_CUSTOM_FILL_OPACITY,
+  DEFAULT_CUSTOM_LINE_OPACITY,
   getLayerPreferences,
   saveLayerPreferences,
   type LayerPreferences,
@@ -73,17 +75,24 @@ function App() {
   const [selectedAdminLevel, setSelectedAdminLevel] = useState<number>(2);
   const [selectedCustomLayer, setSelectedCustomLayer] = useState<string | null>(null);
 
-  // Administrative layer preferences (visibility, color, fillOpacity, labels)
+  // Administrative layer preferences (visibility, color, fillOpacity, lineOpacity, labels)
   const [adminLayerPrefs, setAdminLayerPrefs] = useState<LayerPreferences>(() =>
-    getLayerPreferences('admin', DEFAULT_ADMIN_LAYER_COLOR, DEFAULT_ADMIN_FILL_OPACITY, true),
+    getLayerPreferences(
+      'admin',
+      DEFAULT_ADMIN_LAYER_COLOR,
+      DEFAULT_ADMIN_FILL_OPACITY,
+      DEFAULT_ADMIN_LINE_OPACITY,
+      true,
+    ),
   );
 
-  // Custom layer preferences (visibility, color, fillOpacity, labels)
+  // Custom layer preferences (visibility, color, fillOpacity, lineOpacity, labels)
   const [customLayerPrefs, setCustomLayerPrefs] = useState<LayerPreferences>(() =>
     getLayerPreferences(
       selectedCustomLayer || 'default',
       DEFAULT_CUSTOM_LAYER_COLOR,
       DEFAULT_CUSTOM_FILL_OPACITY,
+      DEFAULT_CUSTOM_LINE_OPACITY,
       true,
     ),
   );
@@ -117,6 +126,7 @@ function App() {
           selectedCustomLayer,
           DEFAULT_CUSTOM_LAYER_COLOR,
           DEFAULT_CUSTOM_FILL_OPACITY,
+          DEFAULT_CUSTOM_LINE_OPACITY,
           true,
         ),
       );
@@ -135,6 +145,7 @@ function App() {
       ...adminLayerPrefs,
       color: DEFAULT_ADMIN_LAYER_COLOR,
       fillOpacity: DEFAULT_ADMIN_FILL_OPACITY,
+      lineOpacity: DEFAULT_ADMIN_LINE_OPACITY,
     };
     setAdminLayerPrefs(updated);
     saveLayerPreferences('admin', updated);
@@ -142,6 +153,12 @@ function App() {
 
   const handleAdminOpacityChange = (fillOpacity: number) => {
     const updated: LayerPreferences = { ...adminLayerPrefs, fillOpacity };
+    setAdminLayerPrefs(updated);
+    saveLayerPreferences('admin', updated);
+  };
+
+  const handleAdminLineOpacityChange = (lineOpacity: number) => {
+    const updated: LayerPreferences = { ...adminLayerPrefs, lineOpacity };
     setAdminLayerPrefs(updated);
     saveLayerPreferences('admin', updated);
   };
@@ -172,6 +189,7 @@ function App() {
       ...customLayerPrefs,
       color: DEFAULT_CUSTOM_LAYER_COLOR,
       fillOpacity: DEFAULT_CUSTOM_FILL_OPACITY,
+      lineOpacity: DEFAULT_CUSTOM_LINE_OPACITY,
     };
     setCustomLayerPrefs(updated);
     saveLayerPreferences(selectedCustomLayer, updated);
@@ -180,6 +198,13 @@ function App() {
   const handleCustomOpacityChange = (fillOpacity: number) => {
     if (!selectedCustomLayer) return;
     const updated: LayerPreferences = { ...customLayerPrefs, fillOpacity };
+    setCustomLayerPrefs(updated);
+    saveLayerPreferences(selectedCustomLayer, updated);
+  };
+
+  const handleCustomLineOpacityChange = (lineOpacity: number) => {
+    if (!selectedCustomLayer) return;
+    const updated: LayerPreferences = { ...customLayerPrefs, lineOpacity };
     setCustomLayerPrefs(updated);
     saveLayerPreferences(selectedCustomLayer, updated);
   };
@@ -552,6 +577,8 @@ function App() {
                     onResetColor={handleResetAdminColor}
                     fillOpacity={adminLayerPrefs.fillOpacity}
                     onOpacityChange={handleAdminOpacityChange}
+                    lineOpacity={adminLayerPrefs.lineOpacity}
+                    onLineOpacityChange={handleAdminLineOpacityChange}
                     showLabels={adminLayerPrefs.showLabels}
                     onToggleLabels={handleToggleAdminLabels}
                     attribution={OSM_ADMIN_ATTRIBUTION}
@@ -589,6 +616,8 @@ function App() {
                         onResetColor={handleResetCustomColor}
                         fillOpacity={customLayerPrefs.fillOpacity}
                         onOpacityChange={handleCustomOpacityChange}
+                        lineOpacity={customLayerPrefs.lineOpacity}
+                        onLineOpacityChange={handleCustomLineOpacityChange}
                         showLabels={customLayerPrefs.showLabels}
                         onToggleLabels={handleToggleCustomLabels}
                         attribution={activeCustomLayer.citation}
@@ -765,10 +794,12 @@ function App() {
           adminGeoJsonData={adminLayerPrefs.visible ? adminGeoJsonData : null}
           adminLayerColor={adminLayerPrefs.color}
           adminFillOpacity={adminLayerPrefs.fillOpacity}
+          adminLineOpacity={adminLayerPrefs.lineOpacity}
           showAdminLabels={adminLayerPrefs.visible && adminLayerPrefs.showLabels}
           customGeoJsonData={customLayerPrefs.visible ? customGeoJsonData : null}
           customLayerColor={customLayerPrefs.color}
           customFillOpacity={customLayerPrefs.fillOpacity}
+          customLineOpacity={customLayerPrefs.lineOpacity}
           showCustomLabels={customLayerPrefs.visible && customLayerPrefs.showLabels}
           exportBbox={exportBbox}
           onZoomChange={setMapZoom}
