@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
 import { CheckIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
 import { getAdminLevelOptions, AdminLevelOptionInfo } from '../data/osm-admin-levels';
@@ -20,11 +20,13 @@ export function AdminLevelSelect({
   availableLevels,
   disabled = false,
 }: AdminLevelSelectProps) {
-  const options = useMemo(() => {
+  const adminOptions = useMemo(() => {
     return getAdminLevelOptions(countryCode, availableLevels);
   }, [countryCode, availableLevels]);
 
-  const selectedOption = options.find((o) => o.value === value);
+  const selectedOption = useMemo(() => {
+    return adminOptions.find((a) => a.value === value) || adminOptions[0];
+  }, [value, adminOptions]);
 
   return (
     <Listbox value={value} onChange={onChange} disabled={disabled}>
@@ -37,8 +39,8 @@ export function AdminLevelSelect({
             <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
           </span>
         </ListboxButton>
-        <ListboxOptions className="absolute z-[100] mt-1 max-h-64 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm">
-          {options.map((option) => (
+        <ListboxOptions className="absolute z-[100] mt-1 max-h-72 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm">
+          {adminOptions.map((option) => (
             <ListboxOption
               key={option.value}
               value={option.value}

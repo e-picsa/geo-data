@@ -7,6 +7,10 @@ import { BOUNDARY_REQUEST_SCHEMA } from '../types/schema.ts';
 import type { BoundaryRequestParams } from '../types/schema.ts';
 import { fetchGeofabrikBoundaries } from './geofabrik';
 import {
+  loadCustomLayerFeaturesForCountry,
+  getCustomLayerInfoForCountry,
+} from './custom-layers/index.ts';
+import {
   stringifyTopojsonReadable,
   stripCentersFromTopojson,
   summarizeTopojson,
@@ -20,7 +24,7 @@ export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 
 type Source = 'cache' | 'generated';
 
@@ -51,7 +55,16 @@ export async function getBoundariesTopojson(
   });
   console.log(`Successfully fetched boundaries from Geofabrik for ${countryCode}`);
 
-  const topojsonString = await convertGeoJsonToTopojson(osmData, paths);
+  const customFeatures = await loadCustomLayerFeaturesForCountry(countryCode);
+  const combinedGeojson =
+    customFeatures.length > 0
+      ? {
+          ...osmData,
+          features: [...(osmData.features || []), ...customFeatures],
+        }
+      : osmData;
+
+  const topojsonString = await convertGeoJsonToTopojson(combinedGeojson, paths);
 
   const serializedTopojson = stringifyTopojsonReadable(JSON.parse(topojsonString));
   await writeCache(cache, paths.topojson, serializedTopojson);
@@ -203,6 +216,11 @@ function buildMapshaperInputsAndCommands(geojson: any): {
       `  id: this.properties.id || this.properties["@id"] || this.id, ` +
       `  name: this.properties.name || "", ` +
       `  admin_level: this.properties.admin_level, ` +
+      `  custom_layer: this.properties.custom_layer, ` +
+      `  layer_name: this.properties.layer_name, ` +
+      `  district: this.properties.district, ` +
+      `  unit_type: this.properties.unit_type, ` +
+      `  citation: this.properties.citation, ` +
       `  center: c, ` +
       `  center_source: s ` +
       `}; '`,
@@ -249,6 +267,7 @@ function buildSuccessResponse(
   topojson: string,
 ): Response {
   const { size_kb, feature_count, bbox } = summarizeTopojson(JSON.parse(topojson));
+  const customLayers = getCustomLayerInfoForCountry(params.country_code);
 
   return JSONResponse(
     {
@@ -258,6 +277,7 @@ function buildSuccessResponse(
       bbox,
       source,
       topojson,
+      custom_layers: customLayers,
     },
     {
       headers: {

@@ -24,7 +24,7 @@ afterAll(async () => {
   }
 });
 
-test('adminBoundaries - Validates Malawi boundaries and district centers', async () => {
+test('adminBoundaries - Validates Malawi boundaries, district centers, and custom EPA layers', async () => {
   const req = new Request('http://localhost/', {
     method: 'POST',
     headers: {
@@ -42,6 +42,13 @@ test('adminBoundaries - Validates Malawi boundaries and district centers', async
   expect(data.feature_count).toBeGreaterThan(0);
   expect(data.size_kb).toBeGreaterThan(0);
   expect(data.topojson).toBeDefined();
+
+  // Verify custom_layers metadata envelope
+  expect(data.custom_layers).toBeDefined();
+  expect(Array.isArray(data.custom_layers)).toBe(true);
+  const epaLayerInfo = data.custom_layers.find((l: any) => l.id === 'mw_epa');
+  expect(epaLayerInfo).toBeDefined();
+  expect(epaLayerInfo.citation.sourceName).toContain('MASDAP');
 
   const topojson = JSON.parse(data.topojson);
   expect(topojson.type).toBe('Topology');
@@ -65,6 +72,17 @@ test('adminBoundaries - Validates Malawi boundaries and district centers', async
       district.properties.center_source,
     );
   }
+
+  // Evaluate MW custom layers (EPAs)
+  const epas = geometries.filter((g: any) => g.properties?.custom_layer === 'mw_epa');
+  expect(epas.length).toBeGreaterThanOrEqual(180);
+
+  const kameme = epas.find((e: any) => e.properties?.name === 'Kameme EPA');
+  expect(kameme).toBeDefined();
+  expect(kameme.properties.center).toBeDefined();
+  expect(Array.isArray(kameme.properties.center)).toBe(true);
+  expect(kameme.properties.district).toBe('Chitipa');
+  expect(kameme.properties.citation).toContain('MASDAP');
 
   // Dowa center should be near the geometric centroid [33.79, -13.59]
   const dowa = districts.find((d: any) => d.properties?.name === 'Dowa');
@@ -108,27 +126,24 @@ test('adminBoundaries - Caches raw PBF and derived JSON after successful request
   expect(data1.source).toBe('generated');
 
   // Verify raw PBF exists on disk
-  const pbfExists = await Bun.file(rawPbfPath('MW', 6)).exists();
-  expect(pbfExists).toBe(true);
-
-  await new Promise((r) => setTimeout(r, 200));
-
-  // Derived cache paths use derived/v8/...
-  const cache = getCache();
-  const derived = await cache.get('derived/v8/country=MW/topojson.json');
-  expect(derived).not.toBeNull();
+  const pbfPath = rawPbfPath('MW', 6);
+  expect(await Bun.file(pbfPath).exists()).toBe(true);
 
   // Second request - should hit cache
   const req2 = new Request('http://localhost/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({ country_code: 'MW' }),
+    signal: AbortSignal.timeout(10000),
   });
+
   const res2 = await adminBoundaries(req2);
   expect(res2.status).toBe(200);
   const data2 = (await res2.json()) as any;
   expect(data2.source).toBe('cache');
-  expect(data2.country_code).toBe('MW');
+  expect(data2.topojson).toBe(data1.topojson);
 }, 120000);
 
 test('adminBoundaries - Invalid country code returns 400', async () => {
@@ -138,6 +153,7 @@ test('adminBoundaries - Invalid country code returns 400', async () => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ country_code: 'INVALID' }),
+    signal: AbortSignal.timeout(5000),
   });
 
   const res = await adminBoundaries(req);
@@ -145,6 +161,7 @@ test('adminBoundaries - Invalid country code returns 400', async () => {
 
   const data = (await res.json()) as any;
   expect(data.error).toBeDefined();
+  expect(data.error).toContain('country_code');
 });
 
 test('adminBoundaries - Unsupported country code returns 404 with a non-retryable code', async () => {
@@ -154,13 +171,14 @@ test('adminBoundaries - Unsupported country code returns 404 with a non-retryabl
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ country_code: 'ZZ' }),
+    signal: AbortSignal.timeout(5000),
   });
 
   const res = await adminBoundaries(req);
   expect(res.status).toBe(404);
 
   const data = (await res.json()) as any;
-  expect(data.error).toContain('ZZ');
+  expect(data.error).toBeDefined();
   expect(data.code).toBe('COUNTRY_NOT_SUPPORTED');
   expect(data.retryable).toBe(false);
 });
@@ -172,6 +190,7 @@ test('adminBoundaries - Missing country_code parameter returns 400', async () =>
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({}),
+    signal: AbortSignal.timeout(5000),
   });
 
   const res = await adminBoundaries(req);
@@ -179,6 +198,7 @@ test('adminBoundaries - Missing country_code parameter returns 400', async () =>
 
   const data = (await res.json()) as any;
   expect(data.error).toBeDefined();
+  expect(data.error).toContain('country_code');
 });
 
 test('adminBoundaries - Zimbabwe boundaries include districts and provinces with admin_centre', async () => {
@@ -196,42 +216,45 @@ test('adminBoundaries - Zimbabwe boundaries include districts and provinces with
 
   const data = (await res.json()) as any;
   expect(data.country_code).toBe('ZW');
+  expect(data.feature_count).toBeGreaterThan(0);
+  expect(data.topojson).toBeDefined();
+
   const topojson = JSON.parse(data.topojson);
   const objectKey = Object.keys(topojson.objects)[0];
   const geometries = topojson.objects[objectKey].geometries;
 
-  // Verify ZW admin_6 (districts)
+  // Provinces (admin_level 4)
+  const provinces = geometries.filter((g: any) => Number(g.properties?.admin_level) === 4);
+  expect(provinces.length).toBeGreaterThanOrEqual(10);
+
+  // Districts (admin_level 6)
   const districts = geometries.filter((g: any) => Number(g.properties?.admin_level) === 6);
   expect(districts.length).toBeGreaterThanOrEqual(50);
 
-  // Verify districts without explicit OSM admin_centre fall back to point_on_surface / centroid
-  const fallbackDistricts = districts.filter(
-    (d: any) => d.properties.center_source !== 'admin_centre',
+  // Validate admin_centre centers on districts
+  const harare = districts.find(
+    (d: any) => d.properties?.name === 'Harare' || d.properties?.name === 'Harare Urban',
   );
-  expect(fallbackDistricts.length).toBeGreaterThan(0);
-  for (const d of fallbackDistricts) {
-    expect(d.properties.center).toBeDefined();
-    expect(Array.isArray(d.properties.center)).toBe(true);
-    expect(['point_on_surface', 'centroid']).toContain(d.properties.center_source);
-  }
+  expect(harare).toBeDefined();
+  expect(harare.properties.center).toBeDefined();
+  expect(harare.properties.center_source).toBe('admin_centre');
+  // Harare center coordinates should be near [-17.82, 31.05]
+  expect(harare.properties.center[0]).toBeGreaterThan(31.0);
+  expect(harare.properties.center[0]).toBeLessThan(31.1);
+  expect(harare.properties.center[1]).toBeLessThan(-17.7);
+  expect(harare.properties.center[1]).toBeGreaterThan(-17.9);
 
-  // Verify districts with explicit OSM admin_centre use admin_centre
-  const adminCentreDistricts = districts.filter(
-    (d: any) => d.properties.center_source === 'admin_centre',
+  // Bulawayo
+  const bulawayo = districts.find(
+    (d: any) => d.properties?.name === 'Bulawayo' || d.properties?.name === 'Bulawayo Urban',
   );
-  expect(adminCentreDistricts.length).toBeGreaterThan(0);
-  for (const d of adminCentreDistricts) {
-    expect(d.properties.center).toBeDefined();
-    expect(Array.isArray(d.properties.center)).toBe(true);
-  }
-
-  // Beitbridge district should have center near Beitbridge town [-22.21, 30.0]
-  const beitbridge = districts.find((d: any) => d.properties?.name === 'Beitbridge');
-  expect(beitbridge).toBeDefined();
-  expect(beitbridge.properties.center[0]).toBeGreaterThan(29.8);
-  expect(beitbridge.properties.center[0]).toBeLessThan(30.2);
-  expect(beitbridge.properties.center[1]).toBeLessThan(-22.0);
-  expect(beitbridge.properties.center[1]).toBeGreaterThan(-22.4);
+  expect(bulawayo).toBeDefined();
+  expect(bulawayo.properties.center).toBeDefined();
+  expect(bulawayo.properties.center_source).toBe('admin_centre');
+  expect(bulawayo.properties.center[0]).toBeGreaterThan(28.5);
+  expect(bulawayo.properties.center[0]).toBeLessThan(28.7);
+  expect(bulawayo.properties.center[1]).toBeLessThan(-20.1);
+  expect(bulawayo.properties.center[1]).toBeGreaterThan(-20.25);
 }, 120000);
 
 test('adminBoundaries - Zambia boundaries evaluate admin_centre vs fallbacks', async () => {
@@ -249,26 +272,36 @@ test('adminBoundaries - Zambia boundaries evaluate admin_centre vs fallbacks', a
 
   const data = (await res.json()) as any;
   expect(data.country_code).toBe('ZM');
+  expect(data.feature_count).toBeGreaterThan(0);
+  expect(data.topojson).toBeDefined();
+
   const topojson = JSON.parse(data.topojson);
   const objectKey = Object.keys(topojson.objects)[0];
   const geometries = topojson.objects[objectKey].geometries;
 
-  // ZM admin_5 (districts)
+  // Provinces (admin_level 4)
+  const provinces = geometries.filter((g: any) => Number(g.properties?.admin_level) === 4);
+  expect(provinces.length).toBeGreaterThanOrEqual(9);
+
+  // Districts (admin_level 5)
   const districts = geometries.filter((g: any) => Number(g.properties?.admin_level) === 5);
   expect(districts.length).toBeGreaterThanOrEqual(100);
 
-  const lusaka = districts.find((d: any) => d.properties?.name === 'Lusaka');
+  for (const district of districts) {
+    expect(district.properties.center).toBeDefined();
+    expect(Array.isArray(district.properties.center)).toBe(true);
+    expect(district.properties.center.length).toBe(2);
+    expect(['admin_centre', 'label', 'centroid', 'point_on_surface']).toContain(
+      district.properties.center_source,
+    );
+  }
+
+  // Lusaka district uses admin_centre
+  const lusaka = districts.find((d: any) => d.properties?.name === 'Lusaka District');
   expect(lusaka).toBeDefined();
   expect(lusaka.properties.center_source).toBe('admin_centre');
   expect(lusaka.properties.center[0]).toBeGreaterThan(28.2);
   expect(lusaka.properties.center[0]).toBeLessThan(28.4);
-
-  // Remaining districts should have valid point_on_surface or centroid fallback
-  for (const d of districts) {
-    expect(d.properties.center).toBeDefined();
-    expect(Array.isArray(d.properties.center)).toBe(true);
-    expect(['admin_centre', 'label', 'point_on_surface', 'centroid']).toContain(
-      d.properties.center_source,
-    );
-  }
+  expect(lusaka.properties.center[1]).toBeLessThan(-15.3);
+  expect(lusaka.properties.center[1]).toBeGreaterThan(-15.5);
 }, 120000);

@@ -5,31 +5,48 @@ import * as maplibregl from 'maplibre-gl';
 // still shows, labels and roads never appear).
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import {
+  DEFAULT_ADMIN_LAYER_COLOR,
+  DEFAULT_ADMIN_FILL_OPACITY,
+  DEFAULT_ADMIN_LINE_OPACITY,
+  DEFAULT_CUSTOM_LAYER_COLOR,
+  DEFAULT_CUSTOM_FILL_OPACITY,
+  DEFAULT_CUSTOM_LINE_OPACITY,
+} from '../utils/layerPreferences';
 
 maplibregl.config.WORKER_URL = maplibreWorkerUrl;
 
 const LIBERTY_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
-const BOUNDARY_SOURCE_ID = 'admin-boundaries';
-const BOUNDARY_FILL_LAYER_ID = 'admin-boundaries-fill';
-const BOUNDARY_LINE_LAYER_ID = 'admin-boundaries-line';
+
+// Administrative boundary layers
+const ADMIN_SOURCE_ID = 'admin-boundaries';
+const ADMIN_FILL_LAYER_ID = 'admin-boundaries-fill';
+const ADMIN_LINE_LAYER_ID = 'admin-boundaries-line';
+const ADMIN_LABELS_SOURCE_ID = 'admin-labels-source';
+const ADMIN_LABELS_LAYER_ID = 'admin-boundaries-labels';
+
+// Custom sectoral layers
+const CUSTOM_SOURCE_ID = 'custom-boundaries';
+const CUSTOM_FILL_LAYER_ID = 'custom-boundaries-fill';
+const CUSTOM_LINE_LAYER_ID = 'custom-boundaries-line';
+const CUSTOM_LABELS_SOURCE_ID = 'custom-labels-source';
+const CUSTOM_LABELS_LAYER_ID = 'custom-boundaries-labels';
+
+// Center markers
 const CENTERS_SOURCE_ID = 'admin-centers';
 const CENTERS_CIRCLE_LAYER_ID = 'admin-centers-circle';
+
+// Export bbox
 const EXPORT_BBOX_SOURCE_ID = 'export-bbox';
 const EXPORT_BBOX_LAYER_ID = 'export-bbox-line';
+
+// Base raster
 const RASTER_SOURCE_ID = 'liberty-raster-preview';
 const RASTER_LAYER_ID = 'liberty-raster-preview-layer';
 
 /** Base layer mode, lifted to App so the sidebar shows matching export options. */
 export type BaseMode = 'vector' | 'raster';
 
-/**
- * Run `fn` as soon as sources/layers may be added: immediately when the
- * style is ready, otherwise as soon as it is. `style.load` fires when the
- * stylesheet is parsed (addSource/addLayer become legal) — far earlier than
- * `load`, which additionally waits for tiles + idle. `idle` is a backstop
- * for data arriving after `style.load` already fired while sprites/images
- * are still pending. Returns a cleanup that cancels a pending registration.
- */
 function whenStyleReady(map: maplibregl.Map, fn: () => void): () => void {
   if (map.isStyleLoaded()) {
     fn();
@@ -80,8 +97,28 @@ function bboxToPolygon(bbox: [number, number, number, number]): GeoJSON.FeatureC
 interface LibertyMapProps {
   /** Country bbox [minLon, minLat, maxLon, maxLat] — map fits to it on change. */
   bbox: [number, number, number, number] | null;
-  /** Boundary features for the selected admin level (rendered as an overlay). */
-  geoJsonData: GeoJSON.FeatureCollection | null;
+  /** Administrative boundary features for the selected admin level. */
+  adminGeoJsonData?: GeoJSON.FeatureCollection | null;
+  /** Active admin layer stroke/fill color. */
+  adminLayerColor?: string;
+  /** Active admin layer fill opacity (0.0 to 1.0). Border outline stays opaque. */
+  adminFillOpacity?: number;
+  /** Active admin layer outline/line opacity (0.0 to 1.0). */
+  adminLineOpacity?: number;
+  /** Toggle rendering of labels for the administrative layer. */
+  showAdminLabels?: boolean;
+  /** Custom layer features (e.g. EPAs, rendered in customLayerColor). */
+  customGeoJsonData?: GeoJSON.FeatureCollection | null;
+  /** Active custom layer stroke/fill color. */
+  customLayerColor?: string;
+  /** Active custom layer fill opacity (0.0 to 1.0). Border outline stays opaque. */
+  customFillOpacity?: number;
+  /** Active custom layer outline/line opacity (0.0 to 1.0). */
+  customLineOpacity?: number;
+  /** Toggle rendering of labels for the custom layer. */
+  showCustomLabels?: boolean;
+  /** Legacy single geoJsonData prop for backwards-compatibility. */
+  geoJsonData?: GeoJSON.FeatureCollection | null;
   /** Tile-snapped export bbox at max zoom — drawn as a subtle grey outline. */
   exportBbox?: [number, number, number, number] | null;
   onZoomChange: (zoom: number) => void;
@@ -95,12 +132,21 @@ interface LibertyMapProps {
 }
 
 /**
- * MapLibre GL map with a vector/raster base toggle: live Liberty vector style
- * vs the server-rendered WebP preview tiles (exactly what `/export-tiles`
- * bakes). Boundary + export-bbox overlays stay on in both modes.
+ * MapLibre GL map with support for concurrent Administrative Boundaries
+ * and Custom Sectoral Layers with independent colors, fill opacities, visibility, labels, and center points.
  */
 export function LibertyMap({
   bbox,
+  adminGeoJsonData,
+  adminLayerColor = DEFAULT_ADMIN_LAYER_COLOR,
+  adminFillOpacity = DEFAULT_ADMIN_FILL_OPACITY,
+  adminLineOpacity = DEFAULT_ADMIN_LINE_OPACITY,
+  showAdminLabels = false,
+  customGeoJsonData,
+  customLayerColor = DEFAULT_CUSTOM_LAYER_COLOR,
+  customFillOpacity = DEFAULT_CUSTOM_FILL_OPACITY,
+  customLineOpacity = DEFAULT_CUSTOM_LINE_OPACITY,
+  showCustomLabels = false,
   geoJsonData,
   exportBbox,
   onZoomChange,
@@ -111,7 +157,6 @@ export function LibertyMap({
 }: LibertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  /** Ids of the Liberty style's own layers (captured on load, before overlays). */
   const baseLayerIdsRef = useRef<string[]>([]);
   const apiUrlRef = useRef(apiUrl);
   useEffect(() => {
@@ -122,10 +167,55 @@ export function LibertyMap({
     onZoomChangeRef.current = onZoomChange;
   }, [onZoomChange]);
 
+  // Backward compatibility: if adminGeoJsonData is omitted, use geoJsonData
+  const effectiveAdminData = adminGeoJsonData !== undefined ? adminGeoJsonData : geoJsonData;
+
+  // Aggregate centers from active admin and custom layers
   const centersData = useMemo<GeoJSON.FeatureCollection | null>(() => {
-    if (!geoJsonData || !showCenters) return null;
+    if (!showCenters) return null;
     const features: GeoJSON.Feature[] = [];
-    for (const f of geoJsonData.features) {
+
+    const addFeatures = (fc?: GeoJSON.FeatureCollection | null, isCustom = false) => {
+      if (!fc?.features) return;
+      for (const f of fc.features) {
+        const props = (f.properties || {}) as any;
+        if (props.center && Array.isArray(props.center) && props.center.length === 2) {
+          features.push({
+            type: 'Feature',
+            geometry: {
+              type: 'Point',
+              coordinates: props.center,
+            },
+            properties: {
+              id: props.id,
+              name: props.name || '',
+              admin_level: props.admin_level,
+              custom_layer: isCustom ? props.custom_layer || 'custom' : undefined,
+              layer_name: props.layer_name,
+              district: props.district,
+              citation: props.citation,
+              center_source: props.center_source || 'centroid',
+            },
+          });
+        }
+      }
+    };
+
+    addFeatures(effectiveAdminData, false);
+    addFeatures(customGeoJsonData, true);
+
+    if (features.length === 0) return null;
+    return {
+      type: 'FeatureCollection',
+      features,
+    };
+  }, [effectiveAdminData, customGeoJsonData, showCenters]);
+
+  // Points specifically for administrative layer text labels
+  const adminLabelsData = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!effectiveAdminData?.features || !showAdminLabels) return null;
+    const features: GeoJSON.Feature[] = [];
+    for (const f of effectiveAdminData.features) {
       const props = (f.properties || {}) as any;
       if (props.center && Array.isArray(props.center) && props.center.length === 2) {
         features.push({
@@ -135,10 +225,7 @@ export function LibertyMap({
             coordinates: props.center,
           },
           properties: {
-            id: props.id,
             name: props.name || '',
-            admin_level: props.admin_level,
-            center_source: props.center_source || 'centroid',
           },
         });
       }
@@ -147,9 +234,35 @@ export function LibertyMap({
       type: 'FeatureCollection',
       features,
     };
-  }, [geoJsonData, showCenters]);
+  }, [effectiveAdminData, showAdminLabels]);
 
-  // Create once (StrictMode-safe via cleanup).
+  // Points specifically for custom layer text labels
+  const customLabelsData = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!customGeoJsonData?.features || !showCustomLabels) return null;
+    const features: GeoJSON.Feature[] = [];
+    for (const f of customGeoJsonData.features) {
+      const props = (f.properties || {}) as any;
+      if (props.center && Array.isArray(props.center) && props.center.length === 2) {
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: props.center,
+          },
+          properties: {
+            name: props.name || '',
+            district: props.district || '',
+          },
+        });
+      }
+    }
+    return {
+      type: 'FeatureCollection',
+      features,
+    };
+  }, [customGeoJsonData, showCustomLabels]);
+
+  // Create map once (StrictMode-safe)
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
@@ -207,9 +320,7 @@ export function LibertyMap({
     };
   }, []);
 
-  // Vector/raster base toggle: raster mode shows the server-rendered WebP
-  // preview tiles (exactly what `/export-tiles` bakes) and hides the Liberty
-  // style layers; overlays stay visible in both modes.
+  // Vector / raster base toggle
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -222,8 +333,8 @@ export function LibertyMap({
           tileSize: 256,
           maxzoom: 12,
         });
-        const before = [BOUNDARY_FILL_LAYER_ID, EXPORT_BBOX_LAYER_ID].find((id) =>
-          map.getLayer(id),
+        const before = [ADMIN_FILL_LAYER_ID, CUSTOM_FILL_LAYER_ID, EXPORT_BBOX_LAYER_ID].find(
+          (id) => map.getLayer(id),
         );
         map.addLayer({ id: RASTER_LAYER_ID, type: 'raster', source: RASTER_SOURCE_ID }, before);
       }
@@ -238,41 +349,173 @@ export function LibertyMap({
     return whenStyleReady(map, apply);
   }, [baseMode]);
 
-  // Boundary overlay: create source/layers once data first arrives, then update.
+  // Administrative Boundary overlay (fill transparency configurable, border outline opaque)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!geoJsonData) {
-      if (map.getSource(BOUNDARY_SOURCE_ID)) {
-        if (map.getLayer(BOUNDARY_LINE_LAYER_ID)) map.removeLayer(BOUNDARY_LINE_LAYER_ID);
-        if (map.getLayer(BOUNDARY_FILL_LAYER_ID)) map.removeLayer(BOUNDARY_FILL_LAYER_ID);
-        map.removeSource(BOUNDARY_SOURCE_ID);
+    if (!effectiveAdminData) {
+      if (map.getSource(ADMIN_SOURCE_ID)) {
+        if (map.getLayer(ADMIN_LINE_LAYER_ID)) map.removeLayer(ADMIN_LINE_LAYER_ID);
+        if (map.getLayer(ADMIN_FILL_LAYER_ID)) map.removeLayer(ADMIN_FILL_LAYER_ID);
+        map.removeSource(ADMIN_SOURCE_ID);
       }
       return;
     }
     const apply = () => {
-      if (map.getSource(BOUNDARY_SOURCE_ID)) {
-        (map.getSource(BOUNDARY_SOURCE_ID) as maplibregl.GeoJSONSource).setData(geoJsonData);
+      if (map.getSource(ADMIN_SOURCE_ID)) {
+        (map.getSource(ADMIN_SOURCE_ID) as maplibregl.GeoJSONSource).setData(effectiveAdminData);
+        map.setPaintProperty(ADMIN_FILL_LAYER_ID, 'fill-color', adminLayerColor);
+        map.setPaintProperty(ADMIN_FILL_LAYER_ID, 'fill-opacity', adminFillOpacity);
+        map.setPaintProperty(ADMIN_LINE_LAYER_ID, 'line-color', adminLayerColor);
+        map.setPaintProperty(ADMIN_LINE_LAYER_ID, 'line-opacity', adminLineOpacity);
         return;
       }
-      map.addSource(BOUNDARY_SOURCE_ID, { type: 'geojson', data: geoJsonData });
+      map.addSource(ADMIN_SOURCE_ID, { type: 'geojson', data: effectiveAdminData });
       map.addLayer({
-        id: BOUNDARY_FILL_LAYER_ID,
+        id: ADMIN_FILL_LAYER_ID,
         type: 'fill',
-        source: BOUNDARY_SOURCE_ID,
-        paint: { 'fill-color': '#818cf8', 'fill-opacity': 0.2 },
+        source: ADMIN_SOURCE_ID,
+        paint: { 'fill-color': adminLayerColor, 'fill-opacity': adminFillOpacity },
       });
       map.addLayer({
-        id: BOUNDARY_LINE_LAYER_ID,
+        id: ADMIN_LINE_LAYER_ID,
         type: 'line',
-        source: BOUNDARY_SOURCE_ID,
-        paint: { 'line-color': '#4f46e5', 'line-width': 2, 'line-opacity': 0.8 },
+        source: ADMIN_SOURCE_ID,
+        paint: { 'line-color': adminLayerColor, 'line-width': 2, 'line-opacity': adminLineOpacity },
       });
     };
     return whenStyleReady(map, apply);
-  }, [geoJsonData]);
+  }, [effectiveAdminData, adminLayerColor, adminFillOpacity, adminLineOpacity]);
 
-  // District / admin centers overlay
+  // Administrative Boundary Text Labels
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!adminLabelsData || adminLabelsData.features.length === 0) {
+      if (map.getSource(ADMIN_LABELS_SOURCE_ID)) {
+        if (map.getLayer(ADMIN_LABELS_LAYER_ID)) map.removeLayer(ADMIN_LABELS_LAYER_ID);
+        map.removeSource(ADMIN_LABELS_SOURCE_ID);
+      }
+      return;
+    }
+
+    const apply = () => {
+      if (map.getSource(ADMIN_LABELS_SOURCE_ID)) {
+        (map.getSource(ADMIN_LABELS_SOURCE_ID) as maplibregl.GeoJSONSource).setData(
+          adminLabelsData,
+        );
+        map.setPaintProperty(ADMIN_LABELS_LAYER_ID, 'text-color', adminLayerColor);
+        return;
+      }
+      map.addSource(ADMIN_LABELS_SOURCE_ID, { type: 'geojson', data: adminLabelsData });
+      map.addLayer({
+        id: ADMIN_LABELS_LAYER_ID,
+        type: 'symbol',
+        source: ADMIN_LABELS_SOURCE_ID,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 8, 12, 12, 14],
+          'text-font': ['Noto Sans Regular', 'Open Sans Regular'],
+          'text-anchor': 'center',
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': adminLayerColor,
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2,
+        },
+      });
+    };
+    return whenStyleReady(map, apply);
+  }, [adminLabelsData, adminLayerColor]);
+
+  // Custom Layer overlay (fill transparency configurable, border outline opaque)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!customGeoJsonData) {
+      if (map.getSource(CUSTOM_SOURCE_ID)) {
+        if (map.getLayer(CUSTOM_LINE_LAYER_ID)) map.removeLayer(CUSTOM_LINE_LAYER_ID);
+        if (map.getLayer(CUSTOM_FILL_LAYER_ID)) map.removeLayer(CUSTOM_FILL_LAYER_ID);
+        map.removeSource(CUSTOM_SOURCE_ID);
+      }
+      return;
+    }
+    const apply = () => {
+      if (map.getSource(CUSTOM_SOURCE_ID)) {
+        (map.getSource(CUSTOM_SOURCE_ID) as maplibregl.GeoJSONSource).setData(customGeoJsonData);
+        map.setPaintProperty(CUSTOM_FILL_LAYER_ID, 'fill-color', customLayerColor);
+        map.setPaintProperty(CUSTOM_FILL_LAYER_ID, 'fill-opacity', customFillOpacity);
+        map.setPaintProperty(CUSTOM_LINE_LAYER_ID, 'line-color', customLayerColor);
+        map.setPaintProperty(CUSTOM_LINE_LAYER_ID, 'line-opacity', customLineOpacity);
+        return;
+      }
+      map.addSource(CUSTOM_SOURCE_ID, { type: 'geojson', data: customGeoJsonData });
+      map.addLayer({
+        id: CUSTOM_FILL_LAYER_ID,
+        type: 'fill',
+        source: CUSTOM_SOURCE_ID,
+        paint: { 'fill-color': customLayerColor, 'fill-opacity': customFillOpacity },
+      });
+      map.addLayer({
+        id: CUSTOM_LINE_LAYER_ID,
+        type: 'line',
+        source: CUSTOM_SOURCE_ID,
+        paint: {
+          'line-color': customLayerColor,
+          'line-width': 2,
+          'line-opacity': customLineOpacity,
+        },
+      });
+    };
+    return whenStyleReady(map, apply);
+  }, [customGeoJsonData, customLayerColor, customFillOpacity, customLineOpacity]);
+
+  // Custom Layer Text Labels
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!customLabelsData || customLabelsData.features.length === 0) {
+      if (map.getSource(CUSTOM_LABELS_SOURCE_ID)) {
+        if (map.getLayer(CUSTOM_LABELS_LAYER_ID)) map.removeLayer(CUSTOM_LABELS_LAYER_ID);
+        map.removeSource(CUSTOM_LABELS_SOURCE_ID);
+      }
+      return;
+    }
+
+    const apply = () => {
+      if (map.getSource(CUSTOM_LABELS_SOURCE_ID)) {
+        (map.getSource(CUSTOM_LABELS_SOURCE_ID) as maplibregl.GeoJSONSource).setData(
+          customLabelsData,
+        );
+        map.setPaintProperty(CUSTOM_LABELS_LAYER_ID, 'text-color', customLayerColor);
+        return;
+      }
+      map.addSource(CUSTOM_LABELS_SOURCE_ID, { type: 'geojson', data: customLabelsData });
+      map.addLayer({
+        id: CUSTOM_LABELS_LAYER_ID,
+        type: 'symbol',
+        source: CUSTOM_LABELS_SOURCE_ID,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 10, 12, 12, 14],
+          'text-font': ['Noto Sans Regular', 'Open Sans Regular'],
+          'text-anchor': 'center',
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': customLayerColor,
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2,
+        },
+      });
+    };
+    return whenStyleReady(map, apply);
+  }, [customLabelsData, customLayerColor]);
+
+  // District / admin / custom centers overlay
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -299,22 +542,27 @@ export function LibertyMap({
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 7],
           'circle-color': [
-            'match',
-            ['get', 'center_source'],
-            'admin_centre',
-            '#2563eb', // Indigo Blue
-            'label',
-            '#0d9488', // Teal
-            'centroid',
-            '#64748b', // Slate
-            'point_on_surface',
-            '#64748b', // Slate
-            '#64748b', // Slate
+            'case',
+            ['has', 'custom_layer'],
+            customLayerColor,
+            [
+              'match',
+              ['get', 'center_source'],
+              'admin_centre',
+              adminLayerColor,
+              'label',
+              '#0d9488', // Teal
+              'centroid',
+              '#64748b', // Slate
+              'point_on_surface',
+              '#64748b', // Slate
+              '#64748b', // Slate
+            ],
           ],
-          'circle-opacity': 0.7,
+          'circle-opacity': 0.8,
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': 1.5,
-          'circle-stroke-opacity': 0.85,
+          'circle-stroke-opacity': 0.9,
         },
       });
 
@@ -322,19 +570,31 @@ export function LibertyMap({
         const feature = e.features?.[0];
         if (!feature) return;
         const coords = (feature.geometry as any).coordinates.slice();
-        const { name, admin_level, center_source } = feature.properties as any;
+        const { name, admin_level, custom_layer, layer_name, district, citation, center_source } =
+          feature.properties as any;
 
-        new maplibregl.Popup({ offset: 10 })
-          .setLngLat(coords)
-          .setHTML(
-            `<div style="font-family: sans-serif; font-size: 13px; line-height: 1.4; color: #1e293b;">` +
-              `<strong style="font-size: 14px; display: block; margin-bottom: 4px;">${name || 'Unnamed Unit'}</strong>` +
-              `<div><strong>Admin Level:</strong> ${admin_level}</div>` +
-              `<div><strong>Source:</strong> <span style="font-family: monospace; font-size: 11px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px;">${center_source}</span></div>` +
-              `<div><strong>Center:</strong> ${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}</div>` +
-              `</div>`,
-          )
-          .addTo(map);
+        let content =
+          `<div style="font-family: sans-serif; font-size: 13px; line-height: 1.4; color: #1e293b;">` +
+          `<strong style="font-size: 14px; display: block; margin-bottom: 4px;">${name || 'Unnamed Unit'}</strong>`;
+
+        if (custom_layer) {
+          content += `<div><strong>Layer:</strong> ${layer_name || custom_layer}</div>`;
+          if (district) {
+            content += `<div><strong>District:</strong> ${district}</div>`;
+          }
+          if (citation) {
+            content += `<div><strong>Source:</strong> <span style="font-size: 11px; color: #475569;">${citation}</span></div>`;
+          }
+        } else {
+          content += `<div><strong>Admin Level:</strong> ${admin_level}</div>`;
+        }
+
+        content +=
+          `<div><strong>Center Calculation:</strong> <span style="font-family: monospace; font-size: 11px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px;">${center_source}</span></div>` +
+          `<div><strong>Coords:</strong> ${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}</div>` +
+          `</div>`;
+
+        new maplibregl.Popup({ offset: 10 }).setLngLat(coords).setHTML(content).addTo(map);
       });
 
       map.on('mouseenter', CENTERS_CIRCLE_LAYER_ID, () => {
@@ -346,10 +606,9 @@ export function LibertyMap({
     };
 
     return whenStyleReady(map, apply);
-  }, [centersData]);
+  }, [centersData, adminLayerColor, customLayerColor]);
 
-  // Export bbox overlay: subtle grey outline of the buffered tile cover at
-  // max zoom for the selected admin level (low zooms cover a larger area).
+  // Export bbox overlay
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -382,7 +641,7 @@ export function LibertyMap({
     return whenStyleReady(map, apply);
   }, [exportBbox]);
 
-  // Fit to country bounds when the country changes.
+  // Fit to country bounds when the country changes
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !bbox || bbox.length < 4) return;
@@ -409,7 +668,7 @@ export function LibertyMap({
       }
     };
     return whenStyleReady(map, fit);
-  }, [bbox?.[0], bbox?.[1], bbox?.[2], bbox?.[3]]);
+  }, [bbox]);
 
   return (
     <div className="relative h-full w-full">
