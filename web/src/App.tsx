@@ -368,6 +368,7 @@ function App() {
     async (code: string) => {
       const upper = code.toUpperCase();
       setCountryCode(upper);
+      setSelectedCustomLayer(null);
       setLoading(true);
       setError(null);
       setData(null);
@@ -558,44 +559,44 @@ function App() {
                   />
                 </div>
 
-                {/* Custom Sectoral Layers Section */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      Custom Layer
-                    </label>
-                    {availableCustomLayers.length > 0 && (
+                {/* Custom Sectoral Layers Section (only rendered when custom layers are available) */}
+                {availableCustomLayers.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Custom Layer
+                      </label>
                       <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                         {availableCustomLayers.length} available
                       </span>
+                    </div>
+                    <CustomLayerSelect
+                      value={selectedCustomLayer}
+                      onChange={setSelectedCustomLayer}
+                      customLayers={availableCustomLayers}
+                      availableCustomLayerIds={availableCustomLayerIds}
+                      disabled={loading}
+                    />
+
+                    {/* Custom Layer Controls (Repeated component) */}
+                    {activeCustomLayer && (
+                      <LayerControls
+                        visible={customLayerPrefs.visible}
+                        onToggleVisible={handleToggleCustomVisible}
+                        color={customLayerPrefs.color}
+                        defaultColor={DEFAULT_CUSTOM_LAYER_COLOR}
+                        onColorChange={handleCustomColorChange}
+                        onResetColor={handleResetCustomColor}
+                        fillOpacity={customLayerPrefs.fillOpacity}
+                        onOpacityChange={handleCustomOpacityChange}
+                        showLabels={customLayerPrefs.showLabels}
+                        onToggleLabels={handleToggleCustomLabels}
+                        attribution={activeCustomLayer.citation}
+                        disabled={loading || !customGeoJsonData?.features?.length}
+                      />
                     )}
                   </div>
-                  <CustomLayerSelect
-                    value={selectedCustomLayer}
-                    onChange={setSelectedCustomLayer}
-                    customLayers={availableCustomLayers}
-                    availableCustomLayerIds={availableCustomLayerIds}
-                    disabled={loading || availableCustomLayers.length === 0}
-                  />
-
-                  {/* Custom Layer Controls (Repeated component) */}
-                  {activeCustomLayer && (
-                    <LayerControls
-                      visible={customLayerPrefs.visible}
-                      onToggleVisible={handleToggleCustomVisible}
-                      color={customLayerPrefs.color}
-                      defaultColor={DEFAULT_CUSTOM_LAYER_COLOR}
-                      onColorChange={handleCustomColorChange}
-                      onResetColor={handleResetCustomColor}
-                      fillOpacity={customLayerPrefs.fillOpacity}
-                      onOpacityChange={handleCustomOpacityChange}
-                      showLabels={customLayerPrefs.showLabels}
-                      onToggleLabels={handleToggleCustomLabels}
-                      attribution={activeCustomLayer.citation}
-                      disabled={loading || !customGeoJsonData?.features?.length}
-                    />
-                  )}
-                </div>
+                )}
               </div>
             )}
           </div>
