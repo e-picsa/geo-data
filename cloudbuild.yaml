@@ -73,10 +73,25 @@ steps:
       - >-
         --update-labels=managed-by=gcp-cloud-build-deploy-cloud-run,gcb-trigger-id=$_TRIGGER_ID,gcb-trigger-region=$LOCATION,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID
       - '--region=$_DEPLOY_REGION'
+      - '--min-instances=0'
       - '--max-instances=1'
       - '--quiet'
     id: Deploy
     entrypoint: gcloud
+
+  # Prune old Cloud Run revisions, retaining only the 2 most recent.
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: Prune-Revisions
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud run revisions list \
+          --service=$_SERVICE_NAME \
+          --region=$_DEPLOY_REGION \
+          --format="value(name)" \
+          --sort-by="~metadata.creationTimestamp" | tail -n +3 | \
+          xargs -r -n 1 gcloud run revisions delete --region=$_DEPLOY_REGION --quiet || true
 
   # Post-deploy warm for the countries that are actually used.
   #
