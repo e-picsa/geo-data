@@ -34,7 +34,7 @@ export default tseslint.config(
   },
   // Node sidecar scripts (plain JS run under Node.js, not Bun)
   {
-    files: ['api/**/*.mjs'],
+    files: ['api/**/*.mjs', 'web/scripts/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
