@@ -330,20 +330,26 @@ function isInsideCountry(geometry: any, props: any, countryGeoms: any[]): boolea
  * Narrows a TopoJSON topology to just the rendered layers: every admin level
  * down to (and including) the requested one — e.g. `admin_level=4` keeps
  * levels 2, 3 and 4 — plus the requested custom layer(s). Used by the
- * download endpoint so exports contain what the map shows. When no filters
- * are given the topology is returned unchanged.
+ * download endpoint so exports contain what the map shows.
+ *
+ * Custom layers are opt-in: when no `customLayers` are given, all geometries
+ * with a `custom_layer` property are dropped (e.g. Malawi EPAs are excluded
+ * from downloads unless `?custom_layer=mw_epa` is passed). Admin levels are
+ * opt-out: when no `adminLevels` are given, all admin geometries are kept.
+ * The top-level `custom_layers` metadata member is narrowed the same way
+ * (removed when nothing is requested).
  */
 export function filterTopojsonGeometries(
   topo: Record<string, unknown>,
   opts: { adminLevels?: number[]; customLayers?: string[] },
 ): Record<string, unknown> {
   const { adminLevels, customLayers } = opts;
-  if ((!adminLevels || adminLevels.length === 0) && (!customLayers || customLayers.length === 0)) {
-    return topo;
-  }
+  const hasAdminFilter = !!adminLevels && adminLevels.length > 0;
 
   const finiteLevels = (adminLevels || []).map(Number).filter(Number.isFinite);
-  const maxAdminLevel = finiteLevels.length > 0 ? Math.max(...finiteLevels) : -Infinity;
+  // No admin filter → keep every admin level; otherwise keep levels down to the max requested.
+  const maxAdminLevel =
+    finiteLevels.length > 0 ? Math.max(...finiteLevels) : Number.POSITIVE_INFINITY;
   const customSet = new Set((customLayers || []).map((c) => c.toLowerCase()));
   const objects = (topo.objects || {}) as Record<string, any>;
   const filteredObjects: Record<string, any> = {};
@@ -359,13 +365,25 @@ export function filterTopojsonGeometries(
         if (g?.properties?.custom_layer) {
           return customSet.has(String(g.properties.custom_layer).toLowerCase());
         }
+        if (!hasAdminFilter) return true;
         const lvl = Number(g?.properties?.admin_level);
         return Number.isFinite(lvl) && lvl <= maxAdminLevel;
       }),
     };
   }
 
-  return { ...topo, objects: filteredObjects };
+  const result: Record<string, unknown> = { ...topo, objects: filteredObjects };
+  if (Array.isArray((topo as any).custom_layers)) {
+    if (customSet.size === 0) {
+      delete (result as any).custom_layers;
+    } else {
+      (result as any).custom_layers = ((topo as any).custom_layers as any[]).filter((l: any) =>
+        customSet.has(String(l?.id ?? '').toLowerCase()),
+      );
+    }
+  }
+
+  return result;
 }
 
 function parseListParam(value: string | null): string[] {
@@ -413,7 +431,9 @@ export const adminBoundaries = async (
       url.searchParams.get('include_centers') ?? url.searchParams.get('centers');
 
     // Narrow the export to the rendered layers: ?admin_level=4&custom_layer=mw_epa
-    // (comma-separated lists supported). Absent params keep the full topology.
+    // (comma-separated lists supported). Custom layers are opt-in — raw
+    // downloads exclude them unless explicitly requested, so plain
+    // `/boundaries/MW.topo.json` never ships EPAs by accident.
     const adminLevelFilter = parseListParam(url.searchParams.get('admin_level'))
       .map(Number)
       .filter((n) => Number.isFinite(n));
@@ -422,7 +442,12 @@ export const adminBoundaries = async (
     );
 
     let finalTopojsonString = topojsonString;
-    if (adminLevelFilter.length > 0 || customLayerFilter.length > 0) {
+    // Raw downloads always narrow (default: all admin levels, no custom
+    // layers). Envelope responses only narrow when filters are explicit, so
+    // the web map keeps receiving the full dataset for client-side toggling.
+    const needsFiltering =
+      adminLevelFilter.length > 0 || customLayerFilter.length > 0 || rawTopojson;
+    if (needsFiltering) {
       const filtered = filterTopojsonGeometries(JSON.parse(topojsonString), {
         adminLevels: adminLevelFilter,
         customLayers: customLayerFilter,

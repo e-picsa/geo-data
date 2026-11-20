@@ -724,9 +724,14 @@ test('filterTopojsonGeometries - keeps requested level and everything above it',
   const names = (filtered.objects as any).input.geometries.map((g: any) => g.properties.name);
   expect(names.sort()).toEqual(['District', 'EPA', 'Region', 'Testland']);
 
-  // No filters → unchanged reference content
+  // No filters → all admin kept, custom layers excluded (opt-in)
   const full = filterTopojsonGeometries(topo, {});
-  expect((full.objects as any).input.geometries.length).toBe(5);
+  expect((full.objects as any).input.geometries.map((g: any) => g.properties.name).sort()).toEqual([
+    'District',
+    'Region',
+    'Testland',
+    'Ward',
+  ]);
 
   // Unknown custom layer id matches nothing for custom features
   const adminOnly = filterTopojsonGeometries(topo, { adminLevels: [4], customLayers: ['other'] });
@@ -735,4 +740,58 @@ test('filterTopojsonGeometries - keeps requested level and everything above it',
     'Region',
     'District',
   ]);
+});
+
+test('filterTopojsonGeometries - custom layers are opt-in, admin levels opt-out', () => {
+  const topo: any = {
+    type: 'Topology',
+    custom_layers: [
+      { id: 'tl_epa', name: 'EPAs' },
+      { id: 'tl_other', name: 'Other' },
+    ],
+    objects: {
+      input: {
+        type: 'GeometryCollection',
+        geometries: [
+          { type: 'MultiPolygon', properties: { name: 'Testland', admin_level: 2 }, arcs: [] },
+          { type: 'MultiPolygon', properties: { name: 'District', admin_level: 4 }, arcs: [] },
+          {
+            type: 'MultiPolygon',
+            properties: { name: 'EPA', custom_layer: 'tl_epa' },
+            arcs: [],
+          },
+          {
+            type: 'MultiPolygon',
+            properties: { name: 'Other', custom_layer: 'tl_other' },
+            arcs: [],
+          },
+        ],
+      },
+    },
+    arcs: [],
+  };
+
+  // Default (no params): all admin, no custom, metadata removed
+  const def = filterTopojsonGeometries(topo, {}) as any;
+  expect(def.objects.input.geometries.map((g: any) => g.properties.name).sort()).toEqual([
+    'District',
+    'Testland',
+  ]);
+  expect(def.custom_layers).toBeUndefined();
+
+  // admin_level alone narrows admin but still excludes custom
+  const adminOnly = filterTopojsonGeometries(topo, { adminLevels: [2] }) as any;
+  expect(adminOnly.objects.input.geometries.map((g: any) => g.properties.name)).toEqual([
+    'Testland',
+  ]);
+  expect(adminOnly.custom_layers).toBeUndefined();
+
+  // custom_layer alone keeps all admin plus the requested custom layer
+  const withCustom = filterTopojsonGeometries(topo, { customLayers: ['tl_epa'] }) as any;
+  expect(withCustom.objects.input.geometries.map((g: any) => g.properties.name).sort()).toEqual([
+    'District',
+    'EPA',
+    'Testland',
+  ]);
+  expect(withCustom.custom_layers.map((l: any) => l.id)).toEqual(['tl_epa']);
 });

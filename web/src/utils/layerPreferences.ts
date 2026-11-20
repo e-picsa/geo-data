@@ -33,6 +33,7 @@ export function getLayerPreferences(
   defaultFillOpacity = DEFAULT_CUSTOM_FILL_OPACITY,
   defaultLineOpacity = DEFAULT_CUSTOM_LINE_OPACITY,
   defaultVisible = true,
+  defaultShowLabels = true,
 ): LayerPreferences {
   try {
     const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${layerId}`);
@@ -56,7 +57,7 @@ export function getLayerPreferences(
             : defaultColor,
         fillOpacity: parsedFillOpacity,
         lineOpacity: parsedLineOpacity,
-        showLabels: Boolean(parsed.showLabels),
+        showLabels: typeof parsed.showLabels === 'boolean' ? parsed.showLabels : defaultShowLabels,
       };
     }
   } catch (e) {
@@ -67,7 +68,7 @@ export function getLayerPreferences(
     color: defaultColor,
     fillOpacity: defaultFillOpacity,
     lineOpacity: defaultLineOpacity,
-    showLabels: false,
+    showLabels: defaultShowLabels,
   };
 }
 
