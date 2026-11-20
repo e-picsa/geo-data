@@ -18,6 +18,8 @@ import {
 import {
   isCentroidInsideGeometry,
   getPolygonCentroid,
+  getRingAreaAndCentroid,
+  pointInRing,
   pointInPolygonGeometry,
 } from '../utils/geometry.utils.ts';
 import { corsHeaders } from '../utils/cors.ts';
@@ -28,7 +30,7 @@ export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 11;
+const CACHE_VERSION = 14;
 
 type Source = 'cache' | 'generated';
 
@@ -101,6 +103,7 @@ export function filterCrossBorderFeatures(geojson: any, countryCode: string): an
   if (features.length === 0) return geojson;
 
   const upper = countryCode.toUpperCase();
+  const isoPrefix = `${upper}-`;
   const isCountryLevel = (f: any) =>
     Number(f?.properties?.admin_level) === 2 && !f?.properties?.custom_layer;
 
@@ -131,11 +134,15 @@ export function filterCrossBorderFeatures(geojson: any, countryCode: string): an
       continue;
     }
 
-    const pt: [number, number] | null =
-      props.admin_centre ?? props.label_point ?? getPolygonCentroid(f?.geometry) ?? null;
-    const inside =
-      pt &&
-      countryGeoms.some((g: any) => pointInPolygonGeometry(pt as [number, number], g?.geometry));
+    // Affirmatively tagged as ours (e.g. Likoma district MW-LK) — keep
+    // regardless of geometry quirks such as exclaves.
+    const iso2 = props['ISO3166-2'];
+    if (iso2 && String(iso2).toUpperCase().startsWith(isoPrefix)) {
+      kept.push(f);
+      continue;
+    }
+
+    const inside = isInsideCountry(f?.geometry, props, countryGeoms);
 
     if (inside) {
       kept.push(f);
@@ -154,10 +161,124 @@ export function filterCrossBorderFeatures(geojson: any, countryCode: string): an
 }
 
 /**
- * Narrows a TopoJSON topology to just the rendered layers: the requested
- * admin level(s) plus the requested custom layer(s). Used by the download
- * endpoint so exports contain only what the map shows. When no filters are
- * given the topology is returned unchanged.
+ * Candidate interior points for containment testing, most authoritative
+ * first: tagged admin centre / label point, then the whole-geometry centroid
+ * (only when it falls inside its own geometry — concave shapes like Chitipa
+ * fail this), then each Polygon part's centroid (only when inside its own
+ * part — island districts like Likoma have a combined centroid out in the
+ * lake, but per-island centroids on land).
+ */
+function representativePoints(geometry: any, props: any): [number, number][] {
+  const pts: [number, number][] = [];
+  if (Array.isArray(props?.admin_centre)) pts.push(props.admin_centre as [number, number]);
+  if (Array.isArray(props?.label_point)) pts.push(props.label_point as [number, number]);
+
+  if (!geometry?.coordinates || !Array.isArray(geometry.coordinates)) return pts;
+
+  if (isCentroidInsideGeometry(geometry)) {
+    const c = getPolygonCentroid(geometry);
+    if (c) pts.push(c);
+  }
+
+  const polys = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  if (Array.isArray(polys)) {
+    for (const poly of polys) {
+      if (!Array.isArray(poly) || !Array.isArray(poly[0]) || poly[0].length === 0) continue;
+      const { cx, cy } = getRingAreaAndCentroid(poly[0]);
+      const pt: [number, number] = [cx, cy];
+      if (!pointInRing(pt, poly[0])) continue;
+      if (poly.slice(1).some((hole: number[][]) => pointInRing(pt, hole))) continue;
+      pts.push(pt);
+    }
+  }
+
+  return pts;
+}
+
+/**
+ * Minimum distance in degrees below which a point counts as lying ON the
+ * country boundary rather than inside it. Shared-border vertices are derived
+ * from the same OSM nodes, so their distance is exactly 0; genuinely inland
+ * points are orders of magnitude further away (OSM precision is ~1e-7).
+ */
+const BOUNDARY_EPSILON = 1e-9;
+
+function pointToSegmentDistance(pt: [number, number], a: number[], b: number[]): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lenSq = dx * dx + dy * dy;
+  let t = 0;
+  if (lenSq > 0) {
+    t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / lenSq));
+  }
+  const ex = a[0] + t * dx - pt[0];
+  const ey = a[1] + t * dy - pt[1];
+  return Math.sqrt(ex * ex + ey * ey);
+}
+
+function distanceToBoundary(pt: [number, number], geometry: any): number {
+  if (!geometry?.coordinates || !Array.isArray(geometry.coordinates)) return Infinity;
+  const polys = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  let min = Infinity;
+  for (const poly of polys) {
+    if (!Array.isArray(poly)) continue;
+    for (const ring of poly) {
+      if (!Array.isArray(ring)) continue;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const d = pointToSegmentDistance(pt, ring[j], ring[i]);
+        if (d < min) min = d;
+      }
+    }
+  }
+  return min;
+}
+
+/** Strict containment: inside the ring(s) and not merely on the boundary. */
+function strictlyInsideCountry(pt: [number, number], countryGeoms: any[]): boolean {
+  return countryGeoms.some(
+    (g: any) =>
+      pointInPolygonGeometry(pt, g?.geometry) &&
+      distanceToBoundary(pt, g?.geometry) > BOUNDARY_EPSILON,
+  );
+}
+
+/**
+ * Whether a feature overlaps the country: any interior candidate strictly
+ * inside, else any polygon vertex strictly inside. The vertex fallback covers
+ * concave features (Blantyre City, Thuma FR) whose area centroids fall
+ * outside their own rings. The strictness (epsilon off the boundary) is what
+ * keeps neighbours out: Angónia's only "inside"-testing points are its
+ * shared-border vertices at distance 0.
+ */
+function isInsideCountry(geometry: any, props: any, countryGeoms: any[]): boolean {
+  if (representativePoints(geometry, props).some((pt) => strictlyInsideCountry(pt, countryGeoms))) {
+    return true;
+  }
+
+  if (!geometry?.coordinates || !Array.isArray(geometry.coordinates)) return false;
+  const polys = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  if (!Array.isArray(polys)) return false;
+
+  for (const poly of polys) {
+    if (!Array.isArray(poly)) continue;
+    for (const ring of poly) {
+      if (!Array.isArray(ring)) continue;
+      for (const pt of ring) {
+        if (!Array.isArray(pt) || pt.length < 2) continue;
+        if (strictlyInsideCountry([pt[0], pt[1]], countryGeoms)) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Narrows a TopoJSON topology to just the rendered layers: every admin level
+ * down to (and including) the requested one — e.g. `admin_level=4` keeps
+ * levels 2, 3 and 4 — plus the requested custom layer(s). Used by the
+ * download endpoint so exports contain what the map shows. When no filters
+ * are given the topology is returned unchanged.
  */
 export function filterTopojsonGeometries(
   topo: Record<string, unknown>,
@@ -168,7 +289,8 @@ export function filterTopojsonGeometries(
     return topo;
   }
 
-  const adminSet = new Set((adminLevels || []).map(Number));
+  const finiteLevels = (adminLevels || []).map(Number).filter(Number.isFinite);
+  const maxAdminLevel = finiteLevels.length > 0 ? Math.max(...finiteLevels) : -Infinity;
   const customSet = new Set((customLayers || []).map((c) => c.toLowerCase()));
   const objects = (topo.objects || {}) as Record<string, any>;
   const filteredObjects: Record<string, any> = {};
@@ -184,7 +306,8 @@ export function filterTopojsonGeometries(
         if (g?.properties?.custom_layer) {
           return customSet.has(String(g.properties.custom_layer).toLowerCase());
         }
-        return adminSet.has(Number(g?.properties?.admin_level));
+        const lvl = Number(g?.properties?.admin_level);
+        return Number.isFinite(lvl) && lvl <= maxAdminLevel;
       }),
     };
   }

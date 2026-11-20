@@ -419,7 +419,201 @@ test('filterCrossBorderFeatures - prefers admin_centre over geometric centroid',
   expect(out.features.map((f: any) => f.properties.name)).toContain('Border Sliver');
 });
 
-test('filterTopojsonGeometries - narrows to rendered admin level + custom layer', () => {
+test('filterCrossBorderFeatures - concave feature kept via inland vertices', () => {
+  // L-shaped polygon: area centroid falls in the missing quadrant (outside
+  // its own ring), but its vertices are on land.
+  const fc: any = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { id: '1', name: 'Testland', admin_level: 2 },
+        geometry: square(0, 0, 10, 10),
+      },
+      {
+        type: 'Feature',
+        properties: { id: '2', name: 'Concave EPA', custom_layer: 'tl_epa' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [1, 1],
+              [7, 1],
+              [7, 3],
+              [3, 3],
+              [3, 7],
+              [1, 7],
+              [1, 1],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+  const out = filterCrossBorderFeatures(fc, 'TL');
+  expect(out.features.map((f: any) => f.properties.name)).toContain('Concave EPA');
+});
+
+test('filterCrossBorderFeatures - neighbour sharing a border is dropped (Angónia case)', () => {
+  // Shares the x=10 edge with the country: shared vertices sit at distance 0
+  // and must not count as inside; interior vertices are across the border.
+  const fc: any = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { id: '1', name: 'Testland', admin_level: 2 },
+        geometry: square(0, 0, 10, 10),
+      },
+      {
+        type: 'Feature',
+        properties: { id: '2', name: 'Angónia', admin_level: 5 },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [10, 0],
+              [15, 0],
+              [15, 5],
+              [10, 5],
+              [10, 0],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+  const out = filterCrossBorderFeatures(fc, 'TL');
+  const names = out.features.map((f: any) => f.properties.name);
+  expect(names).toContain('Testland');
+  expect(names).not.toContain('Angónia');
+});
+
+test('filterCrossBorderFeatures - island district kept via per-part centroids (Likoma case)', () => {
+  // Country covers two land masses with open water between; the district's
+  // combined centroid lands in the water, but each island part is on land.
+  const fc: any = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { id: '1', name: 'Testland', admin_level: 2 },
+        geometry: {
+          type: 'MultiPolygon',
+          coordinates: [
+            [
+              [
+                [0, 0],
+                [4, 0],
+                [4, 4],
+                [0, 4],
+                [0, 0],
+              ],
+            ],
+            [
+              [
+                [6, 6],
+                [10, 6],
+                [10, 10],
+                [6, 10],
+                [6, 6],
+              ],
+            ],
+          ],
+        },
+      },
+      {
+        type: 'Feature',
+        properties: { id: '2', name: 'Island District', admin_level: 4 },
+        geometry: {
+          type: 'MultiPolygon',
+          coordinates: [
+            [
+              [
+                [1, 1],
+                [2, 1],
+                [2, 2],
+                [1, 2],
+                [1, 1],
+              ],
+            ],
+            [
+              [
+                [7, 7],
+                [8, 7],
+                [8, 8],
+                [7, 8],
+                [7, 7],
+              ],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+  const out = filterCrossBorderFeatures(fc, 'TL');
+  expect(out.features.map((f: any) => f.properties.name)).toContain('Island District');
+});
+
+test('filterCrossBorderFeatures - ISO3166-2 tag keeps exclaves, holed part contributes nothing', () => {
+  const fc: any = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { id: '1', name: 'Testland', admin_level: 2 },
+        geometry: square(0, 0, 10, 10),
+      },
+      {
+        // Affirmatively tagged ours despite lying fully outside (data quirk) — keep
+        type: 'Feature',
+        properties: { id: '2', name: 'Tagged Exclave', admin_level: 4, 'ISO3166-2': 'TL-EX' },
+        geometry: square(20, 20, 25, 25),
+      },
+      {
+        // Big part's centroid falls in its own hole; small part is on land — keep
+        type: 'Feature',
+        properties: { id: '3', name: 'Holed EPA', custom_layer: 'tl_epa' },
+        geometry: {
+          type: 'MultiPolygon',
+          coordinates: [
+            [
+              [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+                [0, 0],
+              ],
+              [
+                [4, 4],
+                [6, 4],
+                [6, 6],
+                [4, 6],
+                [4, 4],
+              ],
+            ],
+            [
+              [
+                [1, 1],
+                [2, 1],
+                [2, 2],
+                [1, 2],
+                [1, 1],
+              ],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+  const out = filterCrossBorderFeatures(fc, 'TL');
+  const names = out.features.map((f: any) => f.properties.name);
+  expect(names).toContain('Tagged Exclave');
+  expect(names).toContain('Holed EPA');
+});
+
+test('filterTopojsonGeometries - keeps requested level and everything above it', () => {
   const topo: any = {
     type: 'Topology',
     objects: {
@@ -429,6 +623,7 @@ test('filterTopojsonGeometries - narrows to rendered admin level + custom layer'
           { type: 'MultiPolygon', properties: { name: 'Testland', admin_level: 2 }, arcs: [] },
           { type: 'MultiPolygon', properties: { name: 'Region', admin_level: 3 }, arcs: [] },
           { type: 'MultiPolygon', properties: { name: 'District', admin_level: 4 }, arcs: [] },
+          { type: 'MultiPolygon', properties: { name: 'Ward', admin_level: 6 }, arcs: [] },
           {
             type: 'MultiPolygon',
             properties: { name: 'EPA', custom_layer: 'tl_epa', district: 'Central' },
@@ -440,17 +635,20 @@ test('filterTopojsonGeometries - narrows to rendered admin level + custom layer'
     arcs: [],
   };
 
+  // admin_level=4 keeps 2, 3 and 4 (levels below the selection are dropped)
   const filtered = filterTopojsonGeometries(topo, { adminLevels: [4], customLayers: ['tl_epa'] });
   const names = (filtered.objects as any).input.geometries.map((g: any) => g.properties.name);
-  expect(names.sort()).toEqual(['District', 'EPA']);
+  expect(names.sort()).toEqual(['District', 'EPA', 'Region', 'Testland']);
 
   // No filters → unchanged reference content
   const full = filterTopojsonGeometries(topo, {});
-  expect((full.objects as any).input.geometries.length).toBe(4);
+  expect((full.objects as any).input.geometries.length).toBe(5);
 
   // Unknown custom layer id matches nothing for custom features
   const adminOnly = filterTopojsonGeometries(topo, { adminLevels: [4], customLayers: ['other'] });
   expect((adminOnly.objects as any).input.geometries.map((g: any) => g.properties.name)).toEqual([
+    'Testland',
+    'Region',
     'District',
   ]);
 });
