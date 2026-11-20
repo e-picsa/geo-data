@@ -478,7 +478,11 @@ function App() {
     setDownloadError(null);
     try {
       const baseUrl = API_URL.replace(/\/$/, '');
-      const downloadUrl = `${baseUrl}/boundaries/${data.country_code}.topo.json?include_centers=${includeCenters}`;
+      const params = new URLSearchParams();
+      params.set('admin_level', String(adminLevel));
+      if (selectedCustomLayer) params.set('custom_layer', selectedCustomLayer);
+      if (includeCenters) params.set('include_centers', 'true');
+      const downloadUrl = `${baseUrl}/boundaries/${data.country_code}.topo.json?${params}`;
       const res = await fetch(downloadUrl, { signal: AbortSignal.timeout(120000) });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -800,6 +804,8 @@ function App() {
           customLayerColor={customLayerPrefs.color}
           customFillOpacity={customLayerPrefs.fillOpacity}
           customLineOpacity={customLayerPrefs.lineOpacity}
+          customLayerName={activeCustomLayer?.name ?? selectedCustomLayer}
+          customLayerCitation={activeCustomLayer?.citation.sourceName}
           showCustomLabels={customLayerPrefs.visible && customLayerPrefs.showLabels}
           exportBbox={exportBbox}
           onZoomChange={setMapZoom}

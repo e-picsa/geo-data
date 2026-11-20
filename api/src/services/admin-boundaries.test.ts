@@ -1,5 +1,9 @@
 import { expect, test, beforeEach, afterAll } from 'bun:test';
-import { adminBoundaries } from './admin-boundaries.ts';
+import {
+  adminBoundaries,
+  filterCrossBorderFeatures,
+  filterTopojsonGeometries,
+} from './admin-boundaries.ts';
 import { getCache } from '../utils/cache/index.ts';
 import { rawPbfPath } from './geofabrik/raw-pbf.ts';
 
@@ -53,9 +57,18 @@ test('adminBoundaries - Validates Malawi boundaries, district centers, and custo
   const topojson = JSON.parse(data.topojson);
   expect(topojson.type).toBe('Topology');
   expect(topojson.objects).toBeDefined();
+  // Layer metadata lives once at the topology level (deduped, not per-feature)
+  expect(topojson.custom_layers).toBeDefined();
+  expect(topojson.custom_layers.find((l: any) => l.id === 'mw_epa')?.citation.sourceName).toContain(
+    'MASDAP',
+  );
 
   const objectKey = Object.keys(topojson.objects)[0];
   const geometries = topojson.objects[objectKey].geometries;
+
+  // Cross-border regression: Mozambican districts (e.g. Angónia) must not leak in
+  const allNames = geometries.map((g: any) => g.properties?.name);
+  expect(allNames).not.toContain('Angónia');
 
   // Evaluate MW admin_4 (districts)
   const districts = geometries.filter((g: any) => Number(g.properties?.admin_level) === 4);
@@ -82,7 +95,11 @@ test('adminBoundaries - Validates Malawi boundaries, district centers, and custo
   expect(kameme.properties.center).toBeDefined();
   expect(Array.isArray(kameme.properties.center)).toBe(true);
   expect(kameme.properties.district).toBe('Chitipa');
-  expect(kameme.properties.citation).toContain('MASDAP');
+  // Duplicated per-feature metadata was removed: layer info now lives once in
+  // custom_layers (envelope) / custom_layers (topology member)
+  expect(kameme.properties.citation).toBeUndefined();
+  expect(kameme.properties.layer_name).toBeUndefined();
+  expect(kameme.properties.unit_type).toBeUndefined();
 
   // Dowa center should be near the geometric centroid [33.79, -13.59]
   const dowa = districts.find((d: any) => d.properties?.name === 'Dowa');
@@ -305,3 +322,135 @@ test('adminBoundaries - Zambia boundaries evaluate admin_centre vs fallbacks', a
   expect(lusaka.properties.center[1]).toBeLessThan(-15.3);
   expect(lusaka.properties.center[1]).toBeGreaterThan(-15.5);
 }, 120000);
+
+// Synthetic unit tests for the cross-border filter (no network needed).
+// Country square [0,0]-[10,10]; neighbour district fully outside it.
+const square = (x1: number, y1: number, x2: number, y2: number) => ({
+  type: 'Polygon',
+  coordinates: [
+    [
+      [x1, y1],
+      [x2, y1],
+      [x2, y2],
+      [x1, y2],
+      [x1, y1],
+    ],
+  ],
+});
+
+function fakeCollection() {
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { id: '1', name: 'Testland', admin_level: 2, 'ISO3166-1': 'TL' },
+        geometry: square(0, 0, 10, 10),
+      },
+      {
+        type: 'Feature',
+        properties: { id: '2', name: 'Central District', admin_level: 4 },
+        geometry: square(1, 1, 4, 4),
+      },
+      {
+        type: 'Feature',
+        // Neighbour relation without ISO tags (the Angónia case)
+        properties: { id: '3', name: 'Angónia', admin_level: 5 },
+        geometry: square(20, 20, 25, 25),
+      },
+      {
+        type: 'Feature',
+        properties: { id: 'e1', name: 'Border EPA', custom_layer: 'tl_epa', district: 'Central' },
+        geometry: square(5, 5, 6, 6),
+      },
+      {
+        type: 'Feature',
+        properties: { id: 'e2', name: 'Foreign EPA', custom_layer: 'tl_epa', district: 'East' },
+        geometry: square(30, 30, 31, 31),
+      },
+    ],
+  };
+}
+
+test('filterCrossBorderFeatures - drops foreign features, keeps country + insiders', () => {
+  const out = filterCrossBorderFeatures(fakeCollection(), 'TL');
+  const names = out.features.map((f: any) => f.properties.name);
+  expect(names).toContain('Testland');
+  expect(names).toContain('Central District');
+  expect(names).toContain('Border EPA');
+  expect(names).not.toContain('Angónia');
+  expect(names).not.toContain('Foreign EPA');
+});
+
+test('filterCrossBorderFeatures - drops foreign level-2 via ISO tag, fails open without level-2', () => {
+  const fc: any = fakeCollection();
+  fc.features.push({
+    type: 'Feature',
+    properties: { id: '9', name: 'Neighbourland', admin_level: 2, 'ISO3166-1': 'NB' },
+    geometry: square(20, 20, 30, 30),
+  });
+  const out = filterCrossBorderFeatures(fc, 'TL');
+  const names = out.features.map((f: any) => f.properties.name);
+  expect(names).toContain('Testland');
+  expect(names).not.toContain('Neighbourland');
+
+  const noCountry: any = { type: 'FeatureCollection', features: [fc.features[2]] };
+  expect(filterCrossBorderFeatures(noCountry, 'TL').features.length).toBe(1);
+});
+
+test('filterCrossBorderFeatures - prefers admin_centre over geometric centroid', () => {
+  const fc: any = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { id: '1', name: 'Testland', admin_level: 2 },
+        geometry: square(0, 0, 10, 10),
+      },
+      {
+        // Geometry is outside, but its admin centre is inside (shared-border sliver)
+        type: 'Feature',
+        properties: { id: '2', name: 'Border Sliver', admin_level: 4, admin_centre: [5, 5] },
+        geometry: square(20, 20, 25, 25),
+      },
+    ],
+  };
+  const out = filterCrossBorderFeatures(fc, 'TL');
+  expect(out.features.map((f: any) => f.properties.name)).toContain('Border Sliver');
+});
+
+test('filterTopojsonGeometries - narrows to rendered admin level + custom layer', () => {
+  const topo: any = {
+    type: 'Topology',
+    objects: {
+      input: {
+        type: 'GeometryCollection',
+        geometries: [
+          { type: 'MultiPolygon', properties: { name: 'Testland', admin_level: 2 }, arcs: [] },
+          { type: 'MultiPolygon', properties: { name: 'Region', admin_level: 3 }, arcs: [] },
+          { type: 'MultiPolygon', properties: { name: 'District', admin_level: 4 }, arcs: [] },
+          {
+            type: 'MultiPolygon',
+            properties: { name: 'EPA', custom_layer: 'tl_epa', district: 'Central' },
+            arcs: [],
+          },
+        ],
+      },
+    },
+    arcs: [],
+  };
+
+  const filtered = filterTopojsonGeometries(topo, { adminLevels: [4], customLayers: ['tl_epa'] });
+  const names = (filtered.objects as any).input.geometries.map((g: any) => g.properties.name);
+  expect(names.sort()).toEqual(['District', 'EPA']);
+
+  // No filters → unchanged reference content
+  const full = filterTopojsonGeometries(topo, {});
+  expect((full.objects as any).input.geometries.length).toBe(4);
+
+  // Unknown custom layer id matches nothing for custom features
+  const adminOnly = filterTopojsonGeometries(topo, { adminLevels: [4], customLayers: ['other'] });
+  expect((adminOnly.objects as any).input.geometries.map((g: any) => g.properties.name)).toEqual([
+    'District',
+  ]);
+});

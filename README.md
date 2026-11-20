@@ -64,7 +64,7 @@ Cached objects are namespaced by two independent versions, both bumped by hand w
 | Constant             | Location                                        | Invalidates                                                                            | Cost of bumping                                        |
 | -------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `CACHE_VERSION = 6`  | `api/src/services/geofabrik/fetch-geofabrik.ts` | Extraction output under `geofabrik/v6/…` (raw PBF, extracted relations, intermediates) | Full cold path: re-download the PBF and re-extract     |
-| `CACHE_VERSION = 10` | `api/src/services/admin-boundaries.ts`          | Derived TopoJSON under `derived/v10/…`                                                 | Mapshaper re-run over already-extracted data (seconds) |
+| `CACHE_VERSION = 11` | `api/src/services/admin-boundaries.ts`          | Derived TopoJSON under `derived/v11/…`                                                 | Mapshaper re-run over already-extracted data (seconds) |
 
 Bump the **extraction** version when anything upstream of the extracted relations changes (`api/src/services/geofabrik/**`, including the OSM entity handling). Bump the **derived** version when the conversion, simplification, or centring changes (`topojson.utils.ts`, `geometry.utils.ts`, cache paths, response shaping that alters stored bytes). Dependency bumps matter too: `mapshaper` affects the derived output, `osmix`/`pbf` the extraction output. If unsure, bump both — the cost is a slower first generation, never wrong data.
 
@@ -201,7 +201,6 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 ### 2. Generate Boundaries
 
 **Endpoint:** `POST /`
-
 **Request Body:**
 
 ```json
@@ -225,7 +224,21 @@ The frontend is deployed automatically to GitHub Pages via the `.github/workflow
 }
 ```
 
-### 3. Clear Cache
+### 3. Download Boundaries (TopoJSON file)
+
+**Endpoint:** `GET /boundaries/:countryCode[.topo.json|.json][?admin_level=4&custom_layer=mw_epa&include_centers=true]`
+
+Returns the raw TopoJSON as a file download (or the JSON envelope with `.json` / `?format=json`).
+
+- `admin_level` — only include this admin level (comma-separated lists supported). Omit for all levels.
+- `custom_layer` — only include this custom layer id. Omit to exclude custom layers, or leave both params out for everything.
+- `include_centers=true` — keep per-feature `center`/`center_source` points (stripped by default on download).
+
+Subnational features whose representative point falls outside the country's own `admin_level=2` polygon are excluded at generation time, so neighbouring countries' districts never leak in — while the country polygon itself keeps the shared border arcs.
+
+Per-feature properties are deliberately minimal (`id`, `name`, `admin_level`/`custom_layer`, `district`, `center`, `center_source`). Layer-level metadata (`layer_name`, full `citation`) is not repeated per feature — TopoJSON has no property lookup — and instead lives once in the topology's top-level `custom_layers` member (and in the POST envelope's `custom_layers` field).
+
+### 4. Clear Cache
 
 > [!NOTE]
 > This endpoint is disabled when `NODE_ENV=production` — set that variable on deployed services.
@@ -240,7 +253,7 @@ Clears the boundary-data cache **and** all rendered tile caches (per-country exp
 { "status": "success", "message": "Cache cleared", "cleared": ["boundary-cache", "tile-renders"] }
 ```
 
-### 4. Export Map Tiles Archive
+### 5. Export Map Tiles Archive
 
 **Endpoint:** `POST /export-tiles`
 **Request Body:**
@@ -269,7 +282,7 @@ The archive contains `{z}/{x}/{y}.webp` tiles plus a `manifest.json` at the root
 > [!NOTE]
 > Tile rendering shells out to Node.js (`api/src/services/render-liberty-tiles.mjs`) because `@maplibre/maplibre-gl-native` cannot load under the Bun runtime. Local dev therefore requires Node.js 20+ on `PATH` (plus `xvfb` on Linux — macOS needs no wrapper). The production Docker image already includes both.
 
-### 5. Export Vector Tiles (PMTiles)
+### 6. Export Vector Tiles (PMTiles)
 
 **Endpoint:** `POST /export-pmtiles`
 
@@ -296,13 +309,13 @@ Two-tier design (separate layer per file, small border-tile duplication accepted
 > [!NOTE]
 > Local dev needs the `go-pmtiles` binary: run `sh scripts/setup-pmtiles.sh` (or set `PMTILES_BIN`). The production Docker image downloads it at build time.
 
-### 6. Preview Tiles (Liberty raster)
+### 7. Preview Tiles (Liberty raster)
 
 **Endpoint:** `GET /tiles/liberty/{z}/{x}/{y}.webp` (zooms 0–12)
 
 Renders a single Liberty tile on demand (disk-cached, so repeat views are instant, with ETag revalidation). Useful for QA-ing `/export-tiles` output tile-by-tile. The web debug UI itself renders the live Liberty vector style via MapLibre GL (same style the packs bake), with a boundary overlay and live zoom readout. A Vector/Raster toggle on the map swaps the base between the live vector style and these server-rendered WebP tiles, so you can compare exactly what each export contains.
 
-### 7. Prewarm Tiles (optimistic cache fill)
+### 8. Prewarm Tiles (optimistic cache fill)
 
 **Endpoint:** `POST /prewarm-tiles` (zooms 0–8, capped by design)
 

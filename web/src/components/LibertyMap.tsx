@@ -117,6 +117,10 @@ interface LibertyMapProps {
   customLineOpacity?: number;
   /** Toggle rendering of labels for the custom layer. */
   showCustomLabels?: boolean;
+  /** Display name for the active custom layer (per-feature layer_name was deduped). */
+  customLayerName?: string | null;
+  /** Citation for the active custom layer (per-feature citation was deduped). */
+  customLayerCitation?: string | null;
   /** Legacy single geoJsonData prop for backwards-compatibility. */
   geoJsonData?: GeoJSON.FeatureCollection | null;
   /** Tile-snapped export bbox at max zoom — drawn as a subtle grey outline. */
@@ -147,6 +151,8 @@ export function LibertyMap({
   customFillOpacity = DEFAULT_CUSTOM_FILL_OPACITY,
   customLineOpacity = DEFAULT_CUSTOM_LINE_OPACITY,
   showCustomLabels = false,
+  customLayerName = null,
+  customLayerCitation = null,
   geoJsonData,
   exportBbox,
   onZoomChange,
@@ -191,9 +197,11 @@ export function LibertyMap({
               name: props.name || '',
               admin_level: props.admin_level,
               custom_layer: isCustom ? props.custom_layer || 'custom' : undefined,
-              layer_name: props.layer_name,
+              layer_name:
+                props.layer_name || (isCustom ? (customLayerName ?? undefined) : undefined),
               district: props.district,
-              citation: props.citation,
+              citation:
+                props.citation || (isCustom ? (customLayerCitation ?? undefined) : undefined),
               center_source: props.center_source || 'centroid',
             },
           });
@@ -209,7 +217,7 @@ export function LibertyMap({
       type: 'FeatureCollection',
       features,
     };
-  }, [effectiveAdminData, customGeoJsonData, showCenters]);
+  }, [effectiveAdminData, customGeoJsonData, showCenters, customLayerName, customLayerCitation]);
 
   // Points specifically for administrative layer text labels
   const adminLabelsData = useMemo<GeoJSON.FeatureCollection | null>(() => {

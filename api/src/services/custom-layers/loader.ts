@@ -10,8 +10,6 @@ export interface NormalizedCustomFeature {
     id: string;
     name: string;
     custom_layer: string;
-    layer_name: string;
-    citation: string;
     [key: string]: any;
   };
 }
@@ -67,8 +65,6 @@ export async function loadCustomLayer(
         id,
         name,
         custom_layer: definition.id,
-        layer_name: definition.name,
-        citation: definition.citation.sourceName,
       };
 
       for (const k of extraKeys) {

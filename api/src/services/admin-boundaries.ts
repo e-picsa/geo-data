@@ -15,7 +15,11 @@ import {
   stripCentersFromTopojson,
   summarizeTopojson,
 } from '../utils/topojson.utils.ts';
-import { isCentroidInsideGeometry } from '../utils/geometry.utils.ts';
+import {
+  isCentroidInsideGeometry,
+  getPolygonCentroid,
+  pointInPolygonGeometry,
+} from '../utils/geometry.utils.ts';
 import { corsHeaders } from '../utils/cors.ts';
 import { toBoundaryErrorResponse } from './boundary-errors.ts';
 export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
@@ -24,7 +28,7 @@ export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 10;
+const CACHE_VERSION = 11;
 
 type Source = 'cache' | 'generated';
 
@@ -64,12 +68,136 @@ export async function getBoundariesTopojson(
         }
       : osmData;
 
-  const topojsonString = await convertGeoJsonToTopojson(combinedGeojson, paths);
+  // Geofabrik country extracts are cut with a buffer, so relations from
+  // neighbouring countries (e.g. a Mozambican district in the Malawi extract)
+  // can slip through the tag-based extractor filter when they lack ISO tags.
+  // Drop anything whose representative point falls outside the country's own
+  // admin_level=2 polygon. Shared borders are unaffected: the level-2 country
+  // feature itself is always kept, so border arcs stay in the topology.
+  const filteredGeojson = filterCrossBorderFeatures(combinedGeojson, countryCode);
+
+  const topojsonString = await convertGeoJsonToTopojson(filteredGeojson, paths, countryCode);
 
   const serializedTopojson = stringifyTopojsonReadable(JSON.parse(topojsonString));
   await writeCache(cache, paths.topojson, serializedTopojson);
 
   return { topojsonString: serializedTopojson, source: 'generated' };
+}
+
+/**
+ * Drops features that belong to neighbouring countries but leaked into this
+ * country's Geofabrik extract (buffer overlap + missing ISO tags defeat the
+ * tag-based extractor filter, e.g. Angónia district appearing in Malawi).
+ *
+ * A feature is kept when its representative point (admin_centre, then
+ * label_point, then geometric centroid) falls inside the union of the kept
+ * admin_level=2 country geometries. Level-2 features tagged with a foreign
+ * ISO3166-1 code are dropped outright. Custom-layer features are subject to
+ * the same containment check. If no level-2 geometry exists the input is
+ * returned unfiltered (fail open) rather than wiping the dataset.
+ */
+export function filterCrossBorderFeatures(geojson: any, countryCode: string): any {
+  const features = Array.isArray(geojson?.features) ? geojson.features : [];
+  if (features.length === 0) return geojson;
+
+  const upper = countryCode.toUpperCase();
+  const isCountryLevel = (f: any) =>
+    Number(f?.properties?.admin_level) === 2 && !f?.properties?.custom_layer;
+
+  const countryGeoms = features.filter((f: any) => {
+    if (!isCountryLevel(f)) return false;
+    const iso = f?.properties?.['ISO3166-1'];
+    if (iso && String(iso).toUpperCase() !== upper) return false;
+    return true;
+  });
+
+  if (countryGeoms.length === 0) {
+    console.warn(`No admin_level=2 geometry for ${upper}; skipping cross-border filter.`);
+    return geojson;
+  }
+
+  const kept: any[] = [];
+  const droppedNames: string[] = [];
+
+  for (const f of features) {
+    const props = f?.properties || {};
+    if (!props.custom_layer && Number(props.admin_level) === 2) {
+      const iso = props['ISO3166-1'];
+      if (iso && String(iso).toUpperCase() !== upper) {
+        droppedNames.push(props.name || props.id || 'unnamed level-2');
+        continue;
+      }
+      kept.push(f);
+      continue;
+    }
+
+    const pt: [number, number] | null =
+      props.admin_centre ?? props.label_point ?? getPolygonCentroid(f?.geometry) ?? null;
+    const inside =
+      pt &&
+      countryGeoms.some((g: any) => pointInPolygonGeometry(pt as [number, number], g?.geometry));
+
+    if (inside) {
+      kept.push(f);
+    } else {
+      droppedNames.push(props.name || props.id || 'unnamed feature');
+    }
+  }
+
+  if (droppedNames.length > 0) {
+    console.log(
+      `Filtered ${droppedNames.length} cross-border features for ${upper}: ${droppedNames.slice(0, 10).join(', ')}${droppedNames.length > 10 ? ', …' : ''}`,
+    );
+  }
+
+  return { ...geojson, features: kept };
+}
+
+/**
+ * Narrows a TopoJSON topology to just the rendered layers: the requested
+ * admin level(s) plus the requested custom layer(s). Used by the download
+ * endpoint so exports contain only what the map shows. When no filters are
+ * given the topology is returned unchanged.
+ */
+export function filterTopojsonGeometries(
+  topo: Record<string, unknown>,
+  opts: { adminLevels?: number[]; customLayers?: string[] },
+): Record<string, unknown> {
+  const { adminLevels, customLayers } = opts;
+  if ((!adminLevels || adminLevels.length === 0) && (!customLayers || customLayers.length === 0)) {
+    return topo;
+  }
+
+  const adminSet = new Set((adminLevels || []).map(Number));
+  const customSet = new Set((customLayers || []).map((c) => c.toLowerCase()));
+  const objects = (topo.objects || {}) as Record<string, any>;
+  const filteredObjects: Record<string, any> = {};
+
+  for (const [key, obj] of Object.entries(objects)) {
+    if (!obj || !Array.isArray(obj.geometries)) {
+      filteredObjects[key] = obj;
+      continue;
+    }
+    filteredObjects[key] = {
+      ...obj,
+      geometries: obj.geometries.filter((g: any) => {
+        if (g?.properties?.custom_layer) {
+          return customSet.has(String(g.properties.custom_layer).toLowerCase());
+        }
+        return adminSet.has(Number(g?.properties?.admin_level));
+      }),
+    };
+  }
+
+  return { ...topo, objects: filteredObjects };
+}
+
+function parseListParam(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
 }
 
 export const adminBoundaries = async (
@@ -108,7 +236,23 @@ export const adminBoundaries = async (
     const includeCentersParam =
       url.searchParams.get('include_centers') ?? url.searchParams.get('centers');
 
+    // Narrow the export to the rendered layers: ?admin_level=4&custom_layer=mw_epa
+    // (comma-separated lists supported). Absent params keep the full topology.
+    const adminLevelFilter = parseListParam(url.searchParams.get('admin_level'))
+      .map(Number)
+      .filter((n) => Number.isFinite(n));
+    const customLayerFilter = parseListParam(
+      url.searchParams.get('custom_layer') ?? url.searchParams.get('custom_layers'),
+    );
+
     let finalTopojsonString = topojsonString;
+    if (adminLevelFilter.length > 0 || customLayerFilter.length > 0) {
+      const filtered = filterTopojsonGeometries(JSON.parse(topojsonString), {
+        adminLevels: adminLevelFilter,
+        customLayers: customLayerFilter,
+      });
+      finalTopojsonString = stringifyTopojsonReadable(filtered);
+    }
     // For raw TopoJSON downloads, default include_centers to false to match the web UI download default,
     // unless explicitly requested with include_centers=true / centers=true.
     // For JSON envelope responses (e.g. POST /), default include_centers to true so web UI and tests have centers.
@@ -117,17 +261,20 @@ export const adminBoundaries = async (
       : includeCentersParam !== 'false';
 
     if (!shouldIncludeCenters) {
-      const stripped = stripCentersFromTopojson(JSON.parse(topojsonString));
+      const stripped = stripCentersFromTopojson(JSON.parse(finalTopojsonString));
       finalTopojsonString = stringifyTopojsonReadable(stripped);
     }
 
     if (rawTopojson) {
+      const nameParts = [validatedCode];
+      if (adminLevelFilter.length > 0) nameParts.push(`admin${adminLevelFilter.join('-')}`);
+      if (customLayerFilter.length > 0) nameParts.push(customLayerFilter.join('-'));
       return new Response(finalTopojsonString, {
         status: 200,
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json',
-          'Content-Disposition': `attachment; filename="${validatedCode}.topo.json"`,
+          'Content-Disposition': `attachment; filename="${nameParts.join('_')}.topo.json"`,
           'Cache-Control': 'public, max-age=86400',
         },
       });
@@ -217,10 +364,7 @@ function buildMapshaperInputsAndCommands(geojson: any): {
       `  name: this.properties.name || "", ` +
       `  admin_level: this.properties.admin_level, ` +
       `  custom_layer: this.properties.custom_layer, ` +
-      `  layer_name: this.properties.layer_name, ` +
       `  district: this.properties.district, ` +
-      `  unit_type: this.properties.unit_type, ` +
-      `  citation: this.properties.citation, ` +
       `  center: c, ` +
       `  center_source: s ` +
       `}; '`,
@@ -230,7 +374,11 @@ function buildMapshaperInputsAndCommands(geojson: any): {
   return { input, commands };
 }
 
-async function convertGeoJsonToTopojson(geojson: any, paths: CachePaths): Promise<string> {
+async function convertGeoJsonToTopojson(
+  geojson: any,
+  paths: CachePaths,
+  countryCode: string,
+): Promise<string> {
   const cache = getCache();
 
   // Optional/debug cache
@@ -240,7 +388,7 @@ async function convertGeoJsonToTopojson(geojson: any, paths: CachePaths): Promis
 
   const { input, commands } = buildMapshaperInputsAndCommands(geojson);
 
-  const topojsonString = await new Promise<string>((resolve, reject) => {
+  const rawTopojsonString = await new Promise<string>((resolve, reject) => {
     mapshaper.applyCommands(commands.join(' '), input, (err: Error | null, output: any) => {
       geojson = null as any;
 
@@ -257,8 +405,18 @@ async function convertGeoJsonToTopojson(geojson: any, paths: CachePaths): Promis
     });
   });
 
+  // Per-feature custom-layer metadata (layer_name, citation, unit_type) is
+  // deliberately stripped above — TopoJSON has no property lookup, so the
+  // layer info lives once at the topology level instead of ~300 duplicated
+  // copies. topojson-client ignores foreign top-level members.
+  const topo = JSON.parse(rawTopojsonString);
+  const customLayers = getCustomLayerInfoForCountry(countryCode);
+  if (customLayers.length > 0) {
+    topo.custom_layers = customLayers;
+  }
+
   console.log('Mapshaper processing complete.');
-  return topojsonString;
+  return JSON.stringify(topo);
 }
 
 function buildSuccessResponse(
