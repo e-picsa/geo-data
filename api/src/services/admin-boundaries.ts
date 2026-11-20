@@ -30,7 +30,7 @@ export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 14;
+const CACHE_VERSION = 15;
 
 type Source = 'cache' | 'generated';
 
@@ -91,12 +91,20 @@ export async function getBoundariesTopojson(
  * country's Geofabrik extract (buffer overlap + missing ISO tags defeat the
  * tag-based extractor filter, e.g. Angónia district appearing in Malawi).
  *
- * A feature is kept when its representative point (admin_centre, then
- * label_point, then geometric centroid) falls inside the union of the kept
- * admin_level=2 country geometries. Level-2 features tagged with a foreign
- * ISO3166-1 code are dropped outright. Custom-layer features are subject to
- * the same containment check. If no level-2 geometry exists the input is
- * returned unfiltered (fail open) rather than wiping the dataset.
+ * A feature is kept when a representative interior point (or, for concave
+ * shapes, a polygon vertex) lies strictly inside the country's admin_level=2
+ * geometry — strictly, so shared-border vertices at distance 0 don't count.
+ * Level-2 features tagged with a foreign ISO3166-1 code are dropped
+ * outright. Custom-layer features are subject to the same containment check.
+ *
+ * The containment union only trusts level-2 polygons affirmatively tagged
+ * with our ISO3166-1 code: a neighbour's whole country polygon can be fully
+ * present in enclave cases (e.g. Lesotho inside the South Africa extract),
+ * and an untagged one must not launder its districts through. If nothing is
+ * tagged, the largest untagged level-2 polygon is used as a fallback (the
+ * requested country's own polygon is always the largest fully present one);
+ * if no level-2 geometry exists at all the input is returned unfiltered
+ * (fail open) rather than wiping the dataset.
  */
 export function filterCrossBorderFeatures(geojson: any, countryCode: string): any {
   const features = Array.isArray(geojson?.features) ? geojson.features : [];
@@ -107,12 +115,27 @@ export function filterCrossBorderFeatures(geojson: any, countryCode: string): an
   const isCountryLevel = (f: any) =>
     Number(f?.properties?.admin_level) === 2 && !f?.properties?.custom_layer;
 
-  const countryGeoms = features.filter((f: any) => {
-    if (!isCountryLevel(f)) return false;
-    const iso = f?.properties?.['ISO3166-1'];
-    if (iso && String(iso).toUpperCase() !== upper) return false;
-    return true;
-  });
+  // Only ISO-affirmed polygons join the containment union. An untagged
+  // neighbour (e.g. Lesotho in the South Africa extract) must not launder
+  // its districts through.
+  const tagged = features.filter(
+    (f: any) =>
+      isCountryLevel(f) && String(f?.properties?.['ISO3166-1'] ?? '').toUpperCase() === upper,
+  );
+
+  let countryGeoms = tagged;
+  if (countryGeoms.length === 0) {
+    const untagged = features.filter(
+      (f: any) => isCountryLevel(f) && !f?.properties?.['ISO3166-1'],
+    );
+    untagged.sort((a: any, b: any) => bboxArea(b?.geometry) - bboxArea(a?.geometry));
+    countryGeoms = untagged.slice(0, 1);
+    if (countryGeoms.length > 0) {
+      console.warn(
+        `No ISO3166-1-tagged admin_level=2 geometry for ${upper}; falling back to largest untagged polygon.`,
+      );
+    }
+  }
 
   if (countryGeoms.length === 0) {
     console.warn(`No admin_level=2 geometry for ${upper}; skipping cross-border filter.`);
@@ -127,6 +150,13 @@ export function filterCrossBorderFeatures(geojson: any, countryCode: string): an
     if (!props.custom_layer && Number(props.admin_level) === 2) {
       const iso = props['ISO3166-1'];
       if (iso && String(iso).toUpperCase() !== upper) {
+        droppedNames.push(props.name || props.id || 'unnamed level-2');
+        continue;
+      }
+      // Untagged level-2 polygons are only kept when one was trusted into
+      // the containment union (the fallback case); any other untagged
+      // country polygon is a neighbour and must not ship in the export.
+      if (!iso && !countryGeoms.includes(f)) {
         droppedNames.push(props.name || props.id || 'unnamed level-2');
         continue;
       }
@@ -193,6 +223,29 @@ function representativePoints(geometry: any, props: any): [number, number][] {
   }
 
   return pts;
+}
+
+/** Rough bbox area in square degrees, for ranking fallback polygons. */
+function bboxArea(geometry: any): number {
+  if (!geometry?.coordinates || !Array.isArray(geometry.coordinates)) return -Infinity;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const visit = (pt: any) => {
+    if (!Array.isArray(pt) || pt.length < 2) return;
+    if (typeof pt[0] !== 'number' || typeof pt[1] !== 'number') {
+      for (const sub of pt) visit(sub);
+      return;
+    }
+    if (pt[0] < minX) minX = pt[0];
+    if (pt[1] < minY) minY = pt[1];
+    if (pt[0] > maxX) maxX = pt[0];
+    if (pt[1] > maxY) maxY = pt[1];
+  };
+  visit(geometry.coordinates);
+  if (!Number.isFinite(minX)) return -Infinity;
+  return (maxX - minX) * (maxY - minY);
 }
 
 /**

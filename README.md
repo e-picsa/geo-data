@@ -64,7 +64,7 @@ Cached objects are namespaced by two independent versions, both bumped by hand w
 | Constant             | Location                                        | Invalidates                                                                            | Cost of bumping                                        |
 | -------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `CACHE_VERSION = 6`  | `api/src/services/geofabrik/fetch-geofabrik.ts` | Extraction output under `geofabrik/v6/…` (raw PBF, extracted relations, intermediates) | Full cold path: re-download the PBF and re-extract     |
-| `CACHE_VERSION = 14` | `api/src/services/admin-boundaries.ts`          | Derived TopoJSON under `derived/v14/…`                                                 | Mapshaper re-run over already-extracted data (seconds) |
+| `CACHE_VERSION = 15` | `api/src/services/admin-boundaries.ts`          | Derived TopoJSON under `derived/v15/…`                                                 | Mapshaper re-run over already-extracted data (seconds) |
 
 Bump the **extraction** version when anything upstream of the extracted relations changes (`api/src/services/geofabrik/**`, including the OSM entity handling). Bump the **derived** version when the conversion, simplification, or centring changes (`topojson.utils.ts`, `geometry.utils.ts`, cache paths, response shaping that alters stored bytes). Dependency bumps matter too: `mapshaper` affects the derived output, `osmix`/`pbf` the extraction output. If unsure, bump both — the cost is a slower first generation, never wrong data.
 

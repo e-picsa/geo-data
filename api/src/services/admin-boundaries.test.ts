@@ -489,6 +489,88 @@ test('filterCrossBorderFeatures - neighbour sharing a border is dropped (Angóni
   expect(names).not.toContain('Angónia');
 });
 
+test('filterCrossBorderFeatures - untagged neighbour level-2 never joins the union', () => {
+  // Enclave fully surrounded by the country (Lesotho-in-South-Africa shape):
+  // the neighbour polygon is complete but untagged, so it must neither join
+  // the union nor ship in the export. The country polygon models the enclave
+  // as a hole, so the enclave's districts fail containment too.
+  const countryRing: number[][] = [
+    [0, 0],
+    [20, 0],
+    [20, 20],
+    [0, 20],
+    [0, 0],
+  ];
+  const enclaveRing: number[][] = [
+    [5, 5],
+    [9, 5],
+    [9, 9],
+    [5, 9],
+    [5, 5],
+  ];
+  const fc: any = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { id: '1', name: 'Testland', admin_level: 2, 'ISO3166-1': 'TL' },
+        geometry: { type: 'Polygon', coordinates: [countryRing, enclaveRing] },
+      },
+      {
+        type: 'Feature',
+        properties: { id: '2', name: 'Enclave', admin_level: 2 },
+        geometry: square(5, 5, 9, 9),
+      },
+      {
+        type: 'Feature',
+        properties: { id: '3', name: 'Enclave District', admin_level: 4 },
+        geometry: square(6, 6, 8, 8),
+      },
+      {
+        type: 'Feature',
+        properties: { id: '4', name: 'Own District', admin_level: 4 },
+        geometry: square(12, 12, 14, 14),
+      },
+    ],
+  };
+  const out = filterCrossBorderFeatures(fc, 'TL');
+  const names = out.features.map((f: any) => f.properties.name);
+  expect(names).toContain('Testland');
+  expect(names).toContain('Own District');
+  expect(names).not.toContain('Enclave');
+  expect(names).not.toContain('Enclave District');
+});
+
+test('filterCrossBorderFeatures - falls back to largest untagged level-2', () => {
+  // Own country polygon simply lacks ISO tags: the single untagged level-2
+  // is trusted so filtering still works.
+  const fc: any = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { id: '1', name: 'Testland', admin_level: 2 },
+        geometry: square(0, 0, 10, 10),
+      },
+      {
+        type: 'Feature',
+        properties: { id: '2', name: 'Central District', admin_level: 4 },
+        geometry: square(1, 1, 4, 4),
+      },
+      {
+        type: 'Feature',
+        properties: { id: '3', name: 'Angónia', admin_level: 5 },
+        geometry: square(20, 20, 25, 25),
+      },
+    ],
+  };
+  const out = filterCrossBorderFeatures(fc, 'TL');
+  const names = out.features.map((f: any) => f.properties.name);
+  expect(names).toContain('Testland');
+  expect(names).toContain('Central District');
+  expect(names).not.toContain('Angónia');
+});
+
 test('filterCrossBorderFeatures - island district kept via per-part centroids (Likoma case)', () => {
   // Country covers two land masses with open water between; the district's
   // combined centroid lands in the water, but each island part is on land.
