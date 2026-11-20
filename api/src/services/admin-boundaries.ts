@@ -451,7 +451,7 @@ export const adminBoundaries = async (
           ...corsHeaders,
           'Content-Type': 'application/json',
           'Content-Disposition': `attachment; filename="${nameParts.join('_')}.topo.json"`,
-          'Cache-Control': 'public, max-age=86400',
+          'Cache-Control': 'no-store',
         },
       });
     }
@@ -617,7 +617,7 @@ function buildSuccessResponse(
     },
     {
       headers: {
-        'Cache-Control': 'public, max-age=86400',
+        'Cache-Control': 'no-store',
       },
     },
   );
