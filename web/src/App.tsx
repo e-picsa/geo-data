@@ -529,7 +529,15 @@ function App() {
       {/* Sidebar Controls */}
       <div className="w-80 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full shadow-lg z-10">
         <div className="p-4 border-b border-slate-200 flex-shrink-0">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">E-PICSA Geo Data</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">E-PICSA Geo Data</h1>
+            <span
+              className="text-[10px] font-mono font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5"
+              title="App version"
+            >
+              v{import.meta.env.VITE_APP_VERSION || 'dev'}
+            </span>
+          </div>
           <p className="text-xs text-slate-500 mt-1">Country boundaries & offline tile packs</p>
         </div>
 

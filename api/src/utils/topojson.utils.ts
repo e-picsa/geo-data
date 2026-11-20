@@ -1,8 +1,9 @@
 /**
- * Pretty-prints a TopoJSON object with compact serializations for:
- *   - the top-level `arcs` array (placed at the end, one arc per line)
- *   - every nested `arcs` field (collapsed inline)
- *   - every `coordinates` field (collapsed inline)
+ * Pretty-prints a TopoJSON object, collapsing every value array (bbox,
+ * transform scale/translate, per-geometry arcs, center points, ...) onto a
+ * single line inline — except the top-level `arcs` array, which is placed at
+ * the end with one arc per line. Arrays of objects (e.g. `geometries`,
+ * `custom_layers`) stay expanded so the file remains readable.
  *
  * Produces valid JSON.
  */
@@ -17,15 +18,11 @@ export function stringifyTopojsonReadable(topo: Record<string, unknown>): string
   const PLACEHOLDER_PREFIX = '__COMPACT_PLACEHOLDER_';
   const PLACEHOLDER_SUFFIX = '__';
 
-  const shouldCompact = (key: string, value: unknown): boolean => {
-    if (!Array.isArray(value)) return false;
-    if (key === 'arcs') return true;
-    if (key === 'coordinates') return true;
-    return false;
-  };
+  const isPlainObject = (value: unknown): boolean =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
 
-  const replacer = (key: string, value: unknown) => {
-    if (shouldCompact(key, value)) {
+  const replacer = (_key: string, value: unknown) => {
+    if (Array.isArray(value) && !value.some(isPlainObject)) {
       const idx = placeholders.length;
       placeholders.push(JSON.stringify(value));
       return `${PLACEHOLDER_PREFIX}${idx}${PLACEHOLDER_SUFFIX}`;
