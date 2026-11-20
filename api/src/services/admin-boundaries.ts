@@ -30,7 +30,7 @@ export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 15;
+const CACHE_VERSION = 16;
 
 type Source = 'cache' | 'generated';
 
@@ -584,11 +584,13 @@ async function convertGeoJsonToTopojson(
   // Per-feature custom-layer metadata (layer_name, citation, unit_type) is
   // deliberately stripped above — TopoJSON has no property lookup, so the
   // layer info lives once at the topology level instead of ~300 duplicated
-  // copies. topojson-client ignores foreign top-level members.
+  // copies. topojson-client ignores foreign top-level members. It is placed
+  // before `objects` so the metadata doesn't get buried under the geometry.
   const topo = JSON.parse(rawTopojsonString);
   const customLayers = getCustomLayerInfoForCountry(countryCode);
   if (customLayers.length > 0) {
-    topo.custom_layers = customLayers;
+    const { objects, ...head } = topo;
+    return JSON.stringify({ ...head, custom_layers: customLayers, objects });
   }
 
   console.log('Mapshaper processing complete.');

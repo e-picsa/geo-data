@@ -62,6 +62,8 @@ test('adminBoundaries - Validates Malawi boundaries, district centers, and custo
   expect(topojson.custom_layers.find((l: any) => l.id === 'mw_epa')?.citation.sourceName).toContain(
     'MASDAP',
   );
+  // Metadata serializes before the geometry so it doesn't get buried
+  expect(data.topojson.indexOf('"custom_layers"')).toBeLessThan(data.topojson.indexOf('"objects"'));
 
   const objectKey = Object.keys(topojson.objects)[0];
   const geometries = topojson.objects[objectKey].geometries;
