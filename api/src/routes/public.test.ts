@@ -44,6 +44,8 @@ test('public routes - GET /boundaries/MW returns raw compacted TopoJSON with cen
   const res = await handlePublicRoutes(req, '/boundaries/MW');
   expect(res.status).toBe(200);
   expect(res.headers.get('content-type')).toContain('application/json');
+  expect(res.headers.get('cache-control')).toBe('no-store');
+  expect(res.headers.get('access-control-expose-headers')).toContain('Content-Disposition');
 
   const text = await res.text();
   // Validates it is raw TopoJSON (not enveloped in { country_code, topojson })
