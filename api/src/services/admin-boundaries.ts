@@ -15,7 +15,13 @@ import {
   stripCentersFromTopojson,
   summarizeTopojson,
 } from '../utils/topojson.utils.ts';
-import { isCentroidInsideGeometry } from '../utils/geometry.utils.ts';
+import {
+  isCentroidInsideGeometry,
+  getPolygonCentroid,
+  getRingAreaAndCentroid,
+  pointInRing,
+  pointInPolygonGeometry,
+} from '../utils/geometry.utils.ts';
 import { corsHeaders } from '../utils/cors.ts';
 import { toBoundaryErrorResponse } from './boundary-errors.ts';
 export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
@@ -24,7 +30,7 @@ export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 10;
+const CACHE_VERSION = 15;
 
 type Source = 'cache' | 'generated';
 
@@ -64,12 +70,310 @@ export async function getBoundariesTopojson(
         }
       : osmData;
 
-  const topojsonString = await convertGeoJsonToTopojson(combinedGeojson, paths);
+  // Geofabrik country extracts are cut with a buffer, so relations from
+  // neighbouring countries (e.g. a Mozambican district in the Malawi extract)
+  // can slip through the tag-based extractor filter when they lack ISO tags.
+  // Drop anything whose representative point falls outside the country's own
+  // admin_level=2 polygon. Shared borders are unaffected: the level-2 country
+  // feature itself is always kept, so border arcs stay in the topology.
+  const filteredGeojson = filterCrossBorderFeatures(combinedGeojson, countryCode);
+
+  const topojsonString = await convertGeoJsonToTopojson(filteredGeojson, paths, countryCode);
 
   const serializedTopojson = stringifyTopojsonReadable(JSON.parse(topojsonString));
   await writeCache(cache, paths.topojson, serializedTopojson);
 
   return { topojsonString: serializedTopojson, source: 'generated' };
+}
+
+/**
+ * Drops features that belong to neighbouring countries but leaked into this
+ * country's Geofabrik extract (buffer overlap + missing ISO tags defeat the
+ * tag-based extractor filter, e.g. Angónia district appearing in Malawi).
+ *
+ * A feature is kept when a representative interior point (or, for concave
+ * shapes, a polygon vertex) lies strictly inside the country's admin_level=2
+ * geometry — strictly, so shared-border vertices at distance 0 don't count.
+ * Level-2 features tagged with a foreign ISO3166-1 code are dropped
+ * outright. Custom-layer features are subject to the same containment check.
+ *
+ * The containment union only trusts level-2 polygons affirmatively tagged
+ * with our ISO3166-1 code: a neighbour's whole country polygon can be fully
+ * present in enclave cases (e.g. Lesotho inside the South Africa extract),
+ * and an untagged one must not launder its districts through. If nothing is
+ * tagged, the largest untagged level-2 polygon is used as a fallback (the
+ * requested country's own polygon is always the largest fully present one);
+ * if no level-2 geometry exists at all the input is returned unfiltered
+ * (fail open) rather than wiping the dataset.
+ */
+export function filterCrossBorderFeatures(geojson: any, countryCode: string): any {
+  const features = Array.isArray(geojson?.features) ? geojson.features : [];
+  if (features.length === 0) return geojson;
+
+  const upper = countryCode.toUpperCase();
+  const isoPrefix = `${upper}-`;
+  const isCountryLevel = (f: any) =>
+    Number(f?.properties?.admin_level) === 2 && !f?.properties?.custom_layer;
+
+  // Only ISO-affirmed polygons join the containment union. An untagged
+  // neighbour (e.g. Lesotho in the South Africa extract) must not launder
+  // its districts through.
+  const tagged = features.filter(
+    (f: any) =>
+      isCountryLevel(f) && String(f?.properties?.['ISO3166-1'] ?? '').toUpperCase() === upper,
+  );
+
+  let countryGeoms = tagged;
+  if (countryGeoms.length === 0) {
+    const untagged = features.filter(
+      (f: any) => isCountryLevel(f) && !f?.properties?.['ISO3166-1'],
+    );
+    untagged.sort((a: any, b: any) => bboxArea(b?.geometry) - bboxArea(a?.geometry));
+    countryGeoms = untagged.slice(0, 1);
+    if (countryGeoms.length > 0) {
+      console.warn(
+        `No ISO3166-1-tagged admin_level=2 geometry for ${upper}; falling back to largest untagged polygon.`,
+      );
+    }
+  }
+
+  if (countryGeoms.length === 0) {
+    console.warn(`No admin_level=2 geometry for ${upper}; skipping cross-border filter.`);
+    return geojson;
+  }
+
+  const kept: any[] = [];
+  const droppedNames: string[] = [];
+
+  for (const f of features) {
+    const props = f?.properties || {};
+    if (!props.custom_layer && Number(props.admin_level) === 2) {
+      const iso = props['ISO3166-1'];
+      if (iso && String(iso).toUpperCase() !== upper) {
+        droppedNames.push(props.name || props.id || 'unnamed level-2');
+        continue;
+      }
+      // Untagged level-2 polygons are only kept when one was trusted into
+      // the containment union (the fallback case); any other untagged
+      // country polygon is a neighbour and must not ship in the export.
+      if (!iso && !countryGeoms.includes(f)) {
+        droppedNames.push(props.name || props.id || 'unnamed level-2');
+        continue;
+      }
+      kept.push(f);
+      continue;
+    }
+
+    // Affirmatively tagged as ours (e.g. Likoma district MW-LK) — keep
+    // regardless of geometry quirks such as exclaves.
+    const iso2 = props['ISO3166-2'];
+    if (iso2 && String(iso2).toUpperCase().startsWith(isoPrefix)) {
+      kept.push(f);
+      continue;
+    }
+
+    const inside = isInsideCountry(f?.geometry, props, countryGeoms);
+
+    if (inside) {
+      kept.push(f);
+    } else {
+      droppedNames.push(props.name || props.id || 'unnamed feature');
+    }
+  }
+
+  if (droppedNames.length > 0) {
+    console.log(
+      `Filtered ${droppedNames.length} cross-border features for ${upper}: ${droppedNames.slice(0, 10).join(', ')}${droppedNames.length > 10 ? ', …' : ''}`,
+    );
+  }
+
+  return { ...geojson, features: kept };
+}
+
+/**
+ * Candidate interior points for containment testing, most authoritative
+ * first: tagged admin centre / label point, then the whole-geometry centroid
+ * (only when it falls inside its own geometry — concave shapes like Chitipa
+ * fail this), then each Polygon part's centroid (only when inside its own
+ * part — island districts like Likoma have a combined centroid out in the
+ * lake, but per-island centroids on land).
+ */
+function representativePoints(geometry: any, props: any): [number, number][] {
+  const pts: [number, number][] = [];
+  if (Array.isArray(props?.admin_centre)) pts.push(props.admin_centre as [number, number]);
+  if (Array.isArray(props?.label_point)) pts.push(props.label_point as [number, number]);
+
+  if (!geometry?.coordinates || !Array.isArray(geometry.coordinates)) return pts;
+
+  if (isCentroidInsideGeometry(geometry)) {
+    const c = getPolygonCentroid(geometry);
+    if (c) pts.push(c);
+  }
+
+  const polys = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  if (Array.isArray(polys)) {
+    for (const poly of polys) {
+      if (!Array.isArray(poly) || !Array.isArray(poly[0]) || poly[0].length === 0) continue;
+      const { cx, cy } = getRingAreaAndCentroid(poly[0]);
+      const pt: [number, number] = [cx, cy];
+      if (!pointInRing(pt, poly[0])) continue;
+      if (poly.slice(1).some((hole: number[][]) => pointInRing(pt, hole))) continue;
+      pts.push(pt);
+    }
+  }
+
+  return pts;
+}
+
+/** Rough bbox area in square degrees, for ranking fallback polygons. */
+function bboxArea(geometry: any): number {
+  if (!geometry?.coordinates || !Array.isArray(geometry.coordinates)) return -Infinity;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const visit = (pt: any) => {
+    if (!Array.isArray(pt) || pt.length < 2) return;
+    if (typeof pt[0] !== 'number' || typeof pt[1] !== 'number') {
+      for (const sub of pt) visit(sub);
+      return;
+    }
+    if (pt[0] < minX) minX = pt[0];
+    if (pt[1] < minY) minY = pt[1];
+    if (pt[0] > maxX) maxX = pt[0];
+    if (pt[1] > maxY) maxY = pt[1];
+  };
+  visit(geometry.coordinates);
+  if (!Number.isFinite(minX)) return -Infinity;
+  return (maxX - minX) * (maxY - minY);
+}
+
+/**
+ * Minimum distance in degrees below which a point counts as lying ON the
+ * country boundary rather than inside it. Shared-border vertices are derived
+ * from the same OSM nodes, so their distance is exactly 0; genuinely inland
+ * points are orders of magnitude further away (OSM precision is ~1e-7).
+ */
+const BOUNDARY_EPSILON = 1e-9;
+
+function pointToSegmentDistance(pt: [number, number], a: number[], b: number[]): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lenSq = dx * dx + dy * dy;
+  let t = 0;
+  if (lenSq > 0) {
+    t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / lenSq));
+  }
+  const ex = a[0] + t * dx - pt[0];
+  const ey = a[1] + t * dy - pt[1];
+  return Math.sqrt(ex * ex + ey * ey);
+}
+
+function distanceToBoundary(pt: [number, number], geometry: any): number {
+  if (!geometry?.coordinates || !Array.isArray(geometry.coordinates)) return Infinity;
+  const polys = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  let min = Infinity;
+  for (const poly of polys) {
+    if (!Array.isArray(poly)) continue;
+    for (const ring of poly) {
+      if (!Array.isArray(ring)) continue;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const d = pointToSegmentDistance(pt, ring[j], ring[i]);
+        if (d < min) min = d;
+      }
+    }
+  }
+  return min;
+}
+
+/** Strict containment: inside the ring(s) and not merely on the boundary. */
+function strictlyInsideCountry(pt: [number, number], countryGeoms: any[]): boolean {
+  return countryGeoms.some(
+    (g: any) =>
+      pointInPolygonGeometry(pt, g?.geometry) &&
+      distanceToBoundary(pt, g?.geometry) > BOUNDARY_EPSILON,
+  );
+}
+
+/**
+ * Whether a feature overlaps the country: any interior candidate strictly
+ * inside, else any polygon vertex strictly inside. The vertex fallback covers
+ * concave features (Blantyre City, Thuma FR) whose area centroids fall
+ * outside their own rings. The strictness (epsilon off the boundary) is what
+ * keeps neighbours out: Angónia's only "inside"-testing points are its
+ * shared-border vertices at distance 0.
+ */
+function isInsideCountry(geometry: any, props: any, countryGeoms: any[]): boolean {
+  if (representativePoints(geometry, props).some((pt) => strictlyInsideCountry(pt, countryGeoms))) {
+    return true;
+  }
+
+  if (!geometry?.coordinates || !Array.isArray(geometry.coordinates)) return false;
+  const polys = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  if (!Array.isArray(polys)) return false;
+
+  for (const poly of polys) {
+    if (!Array.isArray(poly)) continue;
+    for (const ring of poly) {
+      if (!Array.isArray(ring)) continue;
+      for (const pt of ring) {
+        if (!Array.isArray(pt) || pt.length < 2) continue;
+        if (strictlyInsideCountry([pt[0], pt[1]], countryGeoms)) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Narrows a TopoJSON topology to just the rendered layers: every admin level
+ * down to (and including) the requested one — e.g. `admin_level=4` keeps
+ * levels 2, 3 and 4 — plus the requested custom layer(s). Used by the
+ * download endpoint so exports contain what the map shows. When no filters
+ * are given the topology is returned unchanged.
+ */
+export function filterTopojsonGeometries(
+  topo: Record<string, unknown>,
+  opts: { adminLevels?: number[]; customLayers?: string[] },
+): Record<string, unknown> {
+  const { adminLevels, customLayers } = opts;
+  if ((!adminLevels || adminLevels.length === 0) && (!customLayers || customLayers.length === 0)) {
+    return topo;
+  }
+
+  const finiteLevels = (adminLevels || []).map(Number).filter(Number.isFinite);
+  const maxAdminLevel = finiteLevels.length > 0 ? Math.max(...finiteLevels) : -Infinity;
+  const customSet = new Set((customLayers || []).map((c) => c.toLowerCase()));
+  const objects = (topo.objects || {}) as Record<string, any>;
+  const filteredObjects: Record<string, any> = {};
+
+  for (const [key, obj] of Object.entries(objects)) {
+    if (!obj || !Array.isArray(obj.geometries)) {
+      filteredObjects[key] = obj;
+      continue;
+    }
+    filteredObjects[key] = {
+      ...obj,
+      geometries: obj.geometries.filter((g: any) => {
+        if (g?.properties?.custom_layer) {
+          return customSet.has(String(g.properties.custom_layer).toLowerCase());
+        }
+        const lvl = Number(g?.properties?.admin_level);
+        return Number.isFinite(lvl) && lvl <= maxAdminLevel;
+      }),
+    };
+  }
+
+  return { ...topo, objects: filteredObjects };
+}
+
+function parseListParam(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
 }
 
 export const adminBoundaries = async (
@@ -108,7 +412,23 @@ export const adminBoundaries = async (
     const includeCentersParam =
       url.searchParams.get('include_centers') ?? url.searchParams.get('centers');
 
+    // Narrow the export to the rendered layers: ?admin_level=4&custom_layer=mw_epa
+    // (comma-separated lists supported). Absent params keep the full topology.
+    const adminLevelFilter = parseListParam(url.searchParams.get('admin_level'))
+      .map(Number)
+      .filter((n) => Number.isFinite(n));
+    const customLayerFilter = parseListParam(
+      url.searchParams.get('custom_layer') ?? url.searchParams.get('custom_layers'),
+    );
+
     let finalTopojsonString = topojsonString;
+    if (adminLevelFilter.length > 0 || customLayerFilter.length > 0) {
+      const filtered = filterTopojsonGeometries(JSON.parse(topojsonString), {
+        adminLevels: adminLevelFilter,
+        customLayers: customLayerFilter,
+      });
+      finalTopojsonString = stringifyTopojsonReadable(filtered);
+    }
     // For raw TopoJSON downloads, default include_centers to false to match the web UI download default,
     // unless explicitly requested with include_centers=true / centers=true.
     // For JSON envelope responses (e.g. POST /), default include_centers to true so web UI and tests have centers.
@@ -117,17 +437,20 @@ export const adminBoundaries = async (
       : includeCentersParam !== 'false';
 
     if (!shouldIncludeCenters) {
-      const stripped = stripCentersFromTopojson(JSON.parse(topojsonString));
+      const stripped = stripCentersFromTopojson(JSON.parse(finalTopojsonString));
       finalTopojsonString = stringifyTopojsonReadable(stripped);
     }
 
     if (rawTopojson) {
+      const nameParts = [validatedCode];
+      if (adminLevelFilter.length > 0) nameParts.push(`admin${adminLevelFilter.join('-')}`);
+      if (customLayerFilter.length > 0) nameParts.push(customLayerFilter.join('-'));
       return new Response(finalTopojsonString, {
         status: 200,
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json',
-          'Content-Disposition': `attachment; filename="${validatedCode}.topo.json"`,
+          'Content-Disposition': `attachment; filename="${nameParts.join('_')}.topo.json"`,
           'Cache-Control': 'public, max-age=86400',
         },
       });
@@ -217,10 +540,7 @@ function buildMapshaperInputsAndCommands(geojson: any): {
       `  name: this.properties.name || "", ` +
       `  admin_level: this.properties.admin_level, ` +
       `  custom_layer: this.properties.custom_layer, ` +
-      `  layer_name: this.properties.layer_name, ` +
       `  district: this.properties.district, ` +
-      `  unit_type: this.properties.unit_type, ` +
-      `  citation: this.properties.citation, ` +
       `  center: c, ` +
       `  center_source: s ` +
       `}; '`,
@@ -230,7 +550,11 @@ function buildMapshaperInputsAndCommands(geojson: any): {
   return { input, commands };
 }
 
-async function convertGeoJsonToTopojson(geojson: any, paths: CachePaths): Promise<string> {
+async function convertGeoJsonToTopojson(
+  geojson: any,
+  paths: CachePaths,
+  countryCode: string,
+): Promise<string> {
   const cache = getCache();
 
   // Optional/debug cache
@@ -240,7 +564,7 @@ async function convertGeoJsonToTopojson(geojson: any, paths: CachePaths): Promis
 
   const { input, commands } = buildMapshaperInputsAndCommands(geojson);
 
-  const topojsonString = await new Promise<string>((resolve, reject) => {
+  const rawTopojsonString = await new Promise<string>((resolve, reject) => {
     mapshaper.applyCommands(commands.join(' '), input, (err: Error | null, output: any) => {
       geojson = null as any;
 
@@ -257,8 +581,18 @@ async function convertGeoJsonToTopojson(geojson: any, paths: CachePaths): Promis
     });
   });
 
+  // Per-feature custom-layer metadata (layer_name, citation, unit_type) is
+  // deliberately stripped above — TopoJSON has no property lookup, so the
+  // layer info lives once at the topology level instead of ~300 duplicated
+  // copies. topojson-client ignores foreign top-level members.
+  const topo = JSON.parse(rawTopojsonString);
+  const customLayers = getCustomLayerInfoForCountry(countryCode);
+  if (customLayers.length > 0) {
+    topo.custom_layers = customLayers;
+  }
+
   console.log('Mapshaper processing complete.');
-  return topojsonString;
+  return JSON.stringify(topo);
 }
 
 function buildSuccessResponse(

@@ -24,7 +24,7 @@ export const CUSTOM_LAYERS_REGISTRY: Record<string, CustomLayerDefinition[]> = {
       propertyMapping: {
         idKey: 'id',
         nameKey: 'name',
-        extraKeys: ['district', 'unit_type'],
+        extraKeys: ['district'],
       },
     },
   ],
