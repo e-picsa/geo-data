@@ -20,6 +20,29 @@ describe('custom layer source files', () => {
     },
   );
 
+  test('mw_epa contains only EPAs and mw_planning_units contains the full dataset', async () => {
+    const epaDef = CUSTOM_LAYERS_REGISTRY.MW.find((d) => d.id === 'mw_epa');
+    const allDef = CUSTOM_LAYERS_REGISTRY.MW.find((d) => d.id === 'mw_planning_units');
+    expect(epaDef).toBeDefined();
+    expect(allDef).toBeDefined();
+
+    const epas = await loadCustomLayer(epaDef!);
+    expect(epas.length).toBe(186);
+    for (const f of epas) {
+      expect(f.properties.name.toUpperCase().endsWith('EPA')).toBe(true);
+    }
+
+    const all = await loadCustomLayer(allDef!);
+    expect(all.length).toBe(318);
+    const types = new Set(all.map((f) => f.properties.unit_type));
+    expect([...types].sort()).toEqual(['epa', 'forest_reserve', 'national_park', 'other']);
+    // EPA-only layer is a strict subset of the wall-to-wall layer
+    const allIds = new Set(all.map((f) => `${f.properties.id}|${f.properties.district}`));
+    for (const f of epas) {
+      expect(allIds.has(`${f.properties.id}|${f.properties.district}`)).toBe(true);
+    }
+  });
+
   test('mw_epa districts align with OSM admin district names', async () => {
     const definition = CUSTOM_LAYERS_REGISTRY.MW.find((d) => d.id === 'mw_epa');
     expect(definition).toBeDefined();

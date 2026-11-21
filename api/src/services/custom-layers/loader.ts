@@ -53,8 +53,18 @@ export async function loadCustomLayer(
 
   try {
     const rawData = await file.json();
-    const rawFeatures = rawData.type === 'FeatureCollection' ? rawData.features : [rawData];
+    const allRawFeatures = rawData.type === 'FeatureCollection' ? rawData.features : [rawData];
     const { idKey, nameKey, extraKeys = [] } = definition.propertyMapping;
+
+    // Optional layer-scoped filter (e.g. mw_epa keeps unit_type === 'epa'
+    // while mw_planning_units keeps everything from the same source file).
+    const filter = definition.featureFilter;
+    const wanted = filter
+      ? new Set(Array.isArray(filter.equals) ? filter.equals : [filter.equals])
+      : null;
+    const rawFeatures = wanted
+      ? allRawFeatures.filter((f: any) => wanted.has(String(f?.properties?.[filter!.property])))
+      : allRawFeatures;
 
     return rawFeatures.map((f: any, idx: number) => {
       const props = f.properties || {};

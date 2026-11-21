@@ -53,6 +53,8 @@ test('adminBoundaries - Validates Malawi boundaries, district centers, and custo
   const epaLayerInfo = data.custom_layers.find((l: any) => l.id === 'mw_epa');
   expect(epaLayerInfo).toBeDefined();
   expect(epaLayerInfo.citation.sourceName).toContain('MASDAP');
+  const planningUnitsInfo = data.custom_layers.find((l: any) => l.id === 'mw_planning_units');
+  expect(planningUnitsInfo).toBeDefined();
 
   const topojson = JSON.parse(data.topojson);
   expect(topojson.type).toBe('Topology');
@@ -88,9 +90,17 @@ test('adminBoundaries - Validates Malawi boundaries, district centers, and custo
     );
   }
 
-  // Evaluate MW custom layers (EPAs)
+  // Evaluate MW custom layers (EPAs + wall-to-wall planning units)
   const epas = geometries.filter((g: any) => g.properties?.custom_layer === 'mw_epa');
-  expect(epas.length).toBeGreaterThanOrEqual(180);
+  expect(epas.length).toBe(186);
+
+  const planningUnits = geometries.filter(
+    (g: any) => g.properties?.custom_layer === 'mw_planning_units',
+  );
+  expect(planningUnits.length).toBe(318);
+  expect(new Set(planningUnits.map((g: any) => g.properties?.unit_type))).toEqual(
+    new Set(['epa', 'forest_reserve', 'national_park', 'other']),
+  );
 
   const kameme = epas.find((e: any) => e.properties?.name === 'Kameme EPA');
   expect(kameme).toBeDefined();
