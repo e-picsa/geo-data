@@ -236,7 +236,7 @@ Returns the raw TopoJSON as a file download (or the JSON envelope with `.json` /
 
 Subnational features whose representative point falls outside the country's own `admin_level=2` polygon are excluded at generation time, so neighbouring countries' districts never leak in — while the country polygon itself keeps the shared border arcs.
 
-Per-feature properties are deliberately minimal (`id`, `name`, `admin_level`/`custom_layer`, `district`, `center`, `center_source`). Layer-level metadata (`layer_name`, full `citation`) is not repeated per feature — TopoJSON has no property lookup — and instead lives once in the topology's top-level `custom_layers` member (and in the POST envelope's `custom_layers` field).
+Per-feature properties are deliberately minimal (`id`, `name`, `admin_level`/`custom_layer`, `district`, `unit_type` on `mw_planning_units`, `center`, `center_source`). Layer-level metadata (`layer_name`, full `citation`) is not repeated per feature — TopoJSON has no property lookup — and instead lives once in the topology's top-level `custom_layers` member (and in the POST envelope's `custom_layers` field).
 
 ### 4. Clear Cache
 

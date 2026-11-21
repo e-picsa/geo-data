@@ -32,6 +32,17 @@ export interface CustomLayerDefinition {
   citation: LayerCitation;
   /** Path to the source GeoJSON file (relative to api root or absolute) */
   filePath: string;
+  /**
+   * Optional row filter applied to source features before normalization.
+   * Useful when one source file backs several layers (e.g. an EPA-only
+   * layer and a wall-to-wall layer sharing the same MASDAP file).
+   */
+  featureFilter?: {
+    /** Source property to match on (e.g. "unit_type") */
+    property: string;
+    /** Keep features whose property equals one of these values */
+    equals: string | string[];
+  };
   /** Property mapping from source features to canonical output properties */
   propertyMapping: {
     idKey: string;
