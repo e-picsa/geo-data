@@ -13,7 +13,7 @@ import {
   DEFAULT_CUSTOM_FILL_OPACITY,
   DEFAULT_CUSTOM_LINE_OPACITY,
 } from '../utils/layerPreferences';
-import { rewriteOfflineTileUrl } from '../utils/tiles';
+import { offlineTileTemplate } from '../utils/tiles';
 
 maplibregl.config.WORKER_URL = maplibreWorkerUrl;
 
@@ -47,6 +47,12 @@ const RASTER_LAYER_ID = 'liberty-raster-preview-layer';
 
 /** Base layer mode, lifted to App so the sidebar shows matching export options. */
 export type BaseMode = 'vector' | 'raster' | 'offline';
+
+/** Liberty style's vector source id (OpenMapTiles schema). */
+const LIBERTY_VECTOR_SOURCE_ID = 'openmaptiles';
+/** Upstream planet TileJSON (the Liberty style's openmaptiles source). Kept in
+ * one place so offline mode can restore the exact live source afterwards. */
+const LIBERTY_TILEJSON_URL = 'https://tiles.openfreemap.org/planet';
 
 function whenStyleReady(map: maplibregl.Map, fn: () => void): () => void {
   if (map.isStyleLoaded()) {
@@ -176,16 +182,6 @@ export function LibertyMap({
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
   }, [onZoomChange]);
-  // Read by transformRequest on every tile fetch — toggling offline mode or
-  // changing country takes effect on the next pan/zoom with no style reload.
-  const offlineRequestRef = useRef({ enabled: false, apiBase: apiUrl, country: 'GLOBAL' });
-  useEffect(() => {
-    offlineRequestRef.current = {
-      enabled: baseMode === 'offline',
-      apiBase: apiUrl,
-      country: countryCode ?? 'GLOBAL',
-    };
-  });
   // Backward compatibility: if adminGeoJsonData is omitted, use geoJsonData
   const effectiveAdminData = adminGeoJsonData !== undefined ? adminGeoJsonData : geoJsonData;
 
@@ -283,9 +279,7 @@ export function LibertyMap({
     };
   }, [customGeoJsonData, showCustomLabels]);
 
-  // Create map once (StrictMode-safe). Offline mode rewrites tile requests to
-  // the local pack server via transformRequest — the style, sources and layers
-  // are never touched, so the map renders identically in both modes.
+  // Create map once (StrictMode-safe)
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
@@ -293,20 +287,14 @@ export function LibertyMap({
       style: LIBERTY_STYLE_URL,
       center: [0, 0],
       zoom: 2,
-      transformRequest: (url: string, resourceType?: string) => {
-        if (resourceType === 'Tile' && offlineRequestRef.current.enabled) {
-          const local = rewriteOfflineTileUrl(
-            url,
-            offlineRequestRef.current.apiBase,
-            offlineRequestRef.current.country,
-          );
-          if (local) return { url: local };
-        }
-        return { url };
-      },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
     mapRef.current = map;
+    if (import.meta.env.DEV) {
+      // QA escape hatch: lets headless checks (and devtools) inspect the live
+      // style, sources and tile caches. Never used by the app itself.
+      (window as unknown as { __geoMap?: maplibregl.Map }).__geoMap = map;
+    }
 
     const reportZoom = () => onZoomChangeRef.current(Math.round(map.getZoom()));
     map.scrollZoom.disable();
@@ -353,6 +341,30 @@ export function LibertyMap({
       mapRef.current = null;
     };
   }, []);
+
+  // Offline mode: point the Liberty vector source at the local pack server.
+  // setTiles/setUrl are the source's own reload path, so tiles refetch with
+  // no layer juggling and no style reload; toggling back restores the exact
+  // TileJSON source. Same style, glyphs and sprites throughout.
+  const offlineActiveRef = useRef(false);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const src = map.getSource(LIBERTY_VECTOR_SOURCE_ID) as
+        | maplibregl.VectorTileSource
+        | undefined;
+      if (!src || typeof src.setTiles !== 'function' || typeof src.setUrl !== 'function') return;
+      if (baseMode === 'offline') {
+        src.setTiles([offlineTileTemplate(apiUrlRef.current, countryCode ?? 'GLOBAL')]);
+        offlineActiveRef.current = true;
+      } else if (offlineActiveRef.current) {
+        src.setUrl(LIBERTY_TILEJSON_URL);
+        offlineActiveRef.current = false;
+      }
+    };
+    return whenStyleReady(map, apply);
+  }, [baseMode, countryCode]);
 
   // Vector / raster base toggle
   useEffect(() => {

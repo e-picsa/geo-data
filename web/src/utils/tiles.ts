@@ -178,24 +178,14 @@ export function estimateExport(
 export const UPSTREAM_PLANET_TILE_ORIGIN = 'https://tiles.openfreemap.org/planet';
 
 /**
- * Rewrite an upstream planet tile URL to the local pack server (pure — unit
- * tested). Returns null for anything that is not a vector tile request
- * (TileJSON, glyphs, sprites pass through untouched), so offline mode degrades
- * to passthrough rather than breaking when upstream URL shapes drift.
+ * Local XYZ tile template for offline mode (`GET /tiles/local/...`), handed
+ * to the vector source via `setTiles` so the map keeps the exact Liberty
+ * style and only the tile bytes change origin. Pure — unit tested.
  */
-export function rewriteOfflineTileUrl(
-  upstreamUrl: string,
-  apiBase: string,
-  countryCode: string,
-): string | null {
-  const m = upstreamUrl.match(
-    /^https:\/\/tiles\.openfreemap\.org\/planet\/[^/]+\/(\d+)\/(\d+)\/(\d+)\.pbf$/,
-  );
-  if (!m) return null;
-  const [, z, x, y] = m;
+export function offlineTileTemplate(apiBase: string, countryCode: string): string {
   const base = apiBase.replace(/\/$/, '');
   const cc = (countryCode || 'GLOBAL').toUpperCase();
-  return `${base}/tiles/local/${z}/${x}/${y}.pbf?country=${cc}`;
+  return `${base}/tiles/local/{z}/{x}/{y}.pbf?country=${cc}`;
 }
 
 export function formatBytes(bytes: number): string {
