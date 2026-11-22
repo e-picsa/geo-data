@@ -15,6 +15,9 @@ import {
   exportPmtiles,
   isGlobalCode,
   resolvePmtilesCover,
+  prewarmPmtilesPacks,
+  prewarmPmtilesCache,
+  PMTILES_DIR,
   CoverTooLargeError,
   PMTILES_GLOBAL_MAX_ZOOM,
   PMTILES_GLOBAL_DEFAULT_ZOOM,
@@ -22,6 +25,11 @@ import {
   PMTILES_COUNTRY_MAX_ZOOM,
   PMTILES_COUNTRY_DEFAULT_ZOOM,
 } from '../services/pmtiles.ts';
+import {
+  downloadPmtilesFromGcs,
+  isGcsPmtilesEnabled,
+  listGcsPmtiles,
+} from '../services/pmtiles-gcs.ts';
 import { getTilesForBbox } from '../utils/tiles.ts';
 
 import { z } from 'zod';
@@ -50,11 +58,21 @@ export const ExportTilesSchema = z
 
 /**
  * Vector export (PMTiles). Global packs cover the whole world starting at z0
- * (capped at z6, default z4) with no bbox/buffer inputs; country packs cover
- * the posted bbox starting at z7 (default max z10, cap z12). Deliberately no
- * multi-country packs and no tile buffer — small border-tile duplication
- * across files is accepted.
+ * (capped at z6, default z4; use maxZoom 3 for the ~1 MB base) with no
+ * bbox/buffer inputs; an optional `regions` array unions extra zoom ranges
+ * (e.g. Southern Africa z4–6) into a zero-duplication composite base.
+ * Country packs cover the posted bbox starting at `minZoom` (default z4,
+ * or z7+ when layered over a composite base) with `maxZoom` capped at z12.
+ * Covers are intersected with the in-repo mask (MW/ZM/ZW) when one exists.
+ * Deliberately no multi-country packs and no tile buffer — small border-tile
+ * duplication across files is accepted.
  */
+const PmtilesRegionSchema = z.object({
+  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+  minZoom: z.number().int().min(0).max(PMTILES_COUNTRY_MAX_ZOOM),
+  maxZoom: z.number().int().min(0).max(PMTILES_COUNTRY_MAX_ZOOM),
+});
+
 export const ExportPmtilesSchema = z
   .object({
     country_code: z
@@ -64,8 +82,15 @@ export const ExportPmtilesSchema = z
       .optional()
       .default('GLOBAL'),
     bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
+    minZoom: z
+      .number()
+      .int()
+      .min(PMTILES_COUNTRY_MIN_ZOOM)
+      .max(PMTILES_COUNTRY_MAX_ZOOM)
+      .optional(),
     maxZoom: z.number().int().min(0).max(PMTILES_COUNTRY_MAX_ZOOM).optional(),
-    layers: z.enum(['full', 'minimal']).optional().default('full'),
+    layers: z.enum(['full', 'minimal', 'mobile']).optional().default('full'),
+    regions: z.array(PmtilesRegionSchema).max(8).optional(),
   })
   .superRefine((v, ctx) => {
     if (isGlobalCode(v.country_code)) {
@@ -74,6 +99,31 @@ export const ExportPmtilesSchema = z
           code: 'custom',
           path: ['maxZoom'],
           message: `Global exports are capped at zoom ${PMTILES_GLOBAL_MAX_ZOOM}`,
+        });
+      }
+      if (v.regions) {
+        v.regions.forEach((r, i) => {
+          const [minLon, minLat, maxLon, maxLat] = r.bbox;
+          const sane =
+            [minLon, minLat, maxLon, maxLat].every(
+              (n) => Number.isFinite(n) && Math.abs(n) <= 180,
+            ) &&
+            Math.abs(minLat) <= 90 &&
+            Math.abs(maxLat) <= 90;
+          if (!sane || minLon >= maxLon || minLat >= maxLat) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['regions', i, 'bbox'],
+              message: 'region bbox must be [minLon, minLat, maxLon, maxLat] within world bounds',
+            });
+          }
+          if (r.minZoom > r.maxZoom) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['regions', i, 'minZoom'],
+              message: 'region minZoom must be <= maxZoom',
+            });
+          }
         });
       }
     } else {
@@ -113,6 +163,20 @@ export const ExportPmtilesSchema = z
           message: `Country exports support zoom ${PMTILES_COUNTRY_MIN_ZOOM}–${PMTILES_COUNTRY_MAX_ZOOM}`,
         });
       }
+      if (v.minZoom !== undefined && v.maxZoom !== undefined && v.minZoom > v.maxZoom) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['minZoom'],
+          message: 'minZoom must be <= maxZoom',
+        });
+      }
+      if (v.regions && v.regions.length > 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['regions'],
+          message: 'regions are only supported for GLOBAL exports',
+        });
+      }
     }
   });
 /**
@@ -134,10 +198,58 @@ export const PrewarmTilesSchema = z.object({
     .default(PREWARM_MAX_ZOOM),
 });
 
+/**
+ * Vector prewarm, two modes. With posted `packs`: builds those consumer-defined
+ * finished artifacts (each reuses the export schema, so prewarm and export can
+ * never disagree). With no packs (default): fills the shared raw source-tile
+ * cache for the world base, the Southern Africa top-up and every
+ * `PREWARM_COUNTRIES` entry at z4–8, so any later export builds fast from disk.
+ */
+export const PrewarmPmtilesSchema = z.object({
+  packs: z.array(ExportPmtilesSchema).max(8).optional(),
+});
+
 export interface PreviewTile {
   x: number;
   y: number;
   z: number;
+}
+
+/**
+ * Parse an HTTP `Range: bytes=start-end` header against a known size (pure —
+ * safe to unit test). Supports `start-`, `start-end` and suffix `-n` forms;
+ * returns null when unsatisfiable or malformed (caller replies 416).
+ */
+export function parseRangeHeader(
+  header: string | null,
+  size: number,
+): { start: number; end: number } | null {
+  if (!header) return null;
+  const m = header.match(/^bytes=(\d*)-(\d*)$/);
+  if (!m) return null;
+  let start: number;
+  let end: number;
+  if (m[1] === '' && m[2] === '') return null;
+  if (m[1] === '') {
+    const suffix = parseInt(m[2], 10);
+    if (!Number.isFinite(suffix) || suffix <= 0) return null;
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = parseInt(m[1], 10);
+    end = m[2] === '' ? size - 1 : parseInt(m[2], 10);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= size || end >= size) {
+    return null;
+  }
+  if (start > end) return null;
+  return { start, end };
+}
+
+/** Pack filenames are hash-derived, never user paths: strict allowlist. */
+export function isSafePmtilesFile(file: string): boolean {
+  if (file !== path.basename(file)) return false;
+  return /^[A-Za-z0-9_.-]+\.(pmtiles|manifest\.json)$/.test(file);
 }
 
 /**
@@ -349,11 +461,13 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
       const maxZoom =
         parseResult.data.maxZoom ??
         (global ? PMTILES_GLOBAL_DEFAULT_ZOOM : PMTILES_COUNTRY_DEFAULT_ZOOM);
+      const minZoom = global ? undefined : parseResult.data.minZoom;
+      const regions = global ? parseResult.data.regions : undefined;
 
       // Reject planet-scale covers before any fetching/rendering starts
       // (resolve throws instead of materializing tens of millions of tiles).
       try {
-        resolvePmtilesCover({ country_code, bbox, maxZoom, layers });
+        resolvePmtilesCover({ country_code, bbox, minZoom, maxZoom, layers, regions });
       } catch (err) {
         if (err instanceof CoverTooLargeError) {
           return new Response(
@@ -368,7 +482,7 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
       }
 
       const { filePath, manifest } = await exportPmtiles(
-        { country_code, bbox, maxZoom, layers },
+        { country_code, bbox, minZoom, maxZoom, layers, regions },
         req.signal,
       );
 
@@ -392,6 +506,190 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
       return new Response(JSON.stringify({ status: 'error', message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
+  if (req.method === 'POST' && pathname === '/prewarm-pmtiles') {
+    try {
+      const body = await req.json().catch(() => ({}));
+      const parseResult = PrewarmPmtilesSchema.safeParse(body);
+      if (!parseResult.success) {
+        return new Response(
+          JSON.stringify({
+            error:
+              parseResult.error.issues.map((issue) => issue.message).join(', ') ??
+              'Invalid request data',
+          }),
+          { status: 400, headers: corsHeaders },
+        );
+      }
+      const packs = parseResult.data.packs;
+      // Explicit packs: build consumer-defined finished artifacts (cap-checked).
+      if (packs && packs.length > 0) {
+        try {
+          for (const p of packs) resolvePmtilesCover(p);
+        } catch (err) {
+          if (err instanceof CoverTooLargeError) {
+            return new Response(JSON.stringify({ error: err.message }), {
+              status: 400,
+              headers: corsHeaders,
+            });
+          }
+          throw err;
+        }
+        const results = await prewarmPmtilesPacks(packs, req.signal);
+        return new Response(JSON.stringify({ status: 'ok', mode: 'packs', packs: results }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Default: fill the shared source-tile cache (world z0–3, SA z4–6,
+      // prewarm countries z4–8) so any consumer export builds fast. No
+      // finished packs, no fixed recipes.
+      const warm = await prewarmPmtilesCache(req.signal);
+      return new Response(JSON.stringify({ status: 'ok', mode: 'tiles', ...warm }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } catch (err: unknown) {
+      if (isAbortError(err) || req.signal.aborted) {
+        console.debug('PMTiles prewarm cancelled by client');
+        return new Response(null, { status: 499, headers: corsHeaders });
+      }
+      console.error('Error prewarming pmtiles packs:', err);
+      const message = err instanceof Error ? err.message : 'An unknown error occurred';
+      return new Response(JSON.stringify({ status: 'error', message }), {
+        status: 500,
+        headers: corsHeaders,
+      });
+    }
+  }
+
+  if (req.method === 'GET' && pathname === '/pmtiles') {
+    try {
+      const entries: Record<string, { manifest: unknown; local: boolean; gcs: boolean }> = {};
+      let localFiles: string[] = [];
+      try {
+        localFiles = await fs.readdir(PMTILES_DIR);
+      } catch {
+        /* no local packs yet */
+      }
+      for (const f of localFiles.filter((f) => f.endsWith('.manifest.json'))) {
+        try {
+          entries[f] = {
+            manifest: JSON.parse(await fs.readFile(path.join(PMTILES_DIR, f), 'utf8')),
+            local: true,
+            gcs: false,
+          };
+        } catch {
+          /* unreadable manifest — skip */
+        }
+      }
+      if (isGcsPmtilesEnabled()) {
+        for (const item of await listGcsPmtiles()) {
+          if (!item.key.endsWith('.manifest.json')) continue;
+          if (entries[item.key]) {
+            entries[item.key].gcs = true;
+            continue;
+          }
+          try {
+            const headers = await (await import('../utils/google-auth.ts')).getAuthHeaders();
+            const res = await fetch(
+              `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(process.env.CACHE_BUCKET!.trim())}/o/${encodeURIComponent('pmtiles/' + item.key)}?alt=media`,
+              { headers },
+            );
+            if (res.ok) {
+              entries[item.key] = { manifest: await res.json(), local: false, gcs: true };
+            }
+          } catch {
+            /* unreadable remote manifest — skip */
+          }
+        }
+      }
+      return new Response(JSON.stringify({ status: 'ok', packs: Object.values(entries) }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } catch (err: unknown) {
+      console.error('Error listing pmtiles packs:', err);
+      const message = err instanceof Error ? err.message : 'An unknown error occurred';
+      return new Response(JSON.stringify({ status: 'error', message }), {
+        status: 500,
+        headers: corsHeaders,
+      });
+    }
+  }
+
+  // Range-served pack bytes for MapLibre pmtiles.js clients + downloads.
+  // Local disk first; GCS warms local disk on a miss so the next hit is local.
+  const pmtilesFileMatch = pathname.match(/^\/pmtiles\/(.+)$/);
+  if (req.method === 'GET' && pmtilesFileMatch) {
+    const file = decodeURIComponent(pmtilesFileMatch[1]);
+    if (!isSafePmtilesFile(file)) {
+      return new Response(JSON.stringify({ error: 'Not Found' }), {
+        status: 404,
+        headers: corsHeaders,
+      });
+    }
+    try {
+      const localPath = path.join(PMTILES_DIR, file);
+      let buf: Uint8Array | null = null;
+      try {
+        buf = new Uint8Array(await fs.readFile(localPath));
+      } catch {
+        buf = null;
+      }
+      if (buf === null) {
+        // Cold instance: pull from GCS into local disk, then serve.
+        const bytes = await downloadPmtilesFromGcs(file);
+        if (bytes === null) {
+          return new Response(JSON.stringify({ error: 'Not Found' }), {
+            status: 404,
+            headers: corsHeaders,
+          });
+        }
+        buf = new Uint8Array(await fs.readFile(localPath));
+      }
+      const size = buf.length;
+      const isManifest = file.endsWith('.json');
+      const baseHeaders = {
+        ...corsHeaders,
+        'Content-Type': isManifest ? 'application/json' : 'application/octet-stream',
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'public, max-age=86400',
+        ...(file.endsWith('.pmtiles')
+          ? { 'Content-Disposition': `attachment; filename="${file}"` }
+          : {}),
+      };
+      const range = parseRangeHeader(req.headers.get('range'), size);
+      if (req.headers.get('range') && !range) {
+        return new Response(null, {
+          status: 416,
+          headers: { ...baseHeaders, 'Content-Range': `bytes */${size}` },
+        });
+      }
+      if (!range) {
+        return new Response(new Uint8Array(buf), {
+          status: 200,
+          headers: { ...baseHeaders, 'Content-Length': String(size) },
+        });
+      }
+      const slice = buf.slice(range.start, range.end + 1);
+      return new Response(new Uint8Array(slice), {
+        status: 206,
+        headers: {
+          ...baseHeaders,
+          'Content-Length': String(slice.length),
+          'Content-Range': `bytes ${range.start}-${range.end}/${size}`,
+        },
+      });
+    } catch (err: unknown) {
+      console.error('Error serving pmtiles file:', err);
+      const message = err instanceof Error ? err.message : 'An unknown error occurred';
+      return new Response(JSON.stringify({ status: 'error', message }), {
+        status: 500,
+        headers: corsHeaders,
       });
     }
   }

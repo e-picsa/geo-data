@@ -1,12 +1,55 @@
 import { expect, test } from 'bun:test';
 import {
   parsePreviewTilePath,
+  parseRangeHeader,
+  isSafePmtilesFile,
   ExportTilesSchema,
   ExportPmtilesSchema,
   PrewarmTilesSchema,
+  PrewarmPmtilesSchema,
 } from './tiles.ts';
 import { handleAdminRoutes } from './admin.ts';
 
+test('parseRangeHeader handles byte ranges, suffixes and rejects junk', () => {
+  expect(parseRangeHeader('bytes=0-99', 1000)).toEqual({ start: 0, end: 99 });
+  expect(parseRangeHeader('bytes=100-', 1000)).toEqual({ start: 100, end: 999 });
+  expect(parseRangeHeader('bytes=-500', 1000)).toEqual({ start: 500, end: 999 });
+  expect(parseRangeHeader('bytes=0-0', 1000)).toEqual({ start: 0, end: 0 });
+  expect(parseRangeHeader(null, 1000)).toBeNull();
+  expect(parseRangeHeader('bytes=-', 1000)).toBeNull();
+  expect(parseRangeHeader('items=0-99', 1000)).toBeNull();
+  expect(parseRangeHeader('bytes=99-0', 1000)).toBeNull();
+  expect(parseRangeHeader('bytes=1000-', 1000)).toBeNull(); // unsatisfiable
+  expect(parseRangeHeader('bytes=0-2000', 1000)).toBeNull(); // past EOF
+});
+
+test('isSafePmtilesFile blocks traversal and non-pack files', () => {
+  expect(isSafePmtilesFile('MW_z7-11_mobile_abc123_v4_20261115_080022_pt.pmtiles')).toBe(true);
+  expect(isSafePmtilesFile('GLOBAL_z0-3_mobile_abc123_v4_20261115_080022_pt.manifest.json')).toBe(
+    true,
+  );
+  expect(isSafePmtilesFile('../admin-boundaries.ts')).toBe(false);
+  expect(isSafePmtilesFile('/etc/passwd')).toBe(false);
+  expect(isSafePmtilesFile('pack.mbtiles')).toBe(false);
+  expect(isSafePmtilesFile('pack.PMTILES')).toBe(false);
+});
+
+test('prewarm schema defaults to empty packs and validates posted packs', () => {
+  const empty = PrewarmPmtilesSchema.safeParse({});
+  expect(empty.success).toBe(true);
+  const bbox = [32.6, -17.2, 36.0, -9.3] as const;
+  expect(
+    PrewarmPmtilesSchema.safeParse({
+      packs: [{ country_code: 'MW', bbox, minZoom: 7, maxZoom: 11, layers: 'mobile' }],
+    }).success,
+  ).toBe(true);
+  expect(
+    PrewarmPmtilesSchema.safeParse({
+      packs: [{ country_code: 'MW', maxZoom: 11 }],
+    }).success,
+  ).toBe(false);
+  expect(PrewarmPmtilesSchema.safeParse({ packs: [] }).success).toBe(true);
+});
 test('parsePreviewTilePath accepts valid liberty tile paths', () => {
   expect(parsePreviewTilePath('/tiles/liberty/8/152/137.webp')).toEqual({
     tile: { x: 152, y: 137, z: 8 },
@@ -65,12 +108,15 @@ test('pmtiles schema caps global at z6', () => {
   expect(ExportPmtilesSchema.safeParse({ maxZoom: 7 }).success).toBe(false);
 });
 
-test('pmtiles schema requires bbox for countries and zooms 7–12', () => {
+test('pmtiles schema requires bbox for countries and zooms 4–12', () => {
   const bbox = [32.6, -17.2, 36.0, -9.3] as const;
   expect(ExportPmtilesSchema.safeParse({ country_code: 'MW' }).success).toBe(false);
   expect(ExportPmtilesSchema.safeParse({ country_code: 'mw', bbox }).success).toBe(true);
-  expect(ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 6 }).success).toBe(
+  expect(ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 3 }).success).toBe(
     false,
+  );
+  expect(ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 4 }).success).toBe(
+    true,
   );
   expect(ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 12 }).success).toBe(
     true,
@@ -78,6 +124,38 @@ test('pmtiles schema requires bbox for countries and zooms 7–12', () => {
   expect(ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 13 }).success).toBe(
     false,
   );
+});
+
+test('pmtiles schema supports mobile layers and country minZoom', () => {
+  const bbox = [32.6, -17.2, 36.0, -9.3] as const;
+  expect(
+    ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 11, layers: 'mobile' })
+      .success,
+  ).toBe(true);
+  expect(
+    ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, minZoom: 7, maxZoom: 11 }).success,
+  ).toBe(true);
+  expect(
+    ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, minZoom: 8, maxZoom: 7 }).success,
+  ).toBe(false);
+  expect(
+    ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, minZoom: 3, maxZoom: 11 }).success,
+  ).toBe(false);
+});
+
+test('pmtiles schema supports GLOBAL regions but rejects them for countries', () => {
+  const regions = [{ bbox: [21.5, -23.0, 36.5, -8.0] as const, minZoom: 4, maxZoom: 6 }];
+  expect(ExportPmtilesSchema.safeParse({ maxZoom: 3, regions }).success).toBe(true);
+  expect(
+    ExportPmtilesSchema.safeParse({
+      maxZoom: 3,
+      regions: [{ bbox: [0, 0, 1, 1], minZoom: 5, maxZoom: 4 }],
+    }).success,
+  ).toBe(false);
+  const bbox = [32.6, -17.2, 36.0, -9.3] as const;
+  expect(
+    ExportPmtilesSchema.safeParse({ country_code: 'MW', bbox, maxZoom: 8, regions }).success,
+  ).toBe(false);
 });
 
 test('pmtiles schema rejects invalid country bboxes', () => {

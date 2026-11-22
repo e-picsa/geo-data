@@ -19,7 +19,9 @@ export const appRouter = async (req: Request): Promise<Response> => {
     pathname.startsWith('/export-tiles') ||
     pathname.startsWith('/export-pmtiles') ||
     pathname.startsWith('/tiles') ||
-    pathname === '/prewarm-tiles'
+    pathname.startsWith('/pmtiles') ||
+    pathname === '/prewarm-tiles' ||
+    pathname === '/prewarm-pmtiles'
   ) {
     return handleTileRoutes(req, pathname);
   }
