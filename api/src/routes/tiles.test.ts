@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
 import {
   parsePreviewTilePath,
+  parseLocalTilePath,
   parseRangeHeader,
   isSafePmtilesFile,
+  resolveLocalPacks,
   ExportTilesSchema,
   ExportPmtilesSchema,
   PrewarmTilesSchema,
@@ -10,6 +12,81 @@ import {
 } from './tiles.ts';
 import { handleAdminRoutes } from './admin.ts';
 
+test('parseLocalTilePath accepts vector tile paths and rejects junk', () => {
+  expect(parseLocalTilePath('/tiles/local/8/152/137.pbf')).toEqual({
+    tile: { x: 152, y: 137, z: 8 },
+  });
+  expect(parseLocalTilePath('/tiles/local/0/0/0.pbf')).toEqual({ tile: { x: 0, y: 0, z: 0 } });
+  expect('error' in parseLocalTilePath('/tiles/local/13/1/1.pbf')).toBe(true);
+  expect('error' in parseLocalTilePath('/tiles/local/2/4/0.pbf')).toBe(true);
+  expect('error' in parseLocalTilePath('/tiles/liberty/8/152/137.webp')).toBe(true);
+});
+
+test('resolveLocalPacks prefers newest mobile pack per scope', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const nodePath = await import('node:path');
+  const tmp = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'localpacks-'));
+  const tiles = nodePath.join(tmp, 'tiles');
+  try {
+    const writeManifest = async (file: string, m: Record<string, unknown>) => {
+      await fs.writeFile(nodePath.join(tmp, file), JSON.stringify(m));
+      await fs.mkdir(nodePath.join(tiles, file.replace(/\.manifest\.json$/, '')), {
+        recursive: true,
+      });
+    };
+    await writeManifest('GLOBAL_z0-3_minimal_old_v4_abc.manifest.json', {
+      file: 'GLOBAL_z0-3_minimal_old_v4_abc.pmtiles',
+      scope: 'global',
+      country_code: 'GLOBAL',
+      layers: 'minimal',
+      minZoom: 0,
+      maxZoom: 3,
+      generatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await writeManifest('GLOBAL_z0-3_mobile_new_v4_abc.manifest.json', {
+      file: 'GLOBAL_z0-3_mobile_new_v4_abc.pmtiles',
+      scope: 'global',
+      country_code: 'GLOBAL',
+      layers: 'mobile',
+      minZoom: 0,
+      maxZoom: 3,
+      regions: [{ bbox: [21.5, -23.0, 36.5, -8.0], minZoom: 4, maxZoom: 6 }],
+      generatedAt: '2026-02-01T00:00:00.000Z',
+    });
+    await writeManifest('MW_z7-11_mobile_new_v4_abc.manifest.json', {
+      file: 'MW_z7-11_mobile_new_v4_abc.pmtiles',
+      scope: 'country',
+      country_code: 'MW',
+      layers: 'mobile',
+      minZoom: 7,
+      maxZoom: 11,
+      generatedAt: '2026-02-01T00:00:00.000Z',
+    });
+    // Pack entry without an unpacked dir must not resolve.
+    await fs.writeFile(
+      nodePath.join(tmp, 'ZM_z7-9_mobile_orphan_v4_abc.manifest.json'),
+      JSON.stringify({
+        file: 'ZM_z7-9_mobile_orphan_v4_abc.pmtiles',
+        scope: 'country',
+        country_code: 'ZM',
+        layers: 'mobile',
+        minZoom: 7,
+        maxZoom: 9,
+        generatedAt: '2026-03-01T00:00:00.000Z',
+      }),
+    );
+    const resolved = await resolveLocalPacks(tmp, tiles);
+    expect(resolved.global?.base).toBe('GLOBAL_z0-3_mobile_new_v4_abc');
+    // Composite regions extend the served range: world maxZoom is 3 but the
+    // SA top-up owns z4–6.
+    expect(resolved.global?.maxZoom).toBe(6);
+    expect(resolved.countries['MW']?.base).toBe('MW_z7-11_mobile_new_v4_abc');
+    expect(resolved.countries['ZM']).toBeUndefined();
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
 test('parseRangeHeader handles byte ranges, suffixes and rejects junk', () => {
   expect(parseRangeHeader('bytes=0-99', 1000)).toEqual({ start: 0, end: 99 });
   expect(parseRangeHeader('bytes=100-', 1000)).toEqual({ start: 100, end: 999 });

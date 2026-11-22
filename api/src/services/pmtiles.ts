@@ -45,6 +45,12 @@ export const MAX_PMTILES_TILES = 100_000;
 export const PMTILES_DIR = path.join(process.cwd(), '.cache', 'pmtiles');
 /** Raw upstream PBFs, cached by planet vintage so exports survive data updates. */
 export const PMTILES_SOURCE_DIR = path.join(process.cwd(), '.cache', 'pmtiles-source');
+/**
+ * Unpacked per-pack vector tiles (`<base>/<z>/<x>/<y>.pbf`), written alongside
+ * every export so the offline map mode can serve local XYZ tiles through this
+ * server with zero conversion. Disposable preview cache — GCS keeps packs only.
+ */
+export const PMTILES_TILES_DIR = path.join(process.cwd(), '.cache', 'pmtiles-tiles');
 
 export const WORLD_BBOX: [number, number, number, number] = [-180, -85.0511, 180, 85.0511];
 
@@ -839,6 +845,22 @@ async function runPmtilesConvert(mbtilesPath: string, pmtilesPath: string): Prom
   }
 }
 
+/** Unpacked per-pack tiles for local XYZ serving (pure file layout, testable). */
+export async function writeUnpackedTiles(
+  base: string,
+  entries: { t: TileCoord; data: Uint8Array }[],
+  tilesDir: string = PMTILES_TILES_DIR,
+): Promise<string> {
+  const dir = path.join(tilesDir, base);
+  await fs.mkdir(dir, { recursive: true });
+  for (const { t, data } of entries) {
+    const file = path.join(dir, String(t.z), String(t.x), `${t.y}.pbf`);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, data);
+  }
+  return dir;
+}
+
 export async function exportPmtiles(
   params: ExportPmtilesParams,
   signal?: AbortSignal,
@@ -858,7 +880,12 @@ export async function exportPmtiles(
     const cached = await fs.readFile(manifestPath, 'utf8');
     try {
       await fs.access(filePath);
-      return { filePath, manifest: JSON.parse(cached) as PmtilesManifest };
+      // A pack without its unpacked tile dir can't serve offline mode —
+      // treat it as a miss so this build regenerates everything.
+      const unpacked = await fs.readdir(path.join(PMTILES_TILES_DIR, base)).catch(() => []);
+      if (unpacked.length > 0) {
+        return { filePath, manifest: JSON.parse(cached) as PmtilesManifest };
+      }
     } catch {
       /* manifest without artifact — rebuild */
     }
@@ -909,6 +936,13 @@ export async function exportPmtiles(
     await runPmtilesConvert(mbtilesPath, filePath);
   } finally {
     await fs.rm(mbtilesPath, { force: true });
+  }
+  // Unpacked tiles for the offline map mode (local XYZ serving). Best-effort:
+  // a pack without an unpacked dir simply 404s tile requests until rebuilt.
+  try {
+    await writeUnpackedTiles(base, entries);
+  } catch (err) {
+    console.error('PMTiles unpacked-tile write failed:', err);
   }
 
   const fileBuf = await fs.readFile(filePath);

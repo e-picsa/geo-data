@@ -15,6 +15,7 @@ import {
   loadCountryMasks,
   mergeFeatureStats,
   pmtilesWarmCover,
+  writeUnpackedTiles,
   MOBILE_DROPPED_LAYERS,
   MINIMAL_DROPPED_LAYERS,
   CoverTooLargeError,
@@ -114,6 +115,32 @@ test('mergeFeatureStats folds per-tile counts into the zoom table', () => {
   expect(acc['8']['place']).toEqual({ kept: 90, dropped: 138 });
   expect(acc['8']['park']).toEqual({ kept: 0, dropped: 12 });
   expect(acc['9']['water']).toEqual({ kept: 3, dropped: 0 });
+});
+
+test('writeUnpackedTiles lays out z/x/y.pbf files for local serving', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const nodePath = await import('node:path');
+  const tmp = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'unpack-test-'));
+  try {
+    const dir = await writeUnpackedTiles(
+      'MW_z7-8_mobile_test',
+      [
+        { t: { x: 1, y: 2, z: 7 }, data: new Uint8Array([1, 2, 3]) },
+        { t: { x: 4, y: 5, z: 8 }, data: new Uint8Array([9]) },
+      ],
+      tmp,
+    );
+    expect(dir).toBe(nodePath.join(tmp, 'MW_z7-8_mobile_test'));
+    expect(new Uint8Array(await fs.readFile(nodePath.join(dir, '7', '1', '2.pbf')))).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+    expect(new Uint8Array(await fs.readFile(nodePath.join(dir, '8', '4', '5.pbf')))).toEqual(
+      new Uint8Array([9]),
+    );
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
 });
 
 test('mbtileRow flips y to TMS orientation', () => {

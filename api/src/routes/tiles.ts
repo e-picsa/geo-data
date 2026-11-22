@@ -18,12 +18,14 @@ import {
   prewarmPmtilesPacks,
   prewarmPmtilesCache,
   PMTILES_DIR,
+  PMTILES_TILES_DIR,
   CoverTooLargeError,
   PMTILES_GLOBAL_MAX_ZOOM,
   PMTILES_GLOBAL_DEFAULT_ZOOM,
   PMTILES_COUNTRY_MIN_ZOOM,
   PMTILES_COUNTRY_MAX_ZOOM,
   PMTILES_COUNTRY_DEFAULT_ZOOM,
+  type TileCoord,
 } from '../services/pmtiles.ts';
 import {
   downloadPmtilesFromGcs,
@@ -274,6 +276,193 @@ const previewTileResponseHeaders = {
   'Cache-Control': 'public, max-age=86400',
 };
 
+const localVectorResponseHeaders = {
+  ...corsHeaders,
+  'Content-Type': 'application/vnd.mapbox-vector-tile',
+  'Cache-Control': 'public, max-age=86400',
+};
+
+/**
+ * Parse + validate a `/tiles/local/{z}/{x}/{y}.pbf` path (pure — unit tested).
+ * Serves unpacked tiles from locally built packs (see writeUnpackedTiles).
+ */
+export function parseLocalTilePath(pathname: string): { tile: TileCoord } | { error: string } {
+  const match = pathname.match(/^\/tiles\/local\/(\d+)\/(\d+)\/(\d+)\.pbf$/);
+  if (!match) return { error: 'Not Found' };
+  const z = parseInt(match[1], 10);
+  const x = parseInt(match[2], 10);
+  const y = parseInt(match[3], 10);
+  if (z > PMTILES_COUNTRY_MAX_ZOOM) {
+    return { error: `Zoom level restricted to ${PMTILES_COUNTRY_MAX_ZOOM} (mirrors export cap)` };
+  }
+  const limit = Math.pow(2, z);
+  if (x >= limit || y >= limit) return { error: `Tile out of range for zoom ${z}` };
+  return { tile: { x, y, z } };
+}
+
+export interface LocalPackRef {
+  base: string;
+  minZoom: number;
+  maxZoom: number;
+}
+
+/**
+ * Resolve which unpacked packs serve the offline map mode: newest `mobile`
+ * pack per scope (falling back to newest of any preset), read from local
+ * manifests. Takes the dir so tests can point at fixtures (pure fs).
+ */
+export async function resolveLocalPacks(
+  dir: string,
+  tilesDir: string = PMTILES_TILES_DIR,
+): Promise<{
+  global: LocalPackRef | null;
+  countries: Record<string, LocalPackRef>;
+}> {
+  let files: string[] = [];
+  try {
+    files = await fs.readdir(dir);
+  } catch {
+    return { global: null, countries: {} };
+  }
+  interface Candidate extends LocalPackRef {
+    scope: 'global' | 'country';
+    country: string;
+    layers: string;
+    generatedAt: string;
+  }
+  const candidates: Candidate[] = [];
+  for (const f of files.filter((f) => f.endsWith('.manifest.json'))) {
+    try {
+      const m = JSON.parse(await fs.readFile(path.join(dir, f), 'utf8')) as {
+        minZoom: number;
+        maxZoom: number;
+        layers: string;
+        generatedAt: string;
+        scope: string;
+        country_code: string;
+        file: string;
+      };
+      const base = String(m.file ?? '').replace(/\.pmtiles$/, '');
+      if (!base || !/^[A-Za-z0-9_.-]+$/.test(base)) continue;
+      // Unpacked dir must exist — a pack entry without tiles can't serve.
+      try {
+        await fs.access(path.join(tilesDir, base));
+      } catch {
+        continue;
+      }
+      const regions = (Array.isArray(m.regions) ? m.regions : []) as {
+        minZoom?: unknown;
+        maxZoom?: unknown;
+      }[];
+      let effMin = Number(m.minZoom);
+      let effMax = Number(m.maxZoom);
+      for (const r of regions) {
+        if (typeof r.minZoom === 'number') effMin = Math.min(effMin, r.minZoom);
+        if (typeof r.maxZoom === 'number') effMax = Math.max(effMax, r.maxZoom);
+      }
+      candidates.push({
+        base,
+        minZoom: effMin,
+        maxZoom: effMax,
+        scope: m.scope === 'country' ? 'country' : 'global',
+        country: String(m.country_code ?? '').toUpperCase(),
+        layers: String(m.layers ?? ''),
+        generatedAt: String(m.generatedAt ?? ''),
+      });
+    } catch {
+      /* unreadable manifest — skip */
+    }
+  }
+  const pick = (list: Candidate[]): LocalPackRef | null => {
+    if (list.length === 0) return null;
+    const mobile = list.filter((c) => c.layers === 'mobile');
+    const pool = mobile.length > 0 ? mobile : list;
+    pool.sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1));
+    return { base: pool[0].base, minZoom: pool[0].minZoom, maxZoom: pool[0].maxZoom };
+  };
+  const global = pick(candidates.filter((c) => c.scope === 'global'));
+  const countries: Record<string, LocalPackRef> = {};
+  const byCountry = new Map<string, Candidate[]>();
+  for (const c of candidates) {
+    if (c.scope !== 'country' || !c.country) continue;
+    const list = byCountry.get(c.country) ?? [];
+    list.push(c);
+    byCountry.set(c.country, list);
+  }
+  for (const [cc, list] of byCountry) {
+    const ref = pick(list);
+    if (ref) countries[cc] = ref;
+  }
+  return { global, countries };
+}
+
+/** Memoized local-pack resolution (dir mtime + short TTL, avoids readdir per tile). */
+let localPacksCache: {
+  at: number;
+  mtimeMs: number;
+  value: Awaited<ReturnType<typeof resolveLocalPacks>>;
+} | null = null;
+
+async function cachedLocalPacks(): Promise<Awaited<ReturnType<typeof resolveLocalPacks>>> {
+  const stat = await fs.stat(PMTILES_DIR).catch(() => null);
+  const mtimeMs = stat?.mtimeMs ?? 0;
+  if (
+    localPacksCache &&
+    localPacksCache.mtimeMs === mtimeMs &&
+    Date.now() - localPacksCache.at < 5000
+  ) {
+    return localPacksCache.value;
+  }
+  const value = await resolveLocalPacks(PMTILES_DIR);
+  localPacksCache = { at: Date.now(), mtimeMs, value };
+  return value;
+}
+
+/**
+ * Serve an unpacked local tile: the global pack owns z0..globalMax, the
+ * requested country's pack owns the rest. Missing files (masked-out land,
+ * ocean, uncovered zooms) are 204 — same as upstream — while a total lack
+ * of packs is a 404 telling the caller to export first.
+ */
+async function handleLocalVectorTile(req: Request, pathname: string): Promise<Response | null> {
+  if (req.method !== 'GET') return null;
+  const parsed = parseLocalTilePath(pathname);
+  if (!('tile' in parsed)) return null;
+  const country = (new URL(req.url).searchParams.get('country') ?? 'GLOBAL').toUpperCase();
+  if (country !== 'GLOBAL' && !/^[A-Z]{2}$/.test(country)) {
+    return new Response(JSON.stringify({ error: 'country must be GLOBAL or a 2-letter code' }), {
+      status: 400,
+      headers: corsHeaders,
+    });
+  }
+  const { x, y, z } = parsed.tile;
+  const packs = await cachedLocalPacks();
+  let base: string | null = null;
+  if (packs.global && z <= packs.global.maxZoom) {
+    base = packs.global.base;
+  } else if (country !== 'GLOBAL') {
+    const c = packs.countries[country];
+    if (c && z >= c.minZoom && z <= c.maxZoom) base = c.base;
+  }
+  if (!base) {
+    return new Response(
+      JSON.stringify({
+        error: `No local pack covers z${z}${country === 'GLOBAL' ? '' : ` for ${country}`} — export one first (offline mode needs the global base + a country pack).`,
+      }),
+      { status: 404, headers: corsHeaders },
+    );
+  }
+  try {
+    const data = await fs.readFile(
+      path.join(PMTILES_TILES_DIR, base, String(z), String(x), `${y}.pbf`),
+    );
+    return new Response(new Uint8Array(data), { status: 200, headers: localVectorResponseHeaders });
+  } catch {
+    // Masked-out, ocean or otherwise empty upstream — render as empty.
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+}
+
 async function handlePreviewTile(req: Request, pathname: string): Promise<Response | null> {
   if (req.method !== 'GET') return null;
   const parsed = parsePreviewTilePath(pathname);
@@ -332,6 +521,11 @@ async function handlePreviewTile(req: Request, pathname: string): Promise<Respon
 }
 
 export const handleTileRoutes = async (req: Request, pathname: string): Promise<Response> => {
+  // Local vector tiles first: /tiles/local/... would otherwise 404 as a
+  // non-liberty path inside handlePreviewTile.
+  const local = await handleLocalVectorTile(req, pathname);
+  if (local) return local;
+
   const preview = await handlePreviewTile(req, pathname);
   if (preview) return preview;
 

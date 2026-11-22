@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
-import { Protocol as PmtilesProtocol } from 'pmtiles';
 // Explicit worker URL: Vite prebundling breaks maplibre's relative worker
 // resolution, which silently kills all vector rendering (raster/shading
 // still shows, labels and roads never appear).
@@ -14,6 +13,7 @@ import {
   DEFAULT_CUSTOM_FILL_OPACITY,
   DEFAULT_CUSTOM_LINE_OPACITY,
 } from '../utils/layerPreferences';
+import { rewriteOfflineTileUrl } from '../utils/tiles';
 
 maplibregl.config.WORKER_URL = maplibreWorkerUrl;
 
@@ -45,41 +45,8 @@ const EXPORT_BBOX_LAYER_ID = 'export-bbox-line';
 const RASTER_SOURCE_ID = 'liberty-raster-preview';
 const RASTER_LAYER_ID = 'liberty-raster-preview-layer';
 
-// PICSA Vector QA overlay: locally served .pmtiles packs rendered with
-// high-contrast debug layers so trimmed features are visible by inspection.
-const QA_SOURCE_ID = 'picsa-vector-pack';
-export const QA_LAYER_IDS = [
-  'picsa-vector-boundary',
-  'picsa-vector-water',
-  'picsa-vector-waterway',
-  'picsa-vector-road',
-  'picsa-vector-road-label',
-  'picsa-vector-place-label',
-  'picsa-vector-water-label',
-] as const;
-
-/** pmtiles:// protocol is process-wide; registering twice throws. */
-let pmtilesProtocolRegistered = false;
-function ensurePmtilesProtocol(): void {
-  if (pmtilesProtocolRegistered) return;
-  try {
-    maplibregl.addProtocol('pmtiles', new PmtilesProtocol().tile);
-  } catch {
-    /* StrictMode double-invoke or HMR — protocol already registered */
-  }
-  pmtilesProtocolRegistered = true;
-}
-
-export interface QaInspectedFeature {
-  layer: string;
-  sourceLayer: string;
-  type: string;
-  name?: string;
-  class?: string;
-}
-
 /** Base layer mode, lifted to App so the sidebar shows matching export options. */
-export type BaseMode = 'vector' | 'raster';
+export type BaseMode = 'vector' | 'raster' | 'offline';
 
 function whenStyleReady(map: maplibregl.Map, fn: () => void): () => void {
   if (map.isStyleLoaded()) {
@@ -167,12 +134,8 @@ interface LibertyMapProps {
   onBaseModeChange: (mode: BaseMode) => void;
   /** Toggle rendering of district/admin center markers */
   showCenters?: boolean;
-  /** Full pmtiles:// URL of a locally served pack to QA (null = overlay off). */
-  qaPackUrl?: string | null;
-  /** Show/hide the QA overlay without unloading the pack. */
-  qaVisible?: boolean;
-  /** Click-inspection hits on the QA layers, lifted for the sidebar panel. */
-  onQaInspect?: (features: QaInspectedFeature[]) => void;
+  /** ISO country code for the offline tile source (`?country=` selector). */
+  countryCode?: string | null;
 }
 
 /**
@@ -200,9 +163,7 @@ export function LibertyMap({
   baseMode,
   onBaseModeChange,
   showCenters = false,
-  qaPackUrl = null,
-  qaVisible = true,
-  onQaInspect,
+  countryCode = null,
 }: LibertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -215,11 +176,16 @@ export function LibertyMap({
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
   }, [onZoomChange]);
-  const onQaInspectRef = useRef(onQaInspect);
+  // Read by transformRequest on every tile fetch — toggling offline mode or
+  // changing country takes effect on the next pan/zoom with no style reload.
+  const offlineRequestRef = useRef({ enabled: false, apiBase: apiUrl, country: 'GLOBAL' });
   useEffect(() => {
-    onQaInspectRef.current = onQaInspect;
-  }, [onQaInspect]);
-
+    offlineRequestRef.current = {
+      enabled: baseMode === 'offline',
+      apiBase: apiUrl,
+      country: countryCode ?? 'GLOBAL',
+    };
+  });
   // Backward compatibility: if adminGeoJsonData is omitted, use geoJsonData
   const effectiveAdminData = adminGeoJsonData !== undefined ? adminGeoJsonData : geoJsonData;
 
@@ -317,7 +283,9 @@ export function LibertyMap({
     };
   }, [customGeoJsonData, showCustomLabels]);
 
-  // Create map once (StrictMode-safe)
+  // Create map once (StrictMode-safe). Offline mode rewrites tile requests to
+  // the local pack server via transformRequest — the style, sources and layers
+  // are never touched, so the map renders identically in both modes.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
@@ -325,6 +293,17 @@ export function LibertyMap({
       style: LIBERTY_STYLE_URL,
       center: [0, 0],
       zoom: 2,
+      transformRequest: (url: string, resourceType?: string) => {
+        if (resourceType === 'Tile' && offlineRequestRef.current.enabled) {
+          const local = rewriteOfflineTileUrl(
+            url,
+            offlineRequestRef.current.apiBase,
+            offlineRequestRef.current.country,
+          );
+          if (local) return { url: local };
+        }
+        return { url };
+      },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
     mapRef.current = map;
@@ -374,107 +353,6 @@ export function LibertyMap({
       mapRef.current = null;
     };
   }, []);
-
-  // PICSA Vector QA overlay: locally served pack + debug layers.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const apply = () => {
-      for (const id of QA_LAYER_IDS) {
-        if (map.getLayer(id)) map.removeLayer(id);
-      }
-      if (map.getSource(QA_SOURCE_ID)) map.removeSource(QA_SOURCE_ID);
-      if (!qaPackUrl || !qaVisible) return;
-      ensurePmtilesProtocol();
-      map.addSource(QA_SOURCE_ID, { type: 'vector', url: qaPackUrl });
-      const line = (
-        id: string,
-        sourceLayer: string,
-        color: string,
-        width: number,
-        dash?: number[],
-      ) =>
-        map.addLayer({
-          id,
-          type: 'line',
-          source: QA_SOURCE_ID,
-          'source-layer': sourceLayer,
-          paint: {
-            'line-color': color,
-            'line-width': width,
-            ...(dash ? { 'line-dasharray': dash } : {}),
-          },
-        });
-      line('picsa-vector-boundary', 'boundary', '#ff00ff', 1.5, [2, 1]);
-      map.addLayer({
-        id: 'picsa-vector-water',
-        type: 'fill',
-        source: QA_SOURCE_ID,
-        'source-layer': 'water',
-        paint: { 'fill-color': '#00e5ff', 'fill-opacity': 0.45 },
-      });
-      line('picsa-vector-waterway', 'waterway', '#0066ff', 2);
-      line('picsa-vector-road', 'transportation', '#ff8800', 1.5);
-      const label = (
-        id: string,
-        sourceLayer: string,
-        field: unknown,
-        color: string,
-        size: number,
-      ) =>
-        map.addLayer({
-          id,
-          type: 'symbol',
-          source: QA_SOURCE_ID,
-          'source-layer': sourceLayer,
-          layout: { 'text-field': field, 'text-size': size } as never,
-          paint: {
-            'text-color': color,
-            'text-halo-color': '#ffffff',
-            'text-halo-width': 1.5,
-          },
-        });
-      label(
-        'picsa-vector-road-label',
-        'transportation_name',
-        ['coalesce', ['get', 'ref'], ['get', 'name']],
-        '#7a2e00',
-        10,
-      );
-      label('picsa-vector-place-label', 'place', ['get', 'name'], '#111111', 12);
-      label('picsa-vector-water-label', 'water_name', ['get', 'name'], '#0044aa', 11);
-    };
-    return whenStyleReady(map, apply);
-  }, [qaPackUrl, qaVisible]);
-
-  // Click inspection on the QA layers.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (!qaPackUrl || !qaVisible) return;
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      const hits = map.queryRenderedFeatures(e.point, { layers: [...QA_LAYER_IDS] });
-      onQaInspectRef.current?.(
-        hits.slice(0, 8).map((f) => ({
-          layer: f.layer.id,
-          sourceLayer: (f.layer as unknown as { 'source-layer'?: string })['source-layer'] ?? '',
-          type: f.geometry.type,
-          name:
-            typeof f.properties?.['name'] === 'string'
-              ? (f.properties['name'] as string)
-              : undefined,
-          class:
-            typeof f.properties?.['class'] === 'string'
-              ? (f.properties['class'] as string)
-              : undefined,
-        })),
-      );
-    };
-    map.on('click', onClick);
-    return () => {
-      map.off('click', onClick);
-    };
-  }, [qaPackUrl, qaVisible]);
 
   // Vector / raster base toggle
   useEffect(() => {
@@ -834,7 +712,7 @@ export function LibertyMap({
         role="group"
         aria-label="Base layer"
       >
-        {(['vector', 'raster'] as BaseMode[]).map((m) => (
+        {(['vector', 'raster', 'offline'] as BaseMode[]).map((m) => (
           <button
             key={m}
             onClick={() => onBaseModeChange(m)}
@@ -842,7 +720,9 @@ export function LibertyMap({
             title={
               m === 'vector'
                 ? 'Live Liberty vector style (crisp at any zoom)'
-                : 'Server-rendered WebP tiles — exactly what the offline pack contains (renders on demand, zooms 0–12)'
+                : m === 'raster'
+                  ? 'Server-rendered WebP tiles — exactly what the offline pack contains (renders on demand, zooms 0–12)'
+                  : 'Same Liberty style, vector tiles served from local packs (global base + country pack)'
             }
             className={`px-3 py-1.5 capitalize transition-colors ${
               baseMode === m ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'

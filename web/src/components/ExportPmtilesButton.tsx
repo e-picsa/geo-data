@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CloudArrowDownIcon, InformationCircleIcon } from '@heroicons/react/20/solid';
+import { CloudArrowDownIcon } from '@heroicons/react/20/solid';
 import { countTilesForBbox, formatBytes } from '../utils/tiles';
 
 interface ExportPmtilesButtonProps {
@@ -48,8 +48,9 @@ export function ExportPmtilesButton({ countryCode, bbox, apiUrl }: ExportPmtiles
   const [maxZoom, setMaxZoom] = useState(
     isGlobal ? PMTILES_GLOBAL_DEFAULT_ZOOM : PMTILES_COUNTRY_DEFAULT_ZOOM,
   );
-  const [layers, setLayers] = useState<'full' | 'minimal' | 'mobile'>('full');
-  const [showLayersInfo, setShowLayersInfo] = useState(false);
+  // The app consumes one preset: mobile packs only. The API still accepts
+  // full/minimal, but this UI offers no other choice.
+  const layers = 'mobile' as const;
   // GLOBAL only: union the Southern Africa z4–6 top-up into a composite base.
   const [includeRegions, setIncludeRegions] = useState(isGlobal);
   const [downloading, setDownloading] = useState(false);
@@ -69,12 +70,9 @@ export function ExportPmtilesButton({ countryCode, bbox, apiUrl }: ExportPmtiles
         bytes += countTilesForBbox(rLon1, rLat1, rLon2, rLat2, z, z, 0) * bytesPerVectorTile(z);
       }
     }
-    // Minimal preset strips bulk layers (aerodrome_label, aeroway, poi) plus
-    // localized name:* bloat at every zoom (biggest win at z0–7).
-    if (layers === 'minimal') bytes = Math.round(bytes * (maxZoom <= 6 ? 0.45 : 0.6));
-    // Mobile additionally drops landuse/park/peaks, minor roads and misc tags
-    // (measured ~0.42–0.83x of minimal across z4–z10).
-    if (layers === 'mobile') bytes = Math.round(bytes * (maxZoom <= 6 ? 0.3 : 0.45));
+    // Mobile preset (the only one this UI offers): threshold-aligned filtering
+    // plus per-layer allowlists (measured ~0.42–0.83x of minimal across z4–z10).
+    bytes = Math.round(bytes * (maxZoom <= 6 ? 0.3 : 0.45));
     // PMTiles dedups byte-identical tiles (common for ocean/low-zoom): measured
     // ~0.55x for global packs, ~0.7x for Malawi.
     bytes = Math.round(bytes * (isGlobal ? 0.55 : 0.7));
@@ -205,58 +203,10 @@ export function ExportPmtilesButton({ countryCode, bbox, apiUrl }: ExportPmtiles
           ))}
         </select>
       </label>
-      <div className="relative">
-        <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
-          <span className="inline-flex items-center gap-1">
-            Vector layers
-            <button
-              type="button"
-              onClick={() => setShowLayersInfo((v) => !v)}
-              aria-label="About Full vs Reduced vs Mobile layers"
-              aria-expanded={showLayersInfo}
-              className="text-slate-400 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-full"
-            >
-              <InformationCircleIcon className="h-4 w-4" />
-            </button>
-          </span>
-          <select
-            value={layers}
-            onChange={(e) => setLayers(e.target.value as 'full' | 'minimal' | 'mobile')}
-            disabled={downloading}
-            className="ml-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-          >
-            <option value="full">Full</option>
-            <option value="minimal">Reduced</option>
-            <option value="mobile">Mobile</option>
-          </select>
-        </label>
-        {showLayersInfo && (
-          <div className="absolute z-50 mt-1 w-full rounded-md border border-slate-200 bg-white p-3 shadow-lg text-xs text-slate-600 space-y-1.5">
-            <p>
-              <span className="font-semibold text-slate-800">Full</span> keeps every upstream layer
-              — byte-identical to the tiles the WebP raster map is rendered from.
-            </p>
-            <p>
-              <span className="font-semibold text-slate-800">Reduced</span> strips buildings, house
-              numbers, POIs, aeroways and aerodrome labels, plus localized name translations (keeps
-              name, name:en, name:latin). Name stripping applies at every zoom — that is what brings
-              the global z0–3 base under ~1 MB — while cities at high zoom lose minor POI detail.
-            </p>
-            <p>
-              <span className="font-semibold text-slate-800">Mobile</span> is threshold-aligned to
-              the offline style: also drops landuse, parks and mountain peaks, minor/unclassified
-              roads below z10 (rail below z9), sub-z10 road labels, villages below z9, and keeps
-              per-layer allowlists (no rank/ids, latin only when differing from name). Country
-              covers are also masked to the border polygon (~25–40% fewer tiles). Use for ≤ 3
-              MB/country packs.
-            </p>
-            <p>
-              Savings vary by country: largest at low zooms (name bloat) and in dense urban areas
-              (POIs/buildings).
-            </p>
-          </div>
-        )}
-      </div>
+      <p className="text-xs text-slate-500">
+        Mobile offline pack (threshold-aligned filtering, masked to the border). Same style as the
+        online map — only the tile source differs.
+      </p>
       {isGlobal && (
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input

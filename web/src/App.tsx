@@ -6,12 +6,7 @@ import { CustomLayerSelect } from './components/CustomLayerSelect';
 import { LayerControls, type LayerAttributionInfo } from './components/LayerControls';
 import { ExportTilesButton } from './components/ExportTilesButton';
 import { ExportPmtilesButton } from './components/ExportPmtilesButton';
-import {
-  PicsaVectorPanel,
-  pmtilesPackUrl,
-  type QaPackManifest,
-} from './components/PicsaVectorPanel';
-import { LibertyMap, type BaseMode, type QaInspectedFeature } from './components/LibertyMap';
+import { LibertyMap, type BaseMode } from './components/LibertyMap';
 import { ZoomBadge } from './components/ZoomBadge';
 import { TrashIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid';
 import { getCountryOsmLevels, type CustomLayerInfo } from './data/osm-admin-levels';
@@ -108,9 +103,6 @@ function App() {
   // Base-layer preview mode — the sidebar shows matching export options only
   // (vector pack in vector mode, raster pack in raster mode).
   const [baseMode, setBaseMode] = useState<BaseMode>('vector');
-  // PICSA Vector QA: locally served pack rendered with debug layers.
-  const [qaPack, setQaPack] = useState<QaPackManifest | null>(null);
-  const [inspected, setInspected] = useState<QaInspectedFeature[]>([]);
   const [includeCenters, setIncludeCenters] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -751,22 +743,11 @@ function App() {
                     apiUrl={API_URL}
                   />
                 )}
-                {baseMode === 'vector' && (
-                  <PicsaVectorPanel
-                    apiUrl={API_URL}
-                    mapZoom={mapZoom}
-                    qaPack={qaPack}
-                    onSelectPack={(manifest) => {
-                      setQaPack(manifest);
-                      setInspected([]);
-                    }}
-                    onClearPack={() => {
-                      setQaPack(null);
-                      setInspected([]);
-                    }}
-                    inspected={inspected}
-                    onClearInspected={() => setInspected([])}
-                  />
+                {baseMode === 'offline' && (
+                  <p className="text-xs text-slate-500">
+                    Offline preview renders the local packs (global base + this country) with the
+                    same Liberty style. Blank areas mean no pack covers that zoom — export below.
+                  </p>
                 )}
               </div>
             )}
@@ -774,35 +755,26 @@ function App() {
             {isGlobal && !loading && (
               <div className="p-4 flex flex-col gap-3">
                 <h3 className="font-semibold text-slate-900 text-sm">Global Base Layer</h3>
-                {baseMode === 'vector' ? (
-                  <>
-                    <p className="text-xs text-slate-500">
-                      Worldwide vector base (zooms 0–6, no tile buffer). Country packs start at z7
-                      and layer over this base.
-                    </p>
-
-                    <ExportPmtilesButton countryCode="GLOBAL" bbox={WORLD_BBOX} apiUrl={API_URL} />
-                    <PicsaVectorPanel
-                      apiUrl={API_URL}
-                      mapZoom={mapZoom}
-                      qaPack={qaPack}
-                      onSelectPack={(manifest) => {
-                        setQaPack(manifest);
-                        setInspected([]);
-                      }}
-                      onClearPack={() => {
-                        setQaPack(null);
-                        setInspected([]);
-                      }}
-                      inspected={inspected}
-                      onClearInspected={() => setInspected([])}
-                    />
-                  </>
-                ) : (
+                {baseMode === 'raster' ? (
                   <p className="text-xs text-slate-500">
                     Raster packs are per-country — select a country to export WebP tiles (the map
                     preview above still shows the server-rendered raster for comparison).
                   </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-500">
+                      Worldwide vector base (z0–3, plus the Southern Africa z4–6 top-up when
+                      ticked). Country packs start at z7 and layer over this base in offline mode.
+                    </p>
+
+                    <ExportPmtilesButton countryCode="GLOBAL" bbox={WORLD_BBOX} apiUrl={API_URL} />
+                    {baseMode === 'offline' && (
+                      <p className="text-xs text-slate-500">
+                        Offline preview renders the local global-base pack with the same Liberty
+                        style. Export the base first if the map is blank.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -864,8 +836,7 @@ function App() {
           baseMode={baseMode}
           onBaseModeChange={setBaseMode}
           showCenters={includeCenters}
-          qaPackUrl={qaPack ? pmtilesPackUrl(API_URL, qaPack.file) : null}
-          onQaInspect={setInspected}
+          countryCode={countryCode}
         />
 
         <ZoomBadge zoom={mapZoom} />
