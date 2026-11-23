@@ -4,6 +4,7 @@ import {
   parseLocalTilePath,
   parseRangeHeader,
   isSafePmtilesFile,
+  isGzipBuffer,
   resolveLocalPacks,
   ExportTilesSchema,
   ExportPmtilesSchema,
@@ -11,6 +12,13 @@ import {
   PrewarmPmtilesSchema,
 } from './tiles.ts';
 import { handleAdminRoutes } from './admin.ts';
+
+test('isGzipBuffer sniffs the gzip magic, not the extension', () => {
+  expect(isGzipBuffer(new Uint8Array([0x1f, 0x8b, 0x08, 0x00]))).toBe(true);
+  expect(isGzipBuffer(new Uint8Array([0x1a, 0x00, 0x07, 0x08]))).toBe(false); // raw MVT
+  expect(isGzipBuffer(new Uint8Array([]))).toBe(false);
+  expect(isGzipBuffer(new Uint8Array([0x1f]))).toBe(false);
+});
 
 test('parseLocalTilePath accepts vector tile paths and rejects junk', () => {
   expect(parseLocalTilePath('/tiles/local/8/152/137.pbf')).toEqual({

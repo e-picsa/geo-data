@@ -218,6 +218,16 @@ export interface PreviewTile {
 }
 
 /**
+ * Gzip magic bytes. Upstream PBFs arrive both raw and gzipped, and filtered
+ * packs are always re-encoded gzipped — sniff per tile so `Content-Encoding`
+ * is only ever sent for bytes that are actually gzip (sending it for raw
+ * protobuf makes every client fail to parse).
+ */
+export function isGzipBuffer(data: Uint8Array): boolean {
+  return data.length >= 2 && data[0] === 0x1f && data[1] === 0x8b;
+}
+
+/**
  * Parse an HTTP `Range: bytes=start-end` header against a known size (pure —
  * safe to unit test). Supports `start-`, `start-end` and suffix `-n` forms;
  * returns null when unsatisfiable or malformed (caller replies 416).
@@ -456,7 +466,18 @@ async function handleLocalVectorTile(req: Request, pathname: string): Promise<Re
     const data = await fs.readFile(
       path.join(PMTILES_TILES_DIR, base, String(z), String(x), `${y}.pbf`),
     );
-    return new Response(new Uint8Array(data), { status: 200, headers: localVectorResponseHeaders });
+    // Stored bytes are gzipped PBFs (filtered packs) or raw protobuf (full
+    // preset passthrough). Browsers only gunzip what is labeled as gzip —
+    // without this header MapLibre feeds gzip bytes to the MVT parser and
+    // every tile fails with "Unable to parse the tile".
+    const bytes = new Uint8Array(data);
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        ...localVectorResponseHeaders,
+        ...(isGzipBuffer(bytes) ? { 'Content-Encoding': 'gzip' } : {}),
+      },
+    });
   } catch {
     // Masked-out, ocean or otherwise empty upstream — render as empty.
     return new Response(null, { status: 204, headers: corsHeaders });

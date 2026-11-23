@@ -736,19 +736,19 @@ function App() {
                     maxZoom={tileMaxZoom}
                     onMaxZoomChange={setTileMaxZoom}
                   />
-                ) : (
-                  <ExportPmtilesButton
-                    countryCode={data.country_code}
-                    bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
-                    apiUrl={API_URL}
-                  />
-                )}
-                {baseMode === 'offline' && (
-                  <p className="text-xs text-slate-500">
-                    Offline preview renders the local packs (global base + this country) with the
-                    same Liberty style. Blank areas mean no pack covers that zoom — export below.
-                  </p>
-                )}
+                ) : baseMode === 'offline' ? (
+                  <>
+                    <ExportPmtilesButton
+                      countryCode={data.country_code}
+                      bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
+                      apiUrl={API_URL}
+                    />
+                    <p className="text-xs text-slate-500">
+                      Offline preview renders the local packs (global base + this country) with the
+                      same Liberty style. Blank areas mean no pack covers that zoom — export above.
+                    </p>
+                  </>
+                ) : null}
               </div>
             )}
 
@@ -760,7 +760,7 @@ function App() {
                     Raster packs are per-country — select a country to export WebP tiles (the map
                     preview above still shows the server-rendered raster for comparison).
                   </p>
-                ) : (
+                ) : baseMode === 'offline' ? (
                   <>
                     <p className="text-xs text-slate-500">
                       Worldwide vector base (z0–3, plus the Southern Africa z4–6 top-up when
@@ -768,14 +768,12 @@ function App() {
                     </p>
 
                     <ExportPmtilesButton countryCode="GLOBAL" bbox={WORLD_BBOX} apiUrl={API_URL} />
-                    {baseMode === 'offline' && (
-                      <p className="text-xs text-slate-500">
-                        Offline preview renders the local global-base pack with the same Liberty
-                        style. Export the base first if the map is blank.
-                      </p>
-                    )}
+                    <p className="text-xs text-slate-500">
+                      Offline preview renders the local global-base pack with the same Liberty
+                      style. Export the base first if the map is blank.
+                    </p>
                   </>
-                )}
+                ) : null}
               </div>
             )}
 
