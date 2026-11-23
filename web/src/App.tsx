@@ -736,34 +736,44 @@ function App() {
                     maxZoom={tileMaxZoom}
                     onMaxZoomChange={setTileMaxZoom}
                   />
-                ) : (
-                  <ExportPmtilesButton
-                    countryCode={data.country_code}
-                    bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
-                    apiUrl={API_URL}
-                  />
-                )}
+                ) : baseMode === 'offline' ? (
+                  <>
+                    <ExportPmtilesButton
+                      countryCode={data.country_code}
+                      bbox={(baseBbox ?? data.bbox) as [number, number, number, number]}
+                      apiUrl={API_URL}
+                    />
+                    <p className="text-xs text-slate-500">
+                      Offline preview renders the local packs (global base + this country) with the
+                      same Liberty style. Blank areas mean no pack covers that zoom — export above.
+                    </p>
+                  </>
+                ) : null}
               </div>
             )}
 
             {isGlobal && !loading && (
               <div className="p-4 flex flex-col gap-3">
                 <h3 className="font-semibold text-slate-900 text-sm">Global Base Layer</h3>
-                {baseMode === 'vector' ? (
-                  <>
-                    <p className="text-xs text-slate-500">
-                      Worldwide vector base (zooms 0–6, no tile buffer). Country packs start at z7
-                      and layer over this base.
-                    </p>
-
-                    <ExportPmtilesButton countryCode="GLOBAL" bbox={WORLD_BBOX} apiUrl={API_URL} />
-                  </>
-                ) : (
+                {baseMode === 'raster' ? (
                   <p className="text-xs text-slate-500">
                     Raster packs are per-country — select a country to export WebP tiles (the map
                     preview above still shows the server-rendered raster for comparison).
                   </p>
-                )}
+                ) : baseMode === 'offline' ? (
+                  <>
+                    <p className="text-xs text-slate-500">
+                      Worldwide vector base (z0–3, plus the Southern Africa z4–6 top-up when
+                      ticked). Country packs start at z7 and layer over this base in offline mode.
+                    </p>
+
+                    <ExportPmtilesButton countryCode="GLOBAL" bbox={WORLD_BBOX} apiUrl={API_URL} />
+                    <p className="text-xs text-slate-500">
+                      Offline preview renders the local global-base pack with the same Liberty
+                      style. Export the base first if the map is blank.
+                    </p>
+                  </>
+                ) : null}
               </div>
             )}
 
@@ -824,6 +834,7 @@ function App() {
           baseMode={baseMode}
           onBaseModeChange={setBaseMode}
           showCenters={includeCenters}
+          countryCode={countryCode}
         />
 
         <ZoomBadge zoom={mapZoom} />

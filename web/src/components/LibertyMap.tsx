@@ -13,6 +13,7 @@ import {
   DEFAULT_CUSTOM_FILL_OPACITY,
   DEFAULT_CUSTOM_LINE_OPACITY,
 } from '../utils/layerPreferences';
+import { offlineTileTemplate } from '../utils/tiles';
 
 maplibregl.config.WORKER_URL = maplibreWorkerUrl;
 
@@ -45,7 +46,13 @@ const RASTER_SOURCE_ID = 'liberty-raster-preview';
 const RASTER_LAYER_ID = 'liberty-raster-preview-layer';
 
 /** Base layer mode, lifted to App so the sidebar shows matching export options. */
-export type BaseMode = 'vector' | 'raster';
+export type BaseMode = 'vector' | 'raster' | 'offline';
+
+/** Liberty style's vector source id (OpenMapTiles schema). */
+const LIBERTY_VECTOR_SOURCE_ID = 'openmaptiles';
+/** Upstream planet TileJSON (the Liberty style's openmaptiles source). Kept in
+ * one place so offline mode can restore the exact live source afterwards. */
+const LIBERTY_TILEJSON_URL = 'https://tiles.openfreemap.org/planet';
 
 function whenStyleReady(map: maplibregl.Map, fn: () => void): () => void {
   if (map.isStyleLoaded()) {
@@ -133,6 +140,8 @@ interface LibertyMapProps {
   onBaseModeChange: (mode: BaseMode) => void;
   /** Toggle rendering of district/admin center markers */
   showCenters?: boolean;
+  /** ISO country code for the offline tile source (`?country=` selector). */
+  countryCode?: string | null;
 }
 
 /**
@@ -160,6 +169,7 @@ export function LibertyMap({
   baseMode,
   onBaseModeChange,
   showCenters = false,
+  countryCode = null,
 }: LibertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -172,7 +182,6 @@ export function LibertyMap({
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
   }, [onZoomChange]);
-
   // Backward compatibility: if adminGeoJsonData is omitted, use geoJsonData
   const effectiveAdminData = adminGeoJsonData !== undefined ? adminGeoJsonData : geoJsonData;
 
@@ -281,6 +290,11 @@ export function LibertyMap({
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
     mapRef.current = map;
+    if (import.meta.env.DEV) {
+      // QA escape hatch: lets headless checks (and devtools) inspect the live
+      // style, sources and tile caches. Never used by the app itself.
+      (window as unknown as { __geoMap?: maplibregl.Map }).__geoMap = map;
+    }
 
     const reportZoom = () => onZoomChangeRef.current(Math.round(map.getZoom()));
     map.scrollZoom.disable();
@@ -327,6 +341,30 @@ export function LibertyMap({
       mapRef.current = null;
     };
   }, []);
+
+  // Offline mode: point the Liberty vector source at the local pack server.
+  // setTiles/setUrl are the source's own reload path, so tiles refetch with
+  // no layer juggling and no style reload; toggling back restores the exact
+  // TileJSON source. Same style, glyphs and sprites throughout.
+  const offlineActiveRef = useRef(false);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const src = map.getSource(LIBERTY_VECTOR_SOURCE_ID) as
+        | maplibregl.VectorTileSource
+        | undefined;
+      if (!src || typeof src.setTiles !== 'function' || typeof src.setUrl !== 'function') return;
+      if (baseMode === 'offline') {
+        src.setTiles([offlineTileTemplate(apiUrlRef.current, countryCode ?? 'GLOBAL')]);
+        offlineActiveRef.current = true;
+      } else if (offlineActiveRef.current) {
+        src.setUrl(LIBERTY_TILEJSON_URL);
+        offlineActiveRef.current = false;
+      }
+    };
+    return whenStyleReady(map, apply);
+  }, [baseMode, countryCode]);
 
   // Vector / raster base toggle
   useEffect(() => {
@@ -686,7 +724,7 @@ export function LibertyMap({
         role="group"
         aria-label="Base layer"
       >
-        {(['vector', 'raster'] as BaseMode[]).map((m) => (
+        {(['vector', 'raster', 'offline'] as BaseMode[]).map((m) => (
           <button
             key={m}
             onClick={() => onBaseModeChange(m)}
@@ -694,7 +732,9 @@ export function LibertyMap({
             title={
               m === 'vector'
                 ? 'Live Liberty vector style (crisp at any zoom)'
-                : 'Server-rendered WebP tiles — exactly what the offline pack contains (renders on demand, zooms 0–12)'
+                : m === 'raster'
+                  ? 'Server-rendered WebP tiles — exactly what the offline pack contains (renders on demand, zooms 0–12)'
+                  : 'Same Liberty style, vector tiles served from local packs (global base + country pack)'
             }
             className={`px-3 py-1.5 capitalize transition-colors ${
               baseMode === m ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'

@@ -174,6 +174,20 @@ export function estimateExport(
   return { tileCount, bytes, seconds: Math.round((tileCount * 0.35) / workers) };
 }
 
+/** Upstream planet tile host baked into the Liberty style's openmaptiles source. */
+export const UPSTREAM_PLANET_TILE_ORIGIN = 'https://tiles.openfreemap.org/planet';
+
+/**
+ * Local XYZ tile template for offline mode (`GET /tiles/local/...`), handed
+ * to the vector source via `setTiles` so the map keeps the exact Liberty
+ * style and only the tile bytes change origin. Pure — unit tested.
+ */
+export function offlineTileTemplate(apiBase: string, countryCode: string): string {
+  const base = apiBase.replace(/\/$/, '');
+  const cc = (countryCode || 'GLOBAL').toUpperCase();
+  return `${base}/tiles/local/{z}/{x}/{y}.pbf?country=${cc}`;
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;

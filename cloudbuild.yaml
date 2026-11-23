@@ -18,9 +18,15 @@ substitutions:
   _SERVICE_NAME: geo-boundaries-topojson-git
   _DEPLOY_REGION: europe-west1
   _TRIGGER_ID: ce47b79c-a6e9-46bc-8cdc-75bc74a64393
-  # Countries warmed into the boundary cache after each rollout. Keep in step
-  # with PREWARM_COUNTRIES in api/src/services/geofabrik/url-mapping.ts.
+  # Prewarm list is deliberately duplicated: PREWARM_COUNTRIES in
+  # api/src/services/geofabrik/url-mapping.ts and _PREWARM_COUNTRIES below.
+  # Change both, or the API's hint and the warm step disagree silently.
   _PREWARM_COUNTRIES: MW ZM ZW
+  # Standard offline tile cache (world z0–3, Southern Africa z4–6, prewarm
+  # countries z4–8 — see pmtilesWarmCover in api/src/services/pmtiles.ts).
+  # The warm step posts `{}` so the server default and the deploy stay in
+  # step automatically — no country list to duplicate here. Post explicit
+  # `packs` instead to bake finished artifacts for specific consumers.
   _PREWARM_BASE_URL: https://geo-data-api.picsa.app
 
 steps:
@@ -140,6 +146,29 @@ steps:
           echo "These countries are generated on demand by the first request instead."
         else
           echo "prewarm complete: $_PREWARM_COUNTRIES"
+        fi
+
+        # Vector tiles: fills the shared raw source-tile cache (world z0-3,
+        # Southern Africa z4-6, prewarm countries z4-8 — WebP parity) so any
+        # consumer-defined export builds fast from disk. Finished packs are
+        # only built when `packs` are posted explicitly, so there is no fixed
+        # pack list to keep in step.
+        echo "prewarming pmtiles tile cache..."
+        pm_start=$(date +%s)
+        pm_code=$(curl -sS -o /tmp/pmtiles-prewarm.json -w '%{http_code}' \
+          --connect-timeout 20 --max-time 3000 \
+          --retry 1 --retry-delay 10 \
+          -X POST "$base/prewarm-pmtiles" \
+          -H 'Content-Type: application/json' \
+          -d '{}' )
+        [ -n "$pm_code" ] || pm_code=000
+        pm_elapsed=$(( $(date +%s) - pm_start ))
+        if [ "$pm_code" = "200" ]; then
+          echo "prewarm pmtiles: ok (${pm_elapsed}s)"
+          cat /tmp/pmtiles-prewarm.json
+        else
+          echo "prewarm pmtiles: FAILED (http $pm_code, ${pm_elapsed}s) — tiles fetch on demand instead"
+          cat /tmp/pmtiles-prewarm.json 2>/dev/null || true
         fi
         exit 0
     timeout: 4200s
