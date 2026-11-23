@@ -173,12 +173,13 @@ test('minimal preset drops bulk layers but never core layers', () => {
   }
 });
 
-test('mobile preset additionally drops landuse, park and mountain peaks', () => {
+test('mobile preset drops landuse and mountain peaks but keeps park', () => {
   const dropped = droppedLayersFor('mobile');
   expect(dropped).toEqual(expect.arrayContaining(MOBILE_DROPPED_LAYERS));
-  for (const extra of ['landuse', 'park', 'mountain_peak']) {
+  for (const extra of ['landuse', 'mountain_peak']) {
     expect(dropped).toContain(extra);
   }
+  expect(dropped).not.toContain('park');
   for (const core of ['boundary', 'place', 'water', 'transportation', 'landcover']) {
     expect(dropped).not.toContain(core);
   }
@@ -187,50 +188,72 @@ test('mobile preset additionally drops landuse, park and mountain peaks', () => 
   expect(shouldStripNamesFor('mobile')).toBe(true);
 });
 
-test('mobile road thresholds keep majors, named links, and z10+ minors', () => {
+test('mobile road thresholds keep majors + rail at z9+, drop minors entirely', () => {
   expect(shouldKeepMobileFeature('transportation', { class: 'primary' }, 2, 8)).toBe(true);
+  expect(shouldKeepMobileFeature('transportation', { class: 'tertiary' }, 2, 7)).toBe(true);
   expect(shouldKeepMobileFeature('transportation', { class: 'minor' }, 2, 9)).toBe(false);
   expect(shouldKeepMobileFeature('transportation', { class: 'unclassified' }, 2, 9)).toBe(false);
-  expect(shouldKeepMobileFeature('transportation', { class: 'minor' }, 2, 10)).toBe(true);
+  expect(shouldKeepMobileFeature('transportation', { class: 'minor' }, 2, 10)).toBe(false);
   expect(shouldKeepMobileFeature('transportation', { class: 'rail' }, 2, 8)).toBe(false);
   expect(shouldKeepMobileFeature('transportation', { class: 'rail' }, 2, 9)).toBe(true);
   expect(
     shouldKeepMobileFeature('transportation', { class: 'track', name: 'Village Path' }, 2, 9),
-  ).toBe(true);
+  ).toBe(false);
   expect(shouldKeepMobileFeature('transportation', { class: 'track' }, 2, 9)).toBe(false);
-  expect(shouldKeepMobileFeature('transportation', { class: 'footway' }, 2, 10)).toBe(false);
+  expect(shouldKeepMobileFeature('transportation', { class: 'ferry' }, 2, 8)).toBe(false);
+  expect(shouldKeepMobileFeature('transportation', { class: 'trunk_construction' }, 2, 8)).toBe(
+    false,
+  );
 });
 
-test('mobile place thresholds drop unrendered classes per zoom', () => {
+test('mobile place thresholds keep country/state/city/town, village only at z9', () => {
   expect(shouldKeepMobileFeature('place', { class: 'village' }, 1, 8)).toBe(false);
   expect(shouldKeepMobileFeature('place', { class: 'village' }, 1, 9)).toBe(true);
   expect(shouldKeepMobileFeature('place', { class: 'suburb' }, 1, 8)).toBe(false);
+  expect(shouldKeepMobileFeature('place', { class: 'island' }, 1, 9)).toBe(false);
   expect(shouldKeepMobileFeature('place', { class: 'town' }, 1, 8)).toBe(true);
   expect(shouldKeepMobileFeature('place', { class: 'country' }, 1, 8)).toBe(true);
-  expect(shouldKeepMobileFeature('place', { class: 'country' }, 1, 9)).toBe(false);
+  expect(shouldKeepMobileFeature('place', { class: 'country' }, 1, 9)).toBe(true);
   expect(shouldKeepMobileFeature('place', { class: 'state' }, 1, 9)).toBe(true);
-  expect(shouldKeepMobileFeature('place', { class: 'state' }, 1, 10)).toBe(false);
+  expect(shouldKeepMobileFeature('place', { class: 'state' }, 1, 7)).toBe(true);
   expect(shouldKeepMobileFeature('place', { class: 'city' }, 1, 11)).toBe(true);
 });
 
-test('mobile drops sub-z10 road labels, line water labels, maritime and tunnels', () => {
-  expect(shouldKeepMobileFeature('transportation_name', { class: 'motorway' }, 2, 9)).toBe(false);
-  expect(shouldKeepMobileFeature('transportation_name', { class: 'motorway' }, 2, 10)).toBe(true);
+test('mobile keeps major road labels at z8+, point water labels, filtered boundaries', () => {
+  // Road shields render at z8+ in pmtiles-style.ts (minzoom 8), majors only.
+  expect(shouldKeepMobileFeature('transportation_name', { class: 'trunk', ref: 'T1' }, 2, 7)).toBe(
+    false,
+  );
+  expect(shouldKeepMobileFeature('transportation_name', { class: 'trunk', ref: 'T1' }, 2, 8)).toBe(
+    true,
+  );
+  expect(
+    shouldKeepMobileFeature('transportation_name', { class: 'motorway', ref: 'M1' }, 2, 9),
+  ).toBe(true);
+  expect(shouldKeepMobileFeature('transportation_name', { class: 'minor', ref: 'M1' }, 2, 9)).toBe(
+    false,
+  );
+  expect(shouldKeepMobileFeature('transportation_name', { class: 'trunk' }, 2, 9)).toBe(false);
   expect(shouldKeepMobileFeature('water_name', { name: 'Lake' }, 1, 8)).toBe(true);
-  expect(shouldKeepMobileFeature('water_name', { name: 'River' }, 2, 8)).toBe(false);
+  expect(shouldKeepMobileFeature('water_name', { name: 'River' }, 2, 8)).toBe(true);
+  expect(shouldKeepMobileFeature('water_name', {}, 1, 8)).toBe(false);
   expect(shouldKeepMobileFeature('boundary', { admin_level: 2, maritime: 1 }, 3, 6)).toBe(false);
   expect(shouldKeepMobileFeature('boundary', { admin_level: 2, maritime: 0 }, 3, 6)).toBe(true);
+  expect(shouldKeepMobileFeature('boundary', { admin_level: 2, disputed: 1 }, 3, 6)).toBe(false);
+  expect(shouldKeepMobileFeature('boundary', { admin_level: 7 }, 3, 6)).toBe(false);
   expect(shouldKeepMobileFeature('water', { class: 'lake', brunnel: 'tunnel' }, 3, 8)).toBe(false);
   expect(shouldKeepMobileFeature('waterway', { class: 'river' }, 2, 8)).toBe(true);
+  expect(shouldKeepMobileFeature('waterway', { class: 'canal' }, 2, 8)).toBe(false);
+  expect(shouldKeepMobileFeature('waterway', { class: 'canal' }, 2, 11)).toBe(true);
   expect(shouldKeepMobileFeature('landcover', { class: 'wood' }, 3, 8)).toBe(true);
+  expect(shouldKeepMobileFeature('landcover', { class: 'ice' }, 3, 8)).toBe(false);
 });
 
 test('mobile property allowlists keep only style-read tags', () => {
-  // place: class/name/latin + capital==2 only (rank stripped except countries).
+  // place: class/name/latin + capital==2 only (rank stripped to save bytes).
   expect(shouldKeepMobileProperty('place', 'class', 'city', { class: 'city' })).toBe(true);
   expect(shouldKeepMobileProperty('place', 'rank', 1, { class: 'city', rank: 1 })).toBe(false);
-  expect(shouldKeepMobileProperty('place', 'rank', 1, { class: 'country', rank: 1 })).toBe(true);
-  expect(shouldKeepMobileProperty('place', 'rank', 3, { class: 'state', rank: 3 })).toBe(false);
+  expect(shouldKeepMobileProperty('place', 'rank', 1, { class: 'country', rank: 1 })).toBe(false);
   expect(shouldKeepMobileProperty('place', 'capital', 2, { class: 'city', capital: 2 })).toBe(true);
   expect(shouldKeepMobileProperty('place', 'capital', 4, { class: 'city', capital: 4 })).toBe(
     false,
@@ -255,26 +278,30 @@ test('mobile property allowlists keep only style-read tags', () => {
   expect(
     shouldKeepMobileProperty('water_name', 'class', 'lake', { name: 'Malawi', class: 'lake' }),
   ).toBe(false);
-  // transportation keeps class only; _name keeps ref + names + class for labels.
+  // transportation keeps class only; _name keeps ref + names (class dropped —
+  // style filters on geometry only to keep APK minimal).
   expect(
     shouldKeepMobileProperty('transportation', 'surface', 'asphalt', { class: 'primary' }),
   ).toBe(false);
   expect(shouldKeepMobileProperty('transportation_name', 'ref', 'M1', { ref: 'M1' })).toBe(true);
   expect(
     shouldKeepMobileProperty('transportation_name', 'class', 'primary', { class: 'primary' }),
-  ).toBe(true);
+  ).toBe(false);
   expect(
     shouldKeepMobileProperty('transportation_name', 'network', 'mw-national', { ref: 'M1' }),
   ).toBe(false);
-  // boundary keeps admin_level + disputed==1 only.
+  // boundary keeps admin_level only (maritime/disputed features are dropped).
   expect(shouldKeepMobileProperty('boundary', 'admin_level', 2, { admin_level: 2 })).toBe(true);
-  expect(shouldKeepMobileProperty('boundary', 'disputed', 1, { disputed: 1 })).toBe(true);
-  expect(shouldKeepMobileProperty('boundary', 'disputed', 0, { disputed: 0 })).toBe(false);
+  expect(shouldKeepMobileProperty('boundary', 'disputed', 1, { disputed: 1 })).toBe(false);
+  expect(shouldKeepMobileProperty('boundary', 'maritime', 1, { maritime: 1 })).toBe(false);
   expect(shouldKeepMobileProperty('boundary', 'name', 'Malawi', { admin_level: 2 })).toBe(false);
   expect(shouldKeepMobileProperty('landcover', 'class', 'wood', { class: 'wood' })).toBe(true);
   expect(shouldKeepMobileProperty('landcover', 'subclass', 'forest', { class: 'wood' })).toBe(
     false,
   );
+  // park carries no properties — fill-only geometry for bearing.
+  expect(shouldKeepMobileProperty('park', 'class', 'national_park', {})).toBe(false);
+  expect(shouldKeepMobileProperty('park', 'name', 'Kafue', {})).toBe(false);
 });
 
 test('filterTileLayers passes bytes through when nothing is dropped', () => {

@@ -25,7 +25,7 @@ import { getPlanetDataDate, LIBERTY_STYLE_URL } from './map-tiles.ts';
  * country bbox (or the whole world for GLOBAL).
  */
 
-export const PMTILES_VERSION = 5;
+export const PMTILES_VERSION = 6;
 export const PMTILES_GLOBAL_MAX_ZOOM = 6;
 export const PMTILES_GLOBAL_DEFAULT_ZOOM = 4;
 export const PMTILES_COUNTRY_MIN_ZOOM = 4;
@@ -73,19 +73,14 @@ export const MINIMAL_DROPPED_LAYERS = [
 ];
 
 /**
- * Layers additionally dropped by the `mobile` preset: parks, landuse polygons
+ * Layers additionally dropped by the `mobile` preset: landuse polygons
  * and mountain peaks are orientation noise for a rural offline basemap —
- * major roads, water, terrain (`landcover`) and place labels carry the
- * context farmers need. Style-threshold feature filtering and per-layer
+ * major roads, water, terrain (`landcover`), parks and place labels carry
+ * the context farmers need. Style-threshold feature filtering and per-layer
  * property allowlists (see shouldKeepMobileFeature/shouldKeepMobileProperty)
- * trim the survivors per zoom.
+ * trim the survivors per zoom to match `pmtiles-style.ts` (`z7–9`).
  */
-export const MOBILE_DROPPED_LAYERS = [
-  ...MINIMAL_DROPPED_LAYERS,
-  'landuse',
-  'park',
-  'mountain_peak',
-];
+export const MOBILE_DROPPED_LAYERS = [...MINIMAL_DROPPED_LAYERS, 'landuse', 'mountain_peak'];
 
 /** Layers that must always survive filtering (guards preset regressions). */
 const CORE_LAYERS = ['boundary', 'place', 'water', 'transportation'];
@@ -113,43 +108,62 @@ export function shouldApplyMobileFilters(preset: PmtilesLayersPreset): boolean {
   return preset === 'mobile';
 }
 
-/** Road classes a rural offline basemap keeps at high zooms (plus any *named* road). */
+/** Road classes the `mobile` (`z7–9`) country style renders (see `pmtiles-style.ts`).
+ * Minor/unclassified streets, ferries and construction variants are skipped to
+ * keep APK size minimal — the style only renders the majors + rail below z10. */
 export const MOBILE_KEPT_ROAD_CLASSES = new Set([
   'motorway',
   'trunk',
   'primary',
   'secondary',
   'tertiary',
-  'minor',
-  'unclassified',
+  'rail',
 ]);
 
-/** Place classes the offline style can render below z9. */
-export const MOBILE_LOW_ZOOM_PLACE_CLASSES = new Set([
-  'country',
-  'state',
-  'city',
-  'town',
-  'village',
-  'continent',
+/** Road-label classes kept at `z8–9` (ref + fallback name shields for majors only). */
+export const MOBILE_KEPT_ROAD_LABEL_CLASSES = new Set([
+  'motorway',
+  'trunk',
+  'primary',
+  'secondary',
 ]);
+
+/** Landcover classes the country style fills at `z7–9`. */
+export const MOBILE_KEPT_LANDCOVER_CLASSES = new Set([
+  'wood',
+  'grass',
+  'wetland',
+  'farmland',
+  'rock',
+  'sand',
+]);
+
+/** Place classes the country style renders at `z7–9` (`village` only at `z9`). */
+export const MOBILE_COUNTRY_PLACE_CLASSES = new Set(['country', 'state', 'city', 'town']);
+
+/** Place classes the offline style can render below z9. */
+export const MOBILE_LOW_ZOOM_PLACE_CLASSES = new Set(['country', 'state', 'city', 'town']);
 
 /**
  * Per-layer allowlists for the `mobile` preset: every other property is
- * dropped (this is what removes `water.id`, `boundary.name`, road `ref`s etc.
- * from output bytes). `capital`/`disputed`/`name:latin`/`rank` are further
- * gated on their values (see shouldKeepMobileProperty) so the Liberty style's
- * label filters keep matching: rank survives on countries, class on road names.
+ * dropped so geometry stays compact and APK size stays minimal. Only
+ * `name:latin` (+ fallback `name`) plus the filter/style fields the
+ * `pmtiles-style.ts` country layers read are kept:
+ * `class`, `admin_level`, `capital`, `ref` (`brunnel`/`maritime`/`disputed`
+ * are filter-only — features carrying them are dropped at generation, so the
+ * flags themselves need no bytes). `capital` survives only when `2` and
+ * `name:latin` only when it differs from `name` (see below).
  */
 export const MOBILE_KEPT_PROPS: Record<string, Set<string>> = {
-  place: new Set(['class', 'name', 'name:latin', 'capital', 'rank']),
+  place: new Set(['class', 'name', 'name:latin', 'capital']),
   landcover: new Set(['class']),
+  park: new Set([]),
   water: new Set([]),
   waterway: new Set(['class', 'name', 'name:latin']),
   water_name: new Set(['name', 'name:latin']),
   transportation: new Set(['class']),
-  transportation_name: new Set(['ref', 'name', 'name:latin', 'class']),
-  boundary: new Set(['admin_level', 'disputed']),
+  transportation_name: new Set(['ref', 'name', 'name:latin']),
+  boundary: new Set(['admin_level']),
 };
 
 export function shouldKeepMobileProperty(
@@ -160,26 +174,31 @@ export function shouldKeepMobileProperty(
 ): boolean {
   const allowed = MOBILE_KEPT_PROPS[layer];
   if (allowed ? !allowed.has(key) : key !== 'class') return false;
-  // `name:en` is never kept (drops colonial/parenthetical aliases at source).
   // `name:latin` survives only when it adds information beyond `name`.
   if (key === 'name:latin') {
     return value !== undefined && value !== null && value !== '' && value !== props?.name;
   }
-  // Flags are only worth bytes when set.
+  // Capitals are only worth bytes when set (drives the capital-city style).
   if (key === 'capital') return value === 2;
-  if (key === 'disputed') return value === 1;
-  // Country rank drives the label_country_* filters in the Liberty style —
-  // keep it on countries only so country names render with the style as-is.
-  if (key === 'rank') return layer === 'place' && props?.class === 'country';
   return true;
 }
 
 /**
- * Threshold-aligned feature filter for the `mobile` preset: drops features the
- * offline style never renders at that zoom (unrendered villages, low-zoom
- * minor roads, sub-z10 road labels, non-point water labels, maritime
- * boundaries, tunnel water). `geomType` is the MVT type (1 point, 2 line, 3
- * polygon). Returns true for presets/layers without mobile rules.
+ * Threshold-aligned feature filter for the `mobile` preset, matching
+ * `pmtiles-style.ts` country-detail layers (`z7–9`, APK-minimal):
+ * - `place`: `country`/`state`/`city`/`town` at `z7–9`, `village` only at `z9`
+ * - `transportation`: majors + `tertiary` at `z7–9`, `rail` only at `z9+`
+ * - `transportation_name`: majors (`motorway`/`trunk`/`primary`/`secondary`)
+ *   with `ref` or `name`, only at `z8+` (style `minzoom: 8`)
+ * - `water_name`: named lake/reservoir/dam labels (upstream lines at z7–9)
+ * - `waterway`: rivers only below `z10` (other waterways render at `z10+`),
+ *   never tunnels
+ * - `boundary`: `admin_level` 2–6, excluding `maritime=1` and `disputed=1`
+ * - `landcover`: only the six styled classes
+ * - `park`: kept here — tiny pocket parks are dropped by geometry area in
+ *   `filterTileLayers` (needs `loadGeometry`, unavailable here).
+ * `geomType` is the MVT type (1 point, 2 line, 3 polygon). Returns true for
+ * presets/layers without mobile rules.
  */
 export function shouldKeepMobileFeature(
   layer: string,
@@ -190,37 +209,52 @@ export function shouldKeepMobileFeature(
   const cls = props.class;
   switch (layer) {
     case 'place':
-      if (z < 9) {
-        if (cls === 'village') return false;
-        if (typeof cls !== 'string' || !MOBILE_LOW_ZOOM_PLACE_CLASSES.has(cls)) return false;
-      }
-      if (z >= 9 && cls === 'country') return false;
-      if (z >= 10 && cls === 'state') return false;
-      return true;
+      if (cls === 'village') return z >= 9;
+      if (typeof cls === 'string' && MOBILE_COUNTRY_PLACE_CLASSES.has(cls)) return true;
+      return false;
     case 'transportation':
-      if (z < 10 && (cls === 'minor' || cls === 'unclassified')) return false;
-      if (z < 9 && cls === 'rail') return false;
-      if (cls === 'rail') return true;
-      // Minor track/path/footway/service noise is kept only when named.
-      if (typeof cls === 'string' && !MOBILE_KEPT_ROAD_CLASSES.has(cls)) {
-        return props.name !== undefined && props.name !== null && props.name !== '';
-      }
-      return true;
-    case 'transportation_name':
-      // Style minzoom is 10 — the whole layer is dead weight below it.
-      return z >= 10;
-    case 'water_name':
-      // Style renders point water labels only.
-      return geomType === 1;
-    case 'boundary':
-      return props.maritime !== 1;
-    case 'water':
+      if (cls === 'rail') return z >= 9;
+      if (typeof cls === 'string' && MOBILE_KEPT_ROAD_CLASSES.has(cls)) return cls !== 'rail';
+      return false;
+    case 'transportation_name': {
+      // Style minzoom is 8 — the whole layer is dead weight below it.
+      if (z < 8) return false;
+      if (typeof cls !== 'string' || !MOBILE_KEPT_ROAD_LABEL_CLASSES.has(cls)) return false;
+      const ref = props.ref;
+      const name = props.name ?? props['name:latin'];
+      return (typeof ref === 'string' && ref !== '') || (typeof name === 'string' && name !== '');
+    }
+    case 'water_name': {
+      // Upstream OpenFreeMap encodes lake/reservoir labels at z7–9 as lines
+      // (e.g. Malawi, Kariba); keep all named features so lake bearing survives
+      // (style renders points, lines are harmless extra bearing + glyph proof).
+      const name = props.name ?? props['name:latin'];
+      return typeof name === 'string' && name !== '';
+    }
     case 'waterway':
+      if (props.brunnel === 'tunnel') return false;
+      // Below z10 the style only renders rivers (other waterways are z10+).
+      if (z < 10 && cls !== 'river') return false;
+      return true;
+    case 'boundary': {
+      if (props.maritime === 1 || props.disputed === 1) return false;
+      const al = props.admin_level;
+      return typeof al === 'number' && al >= 2 && al <= 6;
+    }
+    case 'landcover':
+      return typeof cls === 'string' && MOBILE_KEPT_LANDCOVER_CLASSES.has(cls);
+    case 'water':
       return props.brunnel !== 'tunnel';
     default:
       return true;
   }
 }
+
+/** Minimum park bbox area (MVT extent units², extent 4096) to survive at `z7–9`.
+ * Drops tiny urban pocket parks (Harare `Mukuvisi`/`Haka` ≈ 3–40k) while keeping
+ * national parks/conservancies/game reserves (typically 100k+, Victoria Falls
+ * ≈ 73k+). Features with ≤1 geometry point (tile-edge clips) are always kept. */
+export const MOBILE_PARK_MIN_AREA = 50_000;
 
 /**
  * Low-zoom place thinning (`minimal`/`mobile`, z<=3): keep
@@ -652,6 +686,31 @@ export function filterTileLayers(
         const props = (f.properties ?? {}) as Record<string, unknown>;
         if (!shouldKeepFeature(name, props, z, stripNames)) continue;
         if (mobileFilters && !shouldKeepMobileFeature(name, props, f.type, z)) continue;
+        // Tiny urban pocket parks carry no bearing value at z7–9 but cost real
+        // bytes — drop polygons whose MVT bbox is smaller than
+        // MOBILE_PARK_MIN_AREA (tile-edge clips with ≤1 point always survive).
+        if (mobileFilters && name === 'park') {
+          try {
+            const geom = f.loadGeometry() as Array<Array<{ x: number; y: number }>>;
+            let minX = 4096;
+            let maxX = 0;
+            let minY = 4096;
+            let maxY = 0;
+            let pts = 0;
+            for (const ring of geom) {
+              for (const pt of ring) {
+                pts++;
+                if (pt.x < minX) minX = pt.x;
+                if (pt.x > maxX) maxX = pt.x;
+                if (pt.y < minY) minY = pt.y;
+                if (pt.y > maxY) maxY = pt.y;
+              }
+            }
+            if (pts > 1 && (maxX - minX) * (maxY - minY) < MOBILE_PARK_MIN_AREA) continue;
+          } catch {
+            /* geometry unreadable — keep, not the export */
+          }
+        }
         keptIdx.push(i);
       } catch {
         keptIdx.push(i);
