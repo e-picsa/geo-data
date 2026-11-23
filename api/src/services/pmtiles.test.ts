@@ -226,9 +226,11 @@ test('mobile drops sub-z10 road labels, line water labels, maritime and tunnels'
 });
 
 test('mobile property allowlists keep only style-read tags', () => {
-  // place: class/name/latin + capital==2 only (rank stripped after thinning).
+  // place: class/name/latin + capital==2 only (rank stripped except countries).
   expect(shouldKeepMobileProperty('place', 'class', 'city', { class: 'city' })).toBe(true);
   expect(shouldKeepMobileProperty('place', 'rank', 1, { class: 'city', rank: 1 })).toBe(false);
+  expect(shouldKeepMobileProperty('place', 'rank', 1, { class: 'country', rank: 1 })).toBe(true);
+  expect(shouldKeepMobileProperty('place', 'rank', 3, { class: 'state', rank: 3 })).toBe(false);
   expect(shouldKeepMobileProperty('place', 'capital', 2, { class: 'city', capital: 2 })).toBe(true);
   expect(shouldKeepMobileProperty('place', 'capital', 4, { class: 'city', capital: 4 })).toBe(
     false,
@@ -253,11 +255,14 @@ test('mobile property allowlists keep only style-read tags', () => {
   expect(
     shouldKeepMobileProperty('water_name', 'class', 'lake', { name: 'Malawi', class: 'lake' }),
   ).toBe(false);
-  // transportation keeps class only; _name keeps ref + names.
+  // transportation keeps class only; _name keeps ref + names + class for labels.
   expect(
     shouldKeepMobileProperty('transportation', 'surface', 'asphalt', { class: 'primary' }),
   ).toBe(false);
   expect(shouldKeepMobileProperty('transportation_name', 'ref', 'M1', { ref: 'M1' })).toBe(true);
+  expect(
+    shouldKeepMobileProperty('transportation_name', 'class', 'primary', { class: 'primary' }),
+  ).toBe(true);
   expect(
     shouldKeepMobileProperty('transportation_name', 'network', 'mw-national', { ref: 'M1' }),
   ).toBe(false);

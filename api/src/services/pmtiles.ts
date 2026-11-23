@@ -25,7 +25,7 @@ import { getPlanetDataDate, LIBERTY_STYLE_URL } from './map-tiles.ts';
  * country bbox (or the whole world for GLOBAL).
  */
 
-export const PMTILES_VERSION = 4;
+export const PMTILES_VERSION = 5;
 export const PMTILES_GLOBAL_MAX_ZOOM = 6;
 export const PMTILES_GLOBAL_DEFAULT_ZOOM = 4;
 export const PMTILES_COUNTRY_MIN_ZOOM = 4;
@@ -136,18 +136,19 @@ export const MOBILE_LOW_ZOOM_PLACE_CLASSES = new Set([
 
 /**
  * Per-layer allowlists for the `mobile` preset: every other property is
- * dropped (this is what removes `place.rank`, `water.id`, `boundary.name`,
- * etc. from output bytes). `capital`/`disputed`/`name:latin` are further gated
- * on their values (see shouldKeepMobileProperty).
+ * dropped (this is what removes `water.id`, `boundary.name`, road `ref`s etc.
+ * from output bytes). `capital`/`disputed`/`name:latin`/`rank` are further
+ * gated on their values (see shouldKeepMobileProperty) so the Liberty style's
+ * label filters keep matching: rank survives on countries, class on road names.
  */
 export const MOBILE_KEPT_PROPS: Record<string, Set<string>> = {
-  place: new Set(['class', 'name', 'name:latin', 'capital']),
+  place: new Set(['class', 'name', 'name:latin', 'capital', 'rank']),
   landcover: new Set(['class']),
   water: new Set([]),
   waterway: new Set(['class', 'name', 'name:latin']),
   water_name: new Set(['name', 'name:latin']),
   transportation: new Set(['class']),
-  transportation_name: new Set(['ref', 'name', 'name:latin']),
+  transportation_name: new Set(['ref', 'name', 'name:latin', 'class']),
   boundary: new Set(['admin_level', 'disputed']),
 };
 
@@ -167,6 +168,9 @@ export function shouldKeepMobileProperty(
   // Flags are only worth bytes when set.
   if (key === 'capital') return value === 2;
   if (key === 'disputed') return value === 1;
+  // Country rank drives the label_country_* filters in the Liberty style —
+  // keep it on countries only so country names render with the style as-is.
+  if (key === 'rank') return layer === 'place' && props?.class === 'country';
   return true;
 }
 
