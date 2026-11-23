@@ -230,7 +230,8 @@ export function isGzipBuffer(data: Uint8Array): boolean {
 /**
  * Parse an HTTP `Range: bytes=start-end` header against a known size (pure —
  * safe to unit test). Supports `start-`, `start-end` and suffix `-n` forms;
- * returns null when unsatisfiable or malformed (caller replies 416).
+ * over-long ends are clamped to `size - 1` per RFC 9110 §14.1.2; returns null
+ * when unsatisfiable or malformed (caller replies 416).
  */
 export function parseRangeHeader(
   header: string | null,
@@ -251,9 +252,11 @@ export function parseRangeHeader(
     start = parseInt(m[1], 10);
     end = m[2] === '' ? size - 1 : parseInt(m[2], 10);
   }
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= size || end >= size) {
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= size) {
     return null;
   }
+  // An end past EOF is satisfiable: clamp to the last byte.
+  if (end >= size) end = size - 1;
   if (start > end) return null;
   return { start, end };
 }
@@ -849,24 +852,29 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
     }
     try {
       const localPath = path.join(PMTILES_DIR, file);
-      let buf: Uint8Array | null = null;
+      // Stat for size — never buffer the pack just to learn its length.
+      let size: number | null = null;
       try {
-        buf = new Uint8Array(await fs.readFile(localPath));
+        size = (await fs.stat(localPath)).size;
       } catch {
-        buf = null;
+        size = null;
       }
-      if (buf === null) {
+      if (size === null) {
         // Cold instance: pull from GCS into local disk, then serve.
-        const bytes = await downloadPmtilesFromGcs(file);
-        if (bytes === null) {
+        const downloaded = await downloadPmtilesFromGcs(file);
+        if (downloaded === null) {
           return new Response(JSON.stringify({ error: 'Not Found' }), {
             status: 404,
             headers: corsHeaders,
           });
         }
-        buf = new Uint8Array(await fs.readFile(localPath));
+        try {
+          size = (await fs.stat(localPath)).size;
+        } catch {
+          size = downloaded;
+        }
       }
-      const size = buf.length;
+      const sizeNum = size as number;
       const isManifest = file.endsWith('.json');
       const baseHeaders = {
         ...corsHeaders,
@@ -877,26 +885,29 @@ export const handleTileRoutes = async (req: Request, pathname: string): Promise<
           ? { 'Content-Disposition': `attachment; filename="${file}"` }
           : {}),
       };
-      const range = parseRangeHeader(req.headers.get('range'), size);
+      const range = parseRangeHeader(req.headers.get('range'), sizeNum);
       if (req.headers.get('range') && !range) {
         return new Response(null, {
           status: 416,
-          headers: { ...baseHeaders, 'Content-Range': `bytes */${size}` },
+          headers: { ...baseHeaders, 'Content-Range': `bytes */${sizeNum}` },
         });
       }
       if (!range) {
-        return new Response(new Uint8Array(buf), {
+        // Stream the file — no full read into memory.
+        return new Response(Bun.file(localPath), {
           status: 200,
-          headers: { ...baseHeaders, 'Content-Length': String(size) },
+          headers: { ...baseHeaders, 'Content-Length': String(sizeNum) },
         });
       }
-      const slice = buf.slice(range.start, range.end + 1);
-      return new Response(new Uint8Array(slice), {
+      // Stream only the requested byte span (PMTiles clients make many
+      // small range reads; never buffer the whole pack per request).
+      const slice = Bun.file(localPath).slice(range.start, range.end + 1);
+      return new Response(slice, {
         status: 206,
         headers: {
           ...baseHeaders,
-          'Content-Length': String(slice.length),
-          'Content-Range': `bytes ${range.start}-${range.end}/${size}`,
+          'Content-Length': String(range.end - range.start + 1),
+          'Content-Range': `bytes ${range.start}-${range.end}/${sizeNum}`,
         },
       });
     } catch (err: unknown) {

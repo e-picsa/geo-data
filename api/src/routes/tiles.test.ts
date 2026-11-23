@@ -105,7 +105,10 @@ test('parseRangeHeader handles byte ranges, suffixes and rejects junk', () => {
   expect(parseRangeHeader('items=0-99', 1000)).toBeNull();
   expect(parseRangeHeader('bytes=99-0', 1000)).toBeNull();
   expect(parseRangeHeader('bytes=1000-', 1000)).toBeNull(); // unsatisfiable
-  expect(parseRangeHeader('bytes=0-2000', 1000)).toBeNull(); // past EOF
+  expect(parseRangeHeader('bytes=0-2000', 1000)).toEqual({ start: 0, end: 999 }); // clamped past EOF
+  expect(parseRangeHeader('bytes=900-2000', 1000)).toEqual({ start: 900, end: 999 });
+  expect(parseRangeHeader('bytes=999-9999', 1000)).toEqual({ start: 999, end: 999 });
+  expect(parseRangeHeader('bytes=1000-2000', 1000)).toBeNull(); // start past EOF
 });
 
 test('isSafePmtilesFile blocks traversal and non-pack files', () => {
