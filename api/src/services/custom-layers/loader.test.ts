@@ -43,6 +43,36 @@ describe('custom layer source files', () => {
     }
   });
 
+  test('mw_epa citation states vintage and coverage lists omitted names', async () => {
+    const definition = CUSTOM_LAYERS_REGISTRY.MW.find((d) => d.id === 'mw_epa');
+    expect(definition).toBeDefined();
+    expect(definition!.citation.details).toContain('2013-11-18');
+    expect(definition!.coverage).toBeDefined();
+    expect(definition!.coverage!.vintage).toContain('2013-11-18');
+    expect(definition!.coverage!.featureCount).toBe(186);
+    expect(definition!.coverage!.omitted).toContain('Chiluwa');
+    expect(definition!.coverage!.omitted).toContain('Likangala');
+    expect(definition!.coverage!.omitted).toContain('Makande');
+
+    // Omitted names must match the name-only entries in the registry file
+    // and must not duplicate any polygon in the layer.
+    const registryFile = Bun.file(
+      path.resolve(API_ROOT, 'data/custom-layers/MW/mw_epa_name_registry.json'),
+    );
+    expect(await registryFile.exists()).toBe(true);
+    const registry = await registryFile.json();
+    const nameOnly = registry.names
+      .filter((n: any) => n.status === 'name-only')
+      .map((n: any) => n.name);
+    expect([...definition!.coverage!.omitted].sort()).toEqual([...nameOnly].sort());
+
+    const epas = await loadCustomLayer(definition!);
+    const polygonNames = new Set(epas.map((f) => f.properties.name.replace(/ EPA$/, '')));
+    for (const omitted of definition!.coverage!.omitted) {
+      expect(polygonNames.has(omitted)).toBe(false);
+    }
+  });
+
   test('mw_epa districts align with OSM admin district names', async () => {
     const definition = CUSTOM_LAYERS_REGISTRY.MW.find((d) => d.id === 'mw_epa');
     expect(definition).toBeDefined();

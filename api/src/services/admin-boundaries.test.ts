@@ -53,6 +53,11 @@ test('adminBoundaries - Validates Malawi boundaries, district centers, and custo
   const epaLayerInfo = data.custom_layers.find((l: any) => l.id === 'mw_epa');
   expect(epaLayerInfo).toBeDefined();
   expect(epaLayerInfo.citation.sourceName).toContain('MASDAP');
+  expect(epaLayerInfo.citation.details).toContain('2013-11-18');
+  expect(epaLayerInfo.coverage).toBeDefined();
+  expect(epaLayerInfo.coverage.vintage).toContain('2013-11-18');
+  expect(epaLayerInfo.coverage.featureCount).toBe(186);
+  expect(epaLayerInfo.coverage.omitted).toContain('Chiluwa');
   const planningUnitsInfo = data.custom_layers.find((l: any) => l.id === 'mw_planning_units');
   expect(planningUnitsInfo).toBeDefined();
 

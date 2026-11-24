@@ -30,7 +30,7 @@ export { getCountryAdminLevels } from './geofabrik/url-mapping.ts';
  * Bust cache if conversion or processing methods change.
  * GCS cache object lifecycle automatically deletes after 90 days.
  */
-const CACHE_VERSION = 17;
+const CACHE_VERSION = 18;
 
 type Source = 'cache' | 'generated';
 

@@ -15,6 +15,7 @@ export interface LayerAttributionInfo {
   retrievalDate?: string;
   license?: string;
   details: string;
+  coverageNote?: string;
 }
 
 export interface LayerControlsProps {
@@ -231,6 +232,13 @@ export function LayerControls({
             </div>
 
             <p className="text-[11px] text-slate-700 leading-relaxed">{attribution.details}</p>
+
+            {attribution.coverageNote && (
+              <p className="text-[11px] text-slate-700 leading-relaxed border-t border-amber-200/70 pt-1.5">
+                <span className="font-semibold">Coverage: </span>
+                {attribution.coverageNote}
+              </p>
+            )}
 
             {attribution.license && (
               <div className="text-[10px] text-slate-500">
