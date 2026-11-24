@@ -6,7 +6,9 @@ export interface LayerCitation {
   sourceName: string;
   /** Direct URL or landing page for the source dataset */
   sourceUrl: string;
-  /** Date the dataset was retrieved / archived */
+  /** Date the dataset was originally published / produced by the source */
+  publicationDate?: string;
+  /** Date the dataset was retrieved / archived (provenance, not the data vintage) */
   retrievalDate: string;
   /** Detailed attribution, publication context, or ministry notice */
   details: string;

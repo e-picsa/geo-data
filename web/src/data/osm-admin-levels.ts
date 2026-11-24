@@ -17,6 +17,7 @@ export interface OsmAdminLevelsData {
 export interface LayerCitation {
   sourceName: string;
   sourceUrl: string;
+  publicationDate?: string;
   retrievalDate: string;
   details: string;
   license?: string;

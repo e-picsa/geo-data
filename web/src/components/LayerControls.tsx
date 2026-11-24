@@ -12,6 +12,7 @@ import { SHORTLIST_COLORS } from '../utils/layerPreferences';
 export interface LayerAttributionInfo {
   sourceName: string;
   sourceUrl: string;
+  publicationDate?: string;
   retrievalDate?: string;
   license?: string;
   details: string;
@@ -224,9 +225,9 @@ export function LayerControls({
           <div className="mt-1.5 p-2.5 bg-amber-50/90 border border-amber-200/90 rounded-md text-amber-950 space-y-1.5 shadow-sm">
             <div className="flex items-center justify-between font-semibold">
               <span className="text-[11px] text-amber-900">{attribution.sourceName}</span>
-              {attribution.retrievalDate && (
+              {(attribution.publicationDate ?? attribution.retrievalDate) && (
                 <span className="text-[10px] text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded font-mono">
-                  {attribution.retrievalDate}
+                  {attribution.publicationDate ?? attribution.retrievalDate}
                 </span>
               )}
             </div>

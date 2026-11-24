@@ -15,13 +15,14 @@ export const CUSTOM_LAYERS_REGISTRY: Record<string, CustomLayerDefinition[]> = {
       citation: {
         sourceName: 'Malawi Spatial Data Portal (MASDAP) / Ministry of Agriculture',
         sourceUrl: 'https://www.masdap.mw/catalogue/#/dataset/119',
+        publicationDate: '2013-11-18',
         retrievalDate: '2026-10-22',
         details:
-          'Official Agricultural Extension Planning Areas (EPA) published by the Department of Surveys and Department of Agricultural Extension Services (DAES). Source catalogue vintage 2013-11-18, retrieved 2026-10-22: 186 EPA polygons. Newer EPAs (e.g. Chiluwa, Salima) and retired names (e.g. Likangala, now Mpokwe) have no polygon here — see coverage.omitted and data/custom-layers/MW/mw_epa_name_registry.json. Filtered to unit_type=epa from the source file.',
+          'Official Agricultural Extension Planning Areas (EPA) published 2013-11-18 by the Department of Surveys and Department of Agricultural Extension Services (DAES). 186 EPA polygons. Newer EPAs (e.g. Chiluwa, Salima) and retired names (e.g. Likangala, now Mpokwe) have no polygon here — see coverage.omitted and data/custom-layers/MW/mw_epa_name_registry.json. Filtered to unit_type=epa from the source file.',
         license: 'Malawi Government Open Spatial Data',
       },
       coverage: {
-        vintage: 'MASDAP catalogue 2013-11-18 (retrieved 2026-10-22)',
+        vintage: 'MASDAP catalogue 2013-11-18',
         featureCount: 186,
         omitted: [
           'Chikwatula',
@@ -61,9 +62,10 @@ export const CUSTOM_LAYERS_REGISTRY: Record<string, CustomLayerDefinition[]> = {
       citation: {
         sourceName: 'Malawi Spatial Data Portal (MASDAP) / Ministry of Agriculture',
         sourceUrl: 'https://www.masdap.mw/catalogue/#/dataset/119',
+        publicationDate: '2013-11-18',
         retrievalDate: '2026-10-22',
         details:
-          'Full planning-unit dataset (catalogue vintage 2013-11-18, retrieved 2026-10-22) published by the Department of Surveys and Department of Agricultural Extension Services (DAES); unfiltered source also containing reserves, parks and urban areas alongside EPAs.',
+          'Full planning-unit dataset published 2013-11-18 by the Department of Surveys and Department of Agricultural Extension Services (DAES); unfiltered source also containing reserves, parks and urban areas alongside EPAs.',
         license: 'Malawi Government Open Spatial Data',
       },
       filePath: 'data/custom-layers/MW/mw_epa.geojson',
