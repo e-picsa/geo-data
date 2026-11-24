@@ -76,6 +76,48 @@ function whenStyleReady(map: maplibregl.Map, fn: () => void): () => void {
   };
 }
 
+type OverlayLayerSpec = Omit<maplibregl.LayerSpecification, 'id' | 'source'>;
+
+/**
+ * Shared GeoJSON overlay management — every overlay (admin, custom, labels,
+ * centers, export bbox) goes through these so layers behave identically.
+ * Ensures the source exists with fresh data, (re-)creates any missing layer,
+ * and forces a repaint so newly shown content never waits for the next
+ * map interaction to appear.
+ */
+function upsertGeoJsonOverlay(
+  map: maplibregl.Map,
+  sourceId: string,
+  data: GeoJSON.FeatureCollection,
+  layers: Array<{ id: string; spec: OverlayLayerSpec }>,
+): void {
+  const existing = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+  if (existing) {
+    existing.setData(data);
+  } else {
+    map.addSource(sourceId, { type: 'geojson', data });
+  }
+  for (const { id, spec } of layers) {
+    if (!map.getLayer(id)) {
+      map.addLayer({ id, source: sourceId, ...spec } as maplibregl.LayerSpecification);
+    }
+  }
+  // Newly added sources paint on the worker round-trip, but a forced repaint
+  // covers every path (cached data, style already idle) — content must show
+  // immediately, not on the next pan/zoom.
+  map.triggerRepaint();
+}
+
+function removeGeoJsonOverlay(map: maplibregl.Map, sourceId: string, layerIds: string[]): void {
+  for (const id of layerIds) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+  if (map.getSource(sourceId)) map.removeSource(sourceId);
+}
+
+/** Glyph stack guaranteed by the Liberty style (its only text-font stacks). */
+const LABEL_FONT: [string] = ['Noto Sans Regular'];
+
 function bboxToPolygon(bbox: [number, number, number, number]): GeoJSON.FeatureCollection {
   const [minLon, minLat, maxLon, maxLat] = bbox;
   return {
@@ -400,35 +442,38 @@ export function LibertyMap({
     const map = mapRef.current;
     if (!map) return;
     if (!effectiveAdminData) {
-      if (map.getSource(ADMIN_SOURCE_ID)) {
-        if (map.getLayer(ADMIN_LINE_LAYER_ID)) map.removeLayer(ADMIN_LINE_LAYER_ID);
-        if (map.getLayer(ADMIN_FILL_LAYER_ID)) map.removeLayer(ADMIN_FILL_LAYER_ID);
-        map.removeSource(ADMIN_SOURCE_ID);
-      }
+      removeGeoJsonOverlay(map, ADMIN_SOURCE_ID, [ADMIN_LINE_LAYER_ID, ADMIN_FILL_LAYER_ID]);
       return;
     }
     const apply = () => {
-      if (map.getSource(ADMIN_SOURCE_ID)) {
-        (map.getSource(ADMIN_SOURCE_ID) as maplibregl.GeoJSONSource).setData(effectiveAdminData);
+      upsertGeoJsonOverlay(map, ADMIN_SOURCE_ID, effectiveAdminData, [
+        {
+          id: ADMIN_FILL_LAYER_ID,
+          spec: {
+            type: 'fill',
+            paint: { 'fill-color': adminLayerColor, 'fill-opacity': adminFillOpacity },
+          },
+        },
+        {
+          id: ADMIN_LINE_LAYER_ID,
+          spec: {
+            type: 'line',
+            paint: {
+              'line-color': adminLayerColor,
+              'line-width': 2,
+              'line-opacity': adminLineOpacity,
+            },
+          },
+        },
+      ]);
+      if (map.getLayer(ADMIN_FILL_LAYER_ID)) {
         map.setPaintProperty(ADMIN_FILL_LAYER_ID, 'fill-color', adminLayerColor);
         map.setPaintProperty(ADMIN_FILL_LAYER_ID, 'fill-opacity', adminFillOpacity);
+      }
+      if (map.getLayer(ADMIN_LINE_LAYER_ID)) {
         map.setPaintProperty(ADMIN_LINE_LAYER_ID, 'line-color', adminLayerColor);
         map.setPaintProperty(ADMIN_LINE_LAYER_ID, 'line-opacity', adminLineOpacity);
-        return;
       }
-      map.addSource(ADMIN_SOURCE_ID, { type: 'geojson', data: effectiveAdminData });
-      map.addLayer({
-        id: ADMIN_FILL_LAYER_ID,
-        type: 'fill',
-        source: ADMIN_SOURCE_ID,
-        paint: { 'fill-color': adminLayerColor, 'fill-opacity': adminFillOpacity },
-      });
-      map.addLayer({
-        id: ADMIN_LINE_LAYER_ID,
-        type: 'line',
-        source: ADMIN_SOURCE_ID,
-        paint: { 'line-color': adminLayerColor, 'line-width': 2, 'line-opacity': adminLineOpacity },
-      });
     };
     return whenStyleReady(map, apply);
   }, [effectiveAdminData, adminLayerColor, adminFillOpacity, adminLineOpacity]);
@@ -439,39 +484,34 @@ export function LibertyMap({
     if (!map) return;
 
     if (!adminLabelsData || adminLabelsData.features.length === 0) {
-      if (map.getSource(ADMIN_LABELS_SOURCE_ID)) {
-        if (map.getLayer(ADMIN_LABELS_LAYER_ID)) map.removeLayer(ADMIN_LABELS_LAYER_ID);
-        map.removeSource(ADMIN_LABELS_SOURCE_ID);
-      }
+      removeGeoJsonOverlay(map, ADMIN_LABELS_SOURCE_ID, [ADMIN_LABELS_LAYER_ID]);
       return;
     }
 
     const apply = () => {
-      if (map.getSource(ADMIN_LABELS_SOURCE_ID)) {
-        (map.getSource(ADMIN_LABELS_SOURCE_ID) as maplibregl.GeoJSONSource).setData(
-          adminLabelsData,
-        );
+      upsertGeoJsonOverlay(map, ADMIN_LABELS_SOURCE_ID, adminLabelsData, [
+        {
+          id: ADMIN_LABELS_LAYER_ID,
+          spec: {
+            type: 'symbol',
+            layout: {
+              'text-field': ['get', 'name'],
+              'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 8, 12, 12, 14],
+              'text-font': LABEL_FONT,
+              'text-anchor': 'center',
+              'text-optional': true,
+            } as any,
+            paint: {
+              'text-color': adminLayerColor,
+              'text-halo-color': '#ffffff',
+              'text-halo-width': 2,
+            },
+          },
+        },
+      ]);
+      if (map.getLayer(ADMIN_LABELS_LAYER_ID)) {
         map.setPaintProperty(ADMIN_LABELS_LAYER_ID, 'text-color', adminLayerColor);
-        return;
       }
-      map.addSource(ADMIN_LABELS_SOURCE_ID, { type: 'geojson', data: adminLabelsData });
-      map.addLayer({
-        id: ADMIN_LABELS_LAYER_ID,
-        type: 'symbol',
-        source: ADMIN_LABELS_SOURCE_ID,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 8, 12, 12, 14],
-          'text-font': ['Noto Sans Regular', 'Open Sans Regular'],
-          'text-anchor': 'center',
-          'text-optional': true,
-        },
-        paint: {
-          'text-color': adminLayerColor,
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 2,
-        },
-      });
     };
     return whenStyleReady(map, apply);
   }, [adminLabelsData, adminLayerColor]);
@@ -481,39 +521,38 @@ export function LibertyMap({
     const map = mapRef.current;
     if (!map) return;
     if (!customGeoJsonData) {
-      if (map.getSource(CUSTOM_SOURCE_ID)) {
-        if (map.getLayer(CUSTOM_LINE_LAYER_ID)) map.removeLayer(CUSTOM_LINE_LAYER_ID);
-        if (map.getLayer(CUSTOM_FILL_LAYER_ID)) map.removeLayer(CUSTOM_FILL_LAYER_ID);
-        map.removeSource(CUSTOM_SOURCE_ID);
-      }
+      removeGeoJsonOverlay(map, CUSTOM_SOURCE_ID, [CUSTOM_LINE_LAYER_ID, CUSTOM_FILL_LAYER_ID]);
       return;
     }
     const apply = () => {
-      if (map.getSource(CUSTOM_SOURCE_ID)) {
-        (map.getSource(CUSTOM_SOURCE_ID) as maplibregl.GeoJSONSource).setData(customGeoJsonData);
+      upsertGeoJsonOverlay(map, CUSTOM_SOURCE_ID, customGeoJsonData, [
+        {
+          id: CUSTOM_FILL_LAYER_ID,
+          spec: {
+            type: 'fill',
+            paint: { 'fill-color': customLayerColor, 'fill-opacity': customFillOpacity },
+          },
+        },
+        {
+          id: CUSTOM_LINE_LAYER_ID,
+          spec: {
+            type: 'line',
+            paint: {
+              'line-color': customLayerColor,
+              'line-width': 2,
+              'line-opacity': customLineOpacity,
+            },
+          },
+        },
+      ]);
+      if (map.getLayer(CUSTOM_FILL_LAYER_ID)) {
         map.setPaintProperty(CUSTOM_FILL_LAYER_ID, 'fill-color', customLayerColor);
         map.setPaintProperty(CUSTOM_FILL_LAYER_ID, 'fill-opacity', customFillOpacity);
+      }
+      if (map.getLayer(CUSTOM_LINE_LAYER_ID)) {
         map.setPaintProperty(CUSTOM_LINE_LAYER_ID, 'line-color', customLayerColor);
         map.setPaintProperty(CUSTOM_LINE_LAYER_ID, 'line-opacity', customLineOpacity);
-        return;
       }
-      map.addSource(CUSTOM_SOURCE_ID, { type: 'geojson', data: customGeoJsonData });
-      map.addLayer({
-        id: CUSTOM_FILL_LAYER_ID,
-        type: 'fill',
-        source: CUSTOM_SOURCE_ID,
-        paint: { 'fill-color': customLayerColor, 'fill-opacity': customFillOpacity },
-      });
-      map.addLayer({
-        id: CUSTOM_LINE_LAYER_ID,
-        type: 'line',
-        source: CUSTOM_SOURCE_ID,
-        paint: {
-          'line-color': customLayerColor,
-          'line-width': 2,
-          'line-opacity': customLineOpacity,
-        },
-      });
     };
     return whenStyleReady(map, apply);
   }, [customGeoJsonData, customLayerColor, customFillOpacity, customLineOpacity]);
@@ -524,39 +563,34 @@ export function LibertyMap({
     if (!map) return;
 
     if (!customLabelsData || customLabelsData.features.length === 0) {
-      if (map.getSource(CUSTOM_LABELS_SOURCE_ID)) {
-        if (map.getLayer(CUSTOM_LABELS_LAYER_ID)) map.removeLayer(CUSTOM_LABELS_LAYER_ID);
-        map.removeSource(CUSTOM_LABELS_SOURCE_ID);
-      }
+      removeGeoJsonOverlay(map, CUSTOM_LABELS_SOURCE_ID, [CUSTOM_LABELS_LAYER_ID]);
       return;
     }
 
     const apply = () => {
-      if (map.getSource(CUSTOM_LABELS_SOURCE_ID)) {
-        (map.getSource(CUSTOM_LABELS_SOURCE_ID) as maplibregl.GeoJSONSource).setData(
-          customLabelsData,
-        );
+      upsertGeoJsonOverlay(map, CUSTOM_LABELS_SOURCE_ID, customLabelsData, [
+        {
+          id: CUSTOM_LABELS_LAYER_ID,
+          spec: {
+            type: 'symbol',
+            layout: {
+              'text-field': ['get', 'name'],
+              'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 10, 12, 12, 14],
+              'text-font': LABEL_FONT,
+              'text-anchor': 'center',
+              'text-optional': true,
+            } as any,
+            paint: {
+              'text-color': customLayerColor,
+              'text-halo-color': '#ffffff',
+              'text-halo-width': 2,
+            },
+          },
+        },
+      ]);
+      if (map.getLayer(CUSTOM_LABELS_LAYER_ID)) {
         map.setPaintProperty(CUSTOM_LABELS_LAYER_ID, 'text-color', customLayerColor);
-        return;
       }
-      map.addSource(CUSTOM_LABELS_SOURCE_ID, { type: 'geojson', data: customLabelsData });
-      map.addLayer({
-        id: CUSTOM_LABELS_LAYER_ID,
-        type: 'symbol',
-        source: CUSTOM_LABELS_SOURCE_ID,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 10, 12, 12, 14],
-          'text-font': ['Noto Sans Regular', 'Open Sans Regular'],
-          'text-anchor': 'center',
-          'text-optional': true,
-        },
-        paint: {
-          'text-color': customLayerColor,
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 2,
-        },
-      });
     };
     return whenStyleReady(map, apply);
   }, [customLabelsData, customLayerColor]);
@@ -567,50 +601,47 @@ export function LibertyMap({
     if (!map) return;
 
     if (!centersData || centersData.features.length === 0) {
-      if (map.getSource(CENTERS_SOURCE_ID)) {
-        if (map.getLayer(CENTERS_CIRCLE_LAYER_ID)) map.removeLayer(CENTERS_CIRCLE_LAYER_ID);
-        map.removeSource(CENTERS_SOURCE_ID);
-      }
+      removeGeoJsonOverlay(map, CENTERS_SOURCE_ID, [CENTERS_CIRCLE_LAYER_ID]);
       return;
     }
 
     const apply = () => {
-      if (map.getSource(CENTERS_SOURCE_ID)) {
-        (map.getSource(CENTERS_SOURCE_ID) as maplibregl.GeoJSONSource).setData(centersData);
-        return;
-      }
-
-      map.addSource(CENTERS_SOURCE_ID, { type: 'geojson', data: centersData });
-      map.addLayer({
-        id: CENTERS_CIRCLE_LAYER_ID,
-        type: 'circle',
-        source: CENTERS_SOURCE_ID,
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 7],
-          'circle-color': [
-            'case',
-            ['has', 'custom_layer'],
-            customLayerColor,
-            [
-              'match',
-              ['get', 'center_source'],
-              'admin_centre',
-              adminLayerColor,
-              'label',
-              '#0d9488', // Teal
-              'centroid',
-              '#64748b', // Slate
-              'point_on_surface',
-              '#64748b', // Slate
-              '#64748b', // Slate
-            ],
-          ],
-          'circle-opacity': 0.8,
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1.5,
-          'circle-stroke-opacity': 0.9,
+      const isNew = !map.getLayer(CENTERS_CIRCLE_LAYER_ID);
+      upsertGeoJsonOverlay(map, CENTERS_SOURCE_ID, centersData, [
+        {
+          id: CENTERS_CIRCLE_LAYER_ID,
+          spec: {
+            type: 'circle',
+            paint: {
+              'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 7],
+              'circle-color': [
+                'case',
+                ['has', 'custom_layer'],
+                customLayerColor,
+                [
+                  'match',
+                  ['get', 'center_source'],
+                  'admin_centre',
+                  adminLayerColor,
+                  'label',
+                  '#0d9488', // Teal
+                  'centroid',
+                  '#64748b', // Slate
+                  'point_on_surface',
+                  '#64748b', // Slate
+                  '#64748b', // Slate
+                ],
+              ] as any,
+              'circle-opacity': 0.8,
+              'circle-stroke-color': '#ffffff',
+              'circle-stroke-width': 1.5,
+              'circle-stroke-opacity': 0.9,
+            },
+          },
         },
-      });
+      ]);
+
+      if (!isNew) return;
 
       map.on('click', CENTERS_CIRCLE_LAYER_ID, (e: any) => {
         const feature = e.features?.[0];
@@ -659,30 +690,25 @@ export function LibertyMap({
     const map = mapRef.current;
     if (!map) return;
     if (!exportBbox) {
-      if (map.getSource(EXPORT_BBOX_SOURCE_ID)) {
-        if (map.getLayer(EXPORT_BBOX_LAYER_ID)) map.removeLayer(EXPORT_BBOX_LAYER_ID);
-        map.removeSource(EXPORT_BBOX_SOURCE_ID);
-      }
+      removeGeoJsonOverlay(map, EXPORT_BBOX_SOURCE_ID, [EXPORT_BBOX_LAYER_ID]);
       return;
     }
     const data = bboxToPolygon(exportBbox);
     const apply = () => {
-      if (map.getSource(EXPORT_BBOX_SOURCE_ID)) {
-        (map.getSource(EXPORT_BBOX_SOURCE_ID) as maplibregl.GeoJSONSource).setData(data);
-        return;
-      }
-      map.addSource(EXPORT_BBOX_SOURCE_ID, { type: 'geojson', data });
-      map.addLayer({
-        id: EXPORT_BBOX_LAYER_ID,
-        type: 'line',
-        source: EXPORT_BBOX_SOURCE_ID,
-        paint: {
-          'line-color': '#9ca3af',
-          'line-width': 1.5,
-          'line-opacity': 0.9,
-          'line-dasharray': [5, 3],
+      upsertGeoJsonOverlay(map, EXPORT_BBOX_SOURCE_ID, data, [
+        {
+          id: EXPORT_BBOX_LAYER_ID,
+          spec: {
+            type: 'line',
+            paint: {
+              'line-color': '#9ca3af',
+              'line-width': 1.5,
+              'line-opacity': 0.9,
+              'line-dasharray': [5, 3],
+            },
+          },
         },
-      });
+      ]);
     };
     return whenStyleReady(map, apply);
   }, [exportBbox]);
