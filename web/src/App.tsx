@@ -118,18 +118,22 @@ function App() {
     countryCodeRef.current = countryCode;
   }, [countryCode]);
 
-  // Load preferences from localStorage when active custom layer changes
+  // Load preferences from localStorage when active custom layer changes.
+  // Selecting a layer is an explicit show action: a stored visible=false
+  // (from an earlier eye-toggle) must not leave a freshly selected layer
+  // hidden — the eye toggle remains the way to hide it again.
   useEffect(() => {
     if (selectedCustomLayer) {
-      setCustomLayerPrefs(
-        getLayerPreferences(
-          selectedCustomLayer,
-          DEFAULT_CUSTOM_LAYER_COLOR,
-          DEFAULT_CUSTOM_FILL_OPACITY,
-          DEFAULT_CUSTOM_LINE_OPACITY,
-          true,
-        ),
+      const stored = getLayerPreferences(
+        selectedCustomLayer,
+        DEFAULT_CUSTOM_LAYER_COLOR,
+        DEFAULT_CUSTOM_FILL_OPACITY,
+        DEFAULT_CUSTOM_LINE_OPACITY,
+        true,
       );
+      const updated: LayerPreferences = { ...stored, visible: true };
+      setCustomLayerPrefs(updated);
+      saveLayerPreferences(selectedCustomLayer, updated);
     }
   }, [selectedCustomLayer]);
 
