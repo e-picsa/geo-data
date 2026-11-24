@@ -22,6 +22,13 @@ export interface LayerCitation {
   license?: string;
 }
 
+export interface CustomLayerCoverage {
+  vintage: string;
+  featureCount: number;
+  omitted: string[];
+  note: string;
+}
+
 export interface CustomLayerInfo {
   id: string;
   countryCode: string;
@@ -29,6 +36,7 @@ export interface CustomLayerInfo {
   category: 'agriculture' | 'environment' | 'health' | 'statistical';
   description: string;
   citation: LayerCitation;
+  coverage?: CustomLayerCoverage;
 }
 
 export const osmAdminLevels = osmData as OsmAdminLevelsData;

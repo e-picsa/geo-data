@@ -639,7 +639,10 @@ function App() {
                         onLineOpacityChange={handleCustomLineOpacityChange}
                         showLabels={customLayerPrefs.showLabels}
                         onToggleLabels={handleToggleCustomLabels}
-                        attribution={activeCustomLayer.citation}
+                        attribution={{
+                          ...activeCustomLayer.citation,
+                          coverageNote: activeCustomLayer.coverage?.note,
+                        }}
                         disabled={loading || !customGeoJsonData?.features?.length}
                       />
                     )}

@@ -15,6 +15,21 @@ export interface LayerCitation {
 }
 
 /**
+ * Coverage transparency for a custom layer: which vintage the polygons
+ * represent and which known names have no polygon (yet).
+ */
+export interface CustomLayerCoverage {
+  /** Catalogue vintage of the polygon geometries (not the retrieval date) */
+  vintage: string;
+  /** Number of features with polygons in this layer */
+  featureCount: number;
+  /** Known names with no polygon in this layer (see name registry) */
+  omitted: string[];
+  /** Human-readable note, surfaced in API responses and the web UI */
+  note: string;
+}
+
+/**
  * Definition of a country-specific custom boundary layer.
  */
 export interface CustomLayerDefinition {
@@ -30,6 +45,8 @@ export interface CustomLayerDefinition {
   description: string;
   /** Source attribution and citation info */
   citation: LayerCitation;
+  /** Coverage transparency (vintage + names known to lack polygons) */
+  coverage?: CustomLayerCoverage;
   /** Path to the source GeoJSON file (relative to api root or absolute) */
   filePath: string;
   /**
@@ -61,4 +78,5 @@ export interface CustomLayerInfo {
   category: 'agriculture' | 'environment' | 'health' | 'statistical';
   description: string;
   citation: LayerCitation;
+  coverage?: CustomLayerCoverage;
 }

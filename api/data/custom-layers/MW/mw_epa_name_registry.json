@@ -1,0 +1,1671 @@
+{
+  "generated": "2026-05-13",
+  "vintage_note": "MASDAP-2013 bounds (186 EPA polygons); AES-2003-2010 names via Zant DataverseNL DOI 10.34894/IFWGCL (CC0); MEAS-2016 count reference 203",
+  "count": 213,
+  "names": [
+    {
+      "name": "Bazale EPA",
+      "id": "mw_bazale_epa",
+      "district": "Balaka",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Bembeke EPA",
+      "id": "mw_bembeke_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Bilira EPA",
+      "id": "mw_bilira_epa",
+      "district": "Ntcheu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Bolero EPA",
+      "id": "mw_bolero_epa",
+      "district": "Rumphi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Bowe EPA",
+      "id": "mw_bowe_epa",
+      "district": "Dowa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Bulala EPA",
+      "id": "mw_bulala_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Bwengu EPA",
+      "id": "mw_bwengu_epa",
+      "district": "Rumphi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chafumbwa EPA",
+      "id": "mw_chafumbwa_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chamama EPA",
+      "id": "mw_chamama_epa",
+      "district": "Kasungu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Champhira EPA",
+      "id": "mw_champhira_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chigonthi EPA",
+      "id": "mw_chigonthi_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chikwapula EPA",
+      "id": "mw_chikwapula_epa",
+      "district": "Ntchisi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chikwatula",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Chikweo EPA",
+      "id": "mw_chikweo_epa",
+      "district": "Machinga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chikwina EPA",
+      "id": "mw_chikwina_epa",
+      "district": "Nkhata Bay",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chilaza EPA",
+      "id": "mw_chilaza_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chileka EPA",
+      "id": "mw_chileka_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chilipa EPA",
+      "id": "mw_chilipa_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chiluwa",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Chingale EPA",
+      "id": "mw_chingale_epa",
+      "district": "Zomba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chinguluwe EPA",
+      "id": "mw_chinguluwe_epa",
+      "district": "Salima",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chinteche EPA",
+      "id": "mw_chinteche_epa",
+      "district": "Nkhata Bay",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chintheche",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Chinteche EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Chioshya EPA",
+      "id": "mw_chioshya_epa",
+      "district": "Mchinji",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chipala",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Kasungu Chipala EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Chipande EPA",
+      "id": "mw_chipande_epa",
+      "district": "Blantyre",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chipoka EPA",
+      "id": "mw_chipoka_epa",
+      "district": "Salima",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chipuka EPA",
+      "id": "mw_chipuka_epa",
+      "district": "Ntchisi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chisenga EPA",
+      "id": "mw_chisenga_epa",
+      "district": "Chitipa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chisepo EPA",
+      "id": "mw_chisepo_epa",
+      "district": "Dowa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chitekwele EPA",
+      "id": "mw_chitekwele_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chitheka EPA",
+      "id": "mw_chitheka_epa",
+      "district": "Nkhata Bay",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chitsime EPA",
+      "id": "mw_chitsime_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chivala EPA",
+      "id": "mw_chivala_epa",
+      "district": "Dowa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chiwamba EPA",
+      "id": "mw_chiwamba_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chiweta EPA",
+      "id": "mw_chiweta_epa",
+      "district": "Karonga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chizimulu EPA",
+      "id": "mw_chizimulu_epa",
+      "district": "Likoma",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Chizumulu",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Chizimulu EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Chulu EPA",
+      "id": "mw_chulu_epa",
+      "district": "Kasungu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Demela EPA",
+      "id": "mw_demela_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Demera",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Demela EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Dolo EPA",
+      "id": "mw_dolo_epa",
+      "district": "Chikwawa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Domasi",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Dwale EPA",
+      "id": "mw_dwale_epa",
+      "district": "Thyolo",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Dzaone EPA",
+      "id": "mw_dzaone_epa",
+      "district": "Zomba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Emfeni EPA",
+      "id": "mw_emfeni_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Emsizini EPA",
+      "id": "mw_emsizini_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Eswazini EPA",
+      "id": "mw_eswazini_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Eswazini EPA",
+      "id": "mw_eswazini_epa",
+      "district": "Nkhata Bay",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Euthini EPA",
+      "id": "mw_euthini_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Golomoti EPA",
+      "id": "mw_golomoti_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kabwazi EPA",
+      "id": "mw_kabwazi_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kalambo EPA",
+      "id": "mw_kalambo_epa",
+      "district": "Chikwawa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kalira EPA",
+      "id": "mw_kalira_epa",
+      "district": "Ntchisi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kalulu EPA",
+      "id": "mw_kalulu_epa",
+      "district": "Mchinji",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kaluluma EPA",
+      "id": "mw_kaluluma_epa",
+      "district": "Kasungu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kameme EPA",
+      "id": "mw_kameme_epa",
+      "district": "Chitipa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kamwendo EPA",
+      "id": "mw_kamwendo_epa",
+      "district": "Mulanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kandeu EPA",
+      "id": "mw_kandeu_epa",
+      "district": "Ntcheu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kanyama EPA",
+      "id": "mw_kanyama_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kaphuka EPA",
+      "id": "mw_kaphuka_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kaporo North EPA",
+      "id": "mw_kaporo_north_epa",
+      "district": "Karonga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kaporo South EPA",
+      "id": "mw_kaporo_south_epa",
+      "district": "Karonga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kasongo EPA",
+      "id": "mw_kasongo_epa",
+      "district": "Phalombe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kasungu Chipala EPA",
+      "id": "mw_kasungu_chipala_epa",
+      "district": "Kasungu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Katerera",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Katowo EPA",
+      "id": "mw_katowo_epa",
+      "district": "Rumphi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Katuli EPA",
+      "id": "mw_katuli_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kavukuku EPA",
+      "id": "mw_kavukuku_epa",
+      "district": "Chitipa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kazomba EPA",
+      "id": "mw_kazomba_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Khombedza EPA",
+      "id": "mw_khombedza_epa",
+      "district": "Salima",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Khonjeni EPA",
+      "id": "mw_khonjeni_epa",
+      "district": "Thyolo",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Khosolo EPA",
+      "id": "mw_khosolo_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Kunthembwe EPA",
+      "id": "mw_kunthembwe_epa",
+      "district": "Blantyre",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Likangala",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Likoma EPA",
+      "id": "mw_likoma_epa",
+      "district": "Likoma",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Limphasa EPA",
+      "id": "mw_limphasa_epa",
+      "district": "Nkhata Bay",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Linga EPA",
+      "id": "mw_linga_epa",
+      "district": "Nkhotakota",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Linthipe EPA",
+      "id": "mw_linthipe_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Lirangwe EPA",
+      "id": "mw_lirangwe_epa",
+      "district": "Blantyre",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Lisasadzi EPA",
+      "id": "mw_lisasadzi_epa",
+      "district": "Kasungu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Lisungwi EPA",
+      "id": "mw_lisungwi_epa",
+      "district": "Neno",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Livunzu EPA",
+      "id": "mw_livunzu_epa",
+      "district": "Chikwawa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Lobi EPA",
+      "id": "mw_lobi_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Lufita EPA",
+      "id": "mw_lufita_epa",
+      "district": "Chitipa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Lungwena EPA",
+      "id": "mw_lungwena_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Lupembe EPA",
+      "id": "mw_lupembe_epa",
+      "district": "Karonga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Luwelezi EPA",
+      "id": "mw_luwelezi_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Luwerezi",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Luwelezi EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Madisi EPA",
+      "id": "mw_madisi_epa",
+      "district": "Dowa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Magoti EPA",
+      "id": "mw_magoti_epa",
+      "district": "Nsanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Maiwa EPA",
+      "id": "mw_maiwa_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Makande",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Makhanga EPA",
+      "id": "mw_makhanga_epa",
+      "district": "Nsanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Malidade EPA",
+      "id": "mw_malidade_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Malidadi",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Malidade EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Malingunde EPA",
+      "id": "mw_malingunde_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Malomo EPA",
+      "id": "mw_malomo_epa",
+      "district": "Ntchisi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Malosa EPA",
+      "id": "mw_malosa_epa",
+      "district": "Zomba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Manjawira EPA",
+      "id": "mw_manjawira_epa",
+      "district": "Ntcheu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Manyamula EPA",
+      "id": "mw_manyamula_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Masambanjati EPA",
+      "id": "mw_masambanjati_epa",
+      "district": "Thyolo",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Masuku EPA",
+      "id": "mw_masuku_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Matapwata EPA",
+      "id": "mw_matapwata_epa",
+      "district": "Thyolo",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Matenje",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Mayani EPA",
+      "id": "mw_mayani_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mbalachanda EPA",
+      "id": "mw_mbalachanda_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mbawa EPA",
+      "id": "mw_mbawa_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mbewe EPA",
+      "id": "mw_mbewe_epa",
+      "district": "Chikwawa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mbonechera EPA",
+      "id": "mw_mbonechera_epa",
+      "district": "Machinga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mbulumbuzi EPA",
+      "id": "mw_mbulumbuzi_epa",
+      "district": "Chiradzulu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mbwadzulu EPA",
+      "id": "mw_mbwadzulu_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mhuju",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Muhuju EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Mikalango EPA",
+      "id": "mw_mikalango_epa",
+      "district": "Chikwawa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mikundi EPA",
+      "id": "mw_mikundi_epa",
+      "district": "Mchinji",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Milonde EPA",
+      "id": "mw_milonde_epa",
+      "district": "Mulanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Ming'ongo EPA",
+      "id": "mw_ming_ongo_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Misuku EPA",
+      "id": "mw_misuku_epa",
+      "district": "Chitipa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mitole EPA",
+      "id": "mw_mitole_epa",
+      "district": "Chikwawa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mitundu EPA",
+      "id": "mw_mitundu_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mjinge EPA",
+      "id": "mw_mjinge_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mkanda EPA",
+      "id": "mw_mkanda_epa",
+      "district": "Mchinji",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mkwinda",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Mlomba EPA",
+      "id": "mw_mlomba_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mlonyeni EPA",
+      "id": "mw_mlonyeni_epa",
+      "district": "Mchinji",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mndolera EPA",
+      "id": "mw_mndolera_epa",
+      "district": "Dowa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mng'wangwa EPA",
+      "id": "mw_mng_wangwa_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mombezi EPA",
+      "id": "mw_mombezi_epa",
+      "district": "Chiradzulu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpamba EPA",
+      "id": "mw_mpamba_epa",
+      "district": "Nkhata Bay",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpata EPA",
+      "id": "mw_mpata_epa",
+      "district": "Karonga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpatsa EPA",
+      "id": "mw_mpatsa_epa",
+      "district": "Nsanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpenu EPA",
+      "id": "mw_mpenu_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpherembe EPA",
+      "id": "mw_mpherembe_epa",
+      "district": "Rumphi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mphompha EPA",
+      "id": "mw_mphompha_epa",
+      "district": "Rumphi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpilipili EPA",
+      "id": "mw_mpilipili_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpilisi EPA",
+      "id": "mw_mpilisi_epa",
+      "district": "Balaka",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpinda EPA",
+      "id": "mw_mpinda_epa",
+      "district": "Phalombe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpingu EPA",
+      "id": "mw_mpingu_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mpokwa",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Mpokwe EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Mpokwe EPA",
+      "id": "mw_mpokwe_epa",
+      "district": "Zomba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mponela EPA",
+      "id": "mw_mponela_epa",
+      "district": "Dowa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Msikawanjala EPA",
+      "id": "mw_msikawanjala_epa",
+      "district": "Mulanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Msitu EPA",
+      "id": "mw_msitu_epa",
+      "district": "Mchinji",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Msondole EPA",
+      "id": "mw_msondole_epa",
+      "district": "Zomba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mtakataka EPA",
+      "id": "mw_mtakataka_epa",
+      "district": "Dedza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mthiramanja EPA",
+      "id": "mw_mthiramanja_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mtubwi",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Ntubwi EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Mtunthama",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Muhuju EPA",
+      "id": "mw_muhuju_epa",
+      "district": "Rumphi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mulanje",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Mulanje Boma EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Mulanje Boma EPA",
+      "id": "mw_mulanje_boma_epa",
+      "district": "Mulanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Muona",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Mvera EPA",
+      "id": "mw_mvera_epa",
+      "district": "Dowa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mwamkumbwa EPA",
+      "id": "mw_mwamkumbwa_epa",
+      "district": "Chitipa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mwansambo EPA",
+      "id": "mw_mwansambo_epa",
+      "district": "Nkhotakota",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mwanza EPA",
+      "id": "mw_mwanza_epa",
+      "district": "Mwanza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Mzenga EPA",
+      "id": "mw_mzenga_epa",
+      "district": "Nkhata Bay",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nachisaka EPA",
+      "id": "mw_nachisaka_epa",
+      "district": "Dowa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nakachoka EPA",
+      "id": "mw_nakachoka_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nalunga EPA",
+      "id": "mw_nalunga_epa",
+      "district": "Dowa",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Naminjiwa EPA",
+      "id": "mw_naminjiwa_epa",
+      "district": "Phalombe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Namkumba EPA",
+      "id": "mw_namkumba_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nampeya EPA",
+      "id": "mw_nampeya_epa",
+      "district": "Machinga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nankumba",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Namkumba EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Nanyumbu EPA",
+      "id": "mw_nanyumbu_epa",
+      "district": "Machinga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nasenga EPA",
+      "id": "mw_nasenga_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nchenachena",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Ntchenachena EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Neno EPA",
+      "id": "mw_neno_epa",
+      "district": "Neno",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Ngwelero EPA",
+      "id": "mw_ngwelero_epa",
+      "district": "Zomba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Njolomole EPA",
+      "id": "mw_njolomole_epa",
+      "district": "Ntcheu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Njuyu EPA",
+      "id": "mw_njuyu_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nkanakhothi",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Nkhamenya",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Nkhate",
+      "status": "name-only",
+      "polygon": false,
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Nkhulambe EPA",
+      "id": "mw_nkhulambe_epa",
+      "district": "Phalombe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nkhunga EPA",
+      "id": "mw_nkhunga_epa",
+      "district": "Nkhotakota",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nsamama EPA",
+      "id": "mw_nsamama_epa",
+      "district": "Machinga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nsanama",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Nsamama EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Nsipe EPA",
+      "id": "mw_nsipe_epa",
+      "district": "Ntcheu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nsondole",
+      "status": "spelling-variant",
+      "polygon": false,
+      "canonical": "Msondole EPA",
+      "sources": ["AES-2003-2010-via-Zant"]
+    },
+    {
+      "name": "Ntchenachena EPA",
+      "id": "mw_ntchenachena_epa",
+      "district": "Rumphi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nthondo EPA",
+      "id": "mw_nthondo_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Ntiya EPA",
+      "id": "mw_ntiya_epa",
+      "district": "Mangochi",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Ntonda EPA",
+      "id": "mw_ntonda_epa",
+      "district": "Blantyre",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Ntubwi EPA",
+      "id": "mw_ntubwi_epa",
+      "district": "Machinga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nyachilenda EPA",
+      "id": "mw_nyachilenda_epa",
+      "district": "Nsanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nyambi EPA",
+      "id": "mw_nyambi_epa",
+      "district": "Machinga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nyanja EPA",
+      "id": "mw_nyanja_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Nyungwe EPA",
+      "id": "mw_nyungwe_epa",
+      "district": "Karonga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Phalula EPA",
+      "id": "mw_phalula_epa",
+      "district": "Balaka",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Rivirivi EPA",
+      "id": "mw_rivirivi_epa",
+      "district": "Balaka",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Santhe EPA",
+      "id": "mw_santhe_epa",
+      "district": "Kasungu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Sharpevale EPA",
+      "id": "mw_sharpevale_epa",
+      "district": "Ntcheu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Tamani EPA",
+      "id": "mw_tamani_epa",
+      "district": "Phalombe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Tembwe EPA",
+      "id": "mw_tembwe_epa",
+      "district": "Salima",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Thambani EPA",
+      "id": "mw_thambani_epa",
+      "district": "Mwanza",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Thawale EPA",
+      "id": "mw_thawale_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Thekerani EPA",
+      "id": "mw_thekerani_epa",
+      "district": "Thyolo",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Thondwe EPA",
+      "id": "mw_thondwe_epa",
+      "district": "Zomba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Thuchila EPA",
+      "id": "mw_thuchila_epa",
+      "district": "Mulanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Thumbwe EPA",
+      "id": "mw_thumbwe_epa",
+      "district": "Chiradzulu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Thyolo Central EPA",
+      "id": "mw_thyolo_central_epa",
+      "district": "Thyolo",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Tsangano EPA",
+      "id": "mw_tsangano_epa",
+      "district": "Ntcheu",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Tukombo EPA",
+      "id": "mw_tukombo_epa",
+      "district": "Nkhata Bay",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Ukwe EPA",
+      "id": "mw_ukwe_epa",
+      "district": "Lilongwe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Ulongwe EPA",
+      "id": "mw_ulongwe_epa",
+      "district": "Balaka",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Utale EPA",
+      "id": "mw_utale_epa",
+      "district": "Balaka",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Vibangalala EPA",
+      "id": "mw_vibangalala_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Vinthukutu EPA",
+      "id": "mw_vinthukutu_epa",
+      "district": "Karonga",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Waruma EPA",
+      "id": "mw_waruma_epa",
+      "district": "Phalombe",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Zidyana EPA",
+      "id": "mw_zidyana_epa",
+      "district": "Nkhotakota",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Zombwe EPA",
+      "id": "mw_zombwe_epa",
+      "district": "Mzimba",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    },
+    {
+      "name": "Zunde EPA",
+      "id": "mw_zunde_epa",
+      "district": "Nsanje",
+      "status": "current",
+      "polygon": true,
+      "sources": ["MASDAP-2013"]
+    }
+  ]
+}
